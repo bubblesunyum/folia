@@ -12,13 +12,18 @@
 # Every command is a package.json script, so `pnpm <name>` by hand runs exactly
 # what the gate runs.
 
-step "typecheck" pnpm -s typecheck
-step "lint" pnpm -s lint
-step "build" pnpm -s build
+# Through corepack, which honors package.json's packageManager pin; a bare
+# `pnpm` on PATH can be whatever a Node version manager left behind.
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+PNPM=(corepack pnpm run)
+
+step "typecheck" "${PNPM[@]}" typecheck
+step "lint" "${PNPM[@]}" lint
+step "build" "${PNPM[@]}" build
 
 if [ "$mode" != "--quick" ]; then
   # --run: Vitest watches when stdin is a terminal, and the gate would never exit.
-  step "tests" pnpm -s test --run
+  step "tests" "${PNPM[@]}" test --run
 
   # Vitest's summary line, e.g. "Tests  12 passed (12)" — "ok" alone can't tell
   # a green suite from one that ran nothing.
@@ -31,5 +36,5 @@ if [ "$mode" = "--full" ]; then
   # Needs a browser: route smoke tests and the golden-hour / night captures,
   # written to /tmp/fol-*.png where scripts/review.sh collects them.
   # The HTML report would otherwise open and block on the first failure.
-  step "e2e" env PW_TEST_HTML_REPORT_OPEN=never pnpm -s test:e2e
+  step "e2e" env PW_TEST_HTML_REPORT_OPEN=never "${PNPM[@]}" test:e2e
 fi

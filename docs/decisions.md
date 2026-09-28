@@ -479,6 +479,20 @@ The checklist is in [spec.md](spec.md#milestone-1-one-exciting-neighborhood-cort
 
 ---
 
+## 2026-09-27: Milestone 1 spikes
+
+### D-052 Spike 0 result: the scaffold's measurement and tooling
+**Decision:**
+- **Toolchain:** pnpm 12.6 pinned through `packageManager` and run via `corepack pnpm`; TypeScript 7, Vite 8, Vitest 5, Biome 2 (2-space, single quotes, no semicolons), Playwright on SwiftShader Chromium.
+- **GPU ms** is one `TIME_ELAPSED` query around the whole R3F frame (R3F `addEffect` / `addAfterEffect`, stats-gl initialised on the canvas rather than patching `renderer.render`), so every pass, the shadow map included, is in the number.
+- **Counters** accumulate across passes (`renderer.info.autoReset = false`, reset once per frame). **Sub-draws** are tallied by wrapping `renderBufferDirect` and summing each `BatchedMesh`'s `_multiDrawCount`, only where `WEBGL_multi_draw` exists; without it three already issues real calls.
+- **Context restore:** a restore counter keys anything holding one-shot GL work (the env map render, the timer-query extension), because three's own rebuild doesn't redo it.
+- Dev tooling (HUD, leva) shows in dev builds and with `?hud` / `?panel` in production.
+*Why:* D-035 needs whole-frame GPU time and a sub-draw count that `renderer.info` can't give, and D-043 needs restore to actually recover.
+*Refines:* D-035, D-043.
+
+---
+
 ## Open questions (not yet decided)
 - When to revisit WebGPU after launch.
 - Gallery exhibit stops: what one looks like and how many per case study.

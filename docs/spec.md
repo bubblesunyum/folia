@@ -239,7 +239,7 @@ Build a single real neighborhood that looks good enough to sustain momentum. Bea
 ### Phase 0: spikes
 Timebox each at 1–3 days, and log each result in [decisions.md](decisions.md).
 
-- [ ] **0. Minimal scaffold:** Vite + R3F canvas with the D-043 config, a stats-gl HUD (GPU ms, calls, sub-draws), a leva or tweakpane panel and `?time=`.
+- [x] **0. Minimal scaffold:** Vite + R3F canvas with the D-043 config, a stats-gl HUD (GPU ms, calls, sub-draws), a leva or tweakpane panel and `?time=`.
 - [ ] **1 + 2. Hero look-dev slice and the Blender → three round trip.** Build one Cortico fragment: a Voronoi canopy over a terrace, gold trim, a cream shell, one foliage clump and one neon curve.
   - **Pipeline:** pinned Blender, params JSON, Dual-Mesh Voronoi, `_AO` and `_NIGHT` bakes in placed context, glTF export, the schema validator, then a Float32 `BatchedMesh` with a `_ID` group.
   - **Render it** with the real material composer, env scene and grade, at golden hour and at night. Compare it side by side with the boards.

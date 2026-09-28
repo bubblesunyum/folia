@@ -1,0 +1,5 @@
+# pnpm 12 refuses packages published less than a day ago (its default
+# minimumReleaseAge). pnpm wrote this exception itself when the scaffold
+# installed the release that was current then; drop it once that's aged in.
+minimumReleaseAgeExclude:
+  - '@react-three/postprocessing@3.1.3'
