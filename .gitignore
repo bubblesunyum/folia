@@ -14,3 +14,17 @@ harness/models.json
 .beads-credential-key
 .beads/proxieddb/
 
+# The app's build output and tooling caches.
+node_modules/
+dist/
+build/
+.react-router/
+.vercel/
+test-results/
+playwright-report/
+*.log
+.env*.local
+.DS_Store
+
+# Blender's autosave backups beside the .blend sources.
+*.blend1

@@ -17,6 +17,9 @@
 # should see, and a suffix-only scope is also how a file with no extension at all
 # stays unreviewable — list such files by path.
 SCOPE=('*.py' '*.sh' '*.md' '*.html' '*.json' 'scripts/hooks/*'
+       '*.ts' '*.tsx' '*.glsl' '*.css' '*.mdx' '*.js' '*.mjs' '*.toml' '*.yaml'
+       '.gitignore' '.npmrc' '.nvmrc' 'harness/stacks.txt' 'assets/blender/VERSION'
+       ':(exclude)pnpm-lock.yaml' ':(exclude)*.glb'
        ':(exclude).beads/*' ':(exclude)dashboard/vendor/*')
 
 # Screenshots the design reviewer looks at. Whatever drives your app should

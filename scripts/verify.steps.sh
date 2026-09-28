@@ -8,25 +8,28 @@
 # <name> <cmd...>`: it swallows the log and prints one line, which is the whole
 # point of the gate.
 
-# Replace these with your project's real commands. `step <name> <cmd...>` runs
-# it, logs it, and prints one line. Nothing else in this file needs to change.
+# The app's gate: types, lint, the production build, then the unit tests.
+# Every command is a package.json script, so `pnpm <name>` by hand runs exactly
+# what the gate runs.
 
-step "build" false   # e.g. cargo build / npm run build / xcodebuild ... build
+step "typecheck" pnpm -s typecheck
+step "lint" pnpm -s lint
+step "build" pnpm -s build
 
 if [ "$mode" != "--quick" ]; then
-  step "tests" false # e.g. cargo test / npm test / pytest -q
+  # --run: Vitest watches when stdin is a terminal, and the gate would never exit.
+  step "tests" pnpm -s test --run
 
-  # Test counts are the one detail worth surfacing on success — "ok" alone
-  # can't distinguish a green suite from a suite that ran nothing. Point this
-  # grep at whatever your runner prints.
+  # Vitest's summary line, e.g. "Tests  12 passed (12)" — "ok" alone can't tell
+  # a green suite from one that ran nothing.
   if [ -f "$LOGS/tests.log" ]; then
     grep -oE "[0-9]+ (passed|tests?)[^.]*" "$LOGS/tests.log" | tail -1 | sed -e 's/^/        /'
   fi
 fi
 
 if [ "$mode" = "--full" ]; then
-  # Anything slow, or anything needing a GUI session: a second platform's
-  # build, an integration suite, a smoke check that launches the app and
-  # asserts it came up. Delete this block if the project has none.
-  :
+  # Needs a browser: route smoke tests and the golden-hour / night captures,
+  # written to /tmp/fol-*.png where scripts/review.sh collects them.
+  # The HTML report would otherwise open and block on the first failure.
+  step "e2e" env PW_TEST_HTML_REPORT_OPEN=never pnpm -s test:e2e
 fi

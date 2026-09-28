@@ -45,11 +45,27 @@ Check for, in rough order of how often it actually goes wrong:
   explaining a *why* — a workaround, a constraint, a platform gotcha.
 - **Accessibility.** Icon-only controls need a label.
 
-<!-- ── FILL THIS IN ────────────────────────────────────────────────────────
-Add the checks specific to this project's language and framework: the
-concurrency model's rules, the animation conventions, the selector or test hook
-a new control has to carry. Delete this comment once you have.
-──────────────────────────────────────────────────────────────────────────── -->
+For this project (R3F, three.js, Blender Python):
+
+- **Declarative first.** Scene objects are JSX unless there's a reason for
+  imperative three. The decided imperative paths are the exceptions: the
+  `GLTFLoader` + `BatchedMesh` assembly (R-004, R-009, D-032). Per-frame motion
+  goes through refs in `useFrame`, never through React state.
+- **One of each.** Colors come from `palette.ts`. Architecture and props go
+  through the shared material composer. A new one-off material, or a hex literal
+  outside the palette, is drift (D-024, R-005). The special surfaces the
+  decision log names (water, cream ocean, neon and fake glow, fake glass, hero
+  clearcoat, env sky) are not.
+- **Tunables are data.** Look values (sun angle, bloom, fog, grade) live in the
+  keyframe JSON the tweak panel writes back to, not in magic numbers in
+  components. Blender shape params live in the asset's params JSON.
+- **Shader code reads like code.** Injected GLSL lives in named chunks with a
+  comment saying which built-in chunk it replaces and why, not in anonymous
+  string splices.
+- **Names follow the pipeline.** Mesh names are `<hood>.<object>.<material>.<lod>`
+  (D-034). Vertex attributes are `_AO`, `_NIGHT`, `_ID`.
+- **Decisions stay honored.** Anything that quietly contradicts
+  `docs/decisions.md` is a finding, even when it looks fine locally.
 
 If `harness/stacks.txt` names any stacks, read the `reviewer-taste`
 section of each `harness/stacks/<name>.md` — the checks for this project's

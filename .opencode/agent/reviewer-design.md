@@ -88,11 +88,16 @@ Work through the captures one at a time, and for each one ask:
   is drift, even when it looks fine alone. Compare against the other captures
   and against what the app already does.
 
-  <!-- ── FILL THIS IN ────────────────────────────────────────────────────
-  Name the app's actual look in a sentence — its accent colour, its material,
-  its spacing habit — so this reviewer can spot drift from something specific
-  rather than from memory. Delete this comment once you have.
-  ───────────────────────────────────────────────────────────────────────── -->
+  The look is "stylized-real" solarpunk (docs/art-direction/README.md): gold
+  and cream biomorphic shells with generous bevels, lush forest-green planting,
+  bold paints from `palette.ts`, and one neon per neighborhood (Cortico is mint)
+  tracing the architecture's curves. Captures come in pairs, golden hour and
+  night. Golden hour should have warm low sun, gold highlights and grounded
+  contact shadows (baked AO). Night should have neon that blooms and lights its
+  surroundings, not flat glowing lines on black. Flag shimmer or aliasing on
+  thin lattices, blown-out gold, muddy greens, a missing capture from either
+  keyframe, and DOM panels that pick up website chrome (dividers, eyebrows,
+  long labels).
 - **Alignment and rhythm.** Labels and values on a consistent grid, equal
   spacing between sibling rows, things that should be left-aligned actually
   left-aligned, no lone element hanging off a different margin.

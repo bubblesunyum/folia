@@ -2,90 +2,34 @@
 
 # Portfolio Town (folia)
 
-A 3D solarpunk-town portfolio site built with React Three Fiber.
+A 3D solarpunk-town portfolio site built with React Three Fiber. Beauty is the
+success test, and speed is a requirement alongside it, never traded against it.
 
-Read these before working:
-- **[docs/spec.md](docs/spec.md)**: the build spec and the current milestone checklist.
-- **[docs/decisions.md](docs/decisions.md)**: the decision log. Don't contradict an entry without raising it with @bubbles first. When a new decision is made, append an entry (next `D-0xx` ID) and mark any replaced entry `Superseded by D-0xx` rather than deleting it.
+## Read before working
+- **[docs/spec.md](docs/spec.md)**: the build spec and the milestone checklist. Milestone 1 runs spikes → vertical slice → breadth (D-049).
+- **[docs/decisions.md](docs/decisions.md)**: the decision log. Don't contradict an entry without raising it with @bubbles first. A new decision gets the next `D-0xx` entry, and a replaced one is marked `Superseded by D-0xx`, never deleted. Each spike ends by logging its result there.
 - [docs/art-direction/README.md](docs/art-direction/README.md): the look, the reference boards and the art pillars.
 - [docs/research/](docs/research/): research notes with sources. Where they conflict with `decisions.md`, the decisions win.
 - [docs/reviews/](docs/reviews/): expert reviews of the plan. Adopted findings are recorded as decisions (D-030 onward).
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
-## Beads Issue Tracker
+## Stack
+Vite + React Router v8 (framework mode, `prerender`, fully static), R3F 9 + drei + pmndrs postprocessing on WebGL2 (three r186), TypeScript strict, pnpm, Vitest, Playwright, Biome, Vercel. Geometry comes from headless Blender scripts in `assets/blender/**`, pinned by `assets/blender/VERSION` (Blender 5.2 LTS lives at `/Applications/Blender.app/Contents/MacOS/Blender`; it isn't on PATH).
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+## Standards
+- **Geometry is generated.** Change the params JSON or the script and re-export; a Blender MCP may tune params, not meshes. Hand-modeling is an escape hatch for hero pieces only (D-001, D-002, D-034).
+- **One palette.** Colors come from `palette.ts`, shared by the materials and the panel CSS (D-024). No hex literals elsewhere.
+- **Shared materials, features injected.** Architecture and props use the 6–8 shared materials, with features injected through the material composer (`onBeforeCompile`), shadow-depth materials included. The decided special surfaces have their own programs: water, the cream ocean, neon and fake glow, fake glass, hero clearcoat, the env-scene sky (R-005, D-018, D-038, D-039, D-040, D-050).
+- **Mesh names are `<hood>.<object>.<material>.<lod>`** (D-034).
+- **Tests:** Vitest for pure logic (the time-of-day gradient, tier ladder, content schema, attribute validator). Playwright for routes and screenshots. Visual changes need a capture at golden hour and at night, written to `/tmp/fol-<name>.png` so `scripts/review.sh` hands it to the design reviewer.
+- **UI copy:** one-word labels, spacing instead of rules, no eyebrow kickers, in-world before flat chrome (spec: design rules).
 
-### Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
-```
-
-### Rules
-
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
-
-## Agent Context Profiles
-
-The managed Beads block is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.
-
-- **Conservative (default)**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
-- **Minimal**: Keep tool instruction files as pointers to `bd prime`; use the same conservative git policy unless active instructions say otherwise.
-- **Team-maintainer**: Only when the repository explicitly opts in, agents may close beads, run quality gates, commit, and push as part of session close. A current "do not commit" or "do not push" instruction still wins.
-
-## Session Completion
-
-This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, and orchestrator instructions.
-
-1. **File issues for remaining work** - Create beads for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **Handle git/sync by active profile**:
-   ```bash
-   # Conservative/minimal/default: report status and proposed commands; wait for approval.
-   git status
-
-   # Team-maintainer opt-in only, unless current instructions forbid it:
-   git pull --rebase
-   git push
-   git status
-   ```
-5. **Hand off** - Summarize changes, validation, issue status, and any blocked sync/commit/push step
-
-**Critical rules:**
-- Explicit user or orchestrator instructions override this Beads block.
-- Do not commit or push without clear authority from the active profile or the current user request.
-- If a required sync or push is blocked, stop and report the exact command and error.
-<!-- END BEADS INTEGRATION -->
-
-<!-- BEGIN BEADS CODEX SETUP: generated by bd setup codex -->
-## Beads Issue Tracker
-
-Use Beads (`bd`) for durable task tracking in repositories that include it. Use the `beads` skill at `.agents/skills/beads/SKILL.md` (project install) or `~/.agents/skills/beads/SKILL.md` (global install) for Beads workflow guidance, then use the `bd` CLI for issue operations.
-
-### Quick Reference
-
-```bash
-bd ready                # Find available work
-bd show <id>            # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>           # Complete work
-bd prime                # Refresh Beads context
-```
-
-### Rules
-
-- Use `bd` for all task tracking; do not create markdown TODO lists.
-- Run `bd prime` when Beads context is missing or stale. Codex 0.129.0+ can load Beads context automatically through native hooks; use `/hooks` to inspect or toggle them.
-- Keep persistent project memory in Beads via `bd remember`; do not create ad hoc memory files.
-
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
-<!-- END BEADS CODEX SETUP -->
+## Traps that are already known
+Each of these is a decision because it has bitten someone before.
+- Never toggle `renderer.shadowMap.enabled` at runtime: it recompiles every program. Shadow tiers set intensity to 0 instead (D-043, D-036).
+- No `discard` in shared materials; the reveal is a color and roughness blend (D-044).
+- No `transmission` glass, no hemisphere light next to the env map, no selective-bloom passes, no DPR above 2 (D-050, D-040, spec: Performance, D-036).
+- No gltf-transform `instance()` on anything headed into a `BatchedMesh`, and batched geometry is dequantized to Float32 at load (D-033).
+- `<Canvas flat gl={{ antialias: false, alpha: false }}>`. Tone mapping belongs to the composer (D-043).
+- three and R3F stay out of the SSR module graph (D-047).
+- Vercel doesn't compress `.glb` (D-047).
+- Perf is measured as GPU ms via the timer query, not FPS. The budget is ≤3 ms GPU on the Max under `?perf=base` (D-035, D-051).

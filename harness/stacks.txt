@@ -5,3 +5,4 @@
 # rewrites it. If it guessed wrong, edit it; to pick up guidance for a stack
 # you added, re-run harness add. The names are the files in the starter's
 # template/harness/stacks/.
+web
