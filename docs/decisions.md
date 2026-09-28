@@ -544,6 +544,24 @@ The checklist is in [spec.md](spec.md#milestone-1-one-exciting-neighborhood-cort
 *Why:* B-1, B-2, S-1 and S-13 each needed a working asset to answer rather than a plan.
 *Refines:* D-031, D-032, D-033, D-034, D-045.
 
+### D-054 Foliage detail: lobes, sprays and a leaf-normal blend
+**Decision:** Foliage clumps stop reading as one ball of big cards (@bubbles: "low-poly and lego-like"). Three scales, all in `assets/blender/folia/foliage.py` and driven by the `planting` params:
+- **Lobes:** each clump is a few overlapping ellipsoids. The proxy normals come from their soft union (a softmin-weighted blend of each lobe's gradient), not from one ellipsoid.
+- **Sprays:** leaves come in fans of about 7 around a point. They share a facing, so they shade together as a middle scale between lobe and leaf.
+- **Leaves:** small, pointed and creased along the midrib, with a drooping tip. Each is 6 vertices and 4 triangles.
+- **Normals:** each normal is 70% proxy and 30% the leaf's own creased normal, so the clump still shades as a mass while single leaves catch the light.
+- **Colour:** the foliage feature's jitter is smooth value noise instead of an axis-aligned cell hash, plus clump-scale patches tinted toward `palette.lawn` as new growth.
+
+**Cost:**
+- The fragment's foliage goes from 11.2k to 36.0k triangles, and the GLB from 1.16 MB to 1.60 MB.
+- **Not yet verified against the D-051 budget.** Perf is GPU ms under `?perf=base` (D-035), and that measurement is spike 3's. The dev HUD still pins at the 120 Hz vsync cap on the M1 Max, which shows no regression large enough to drop frames, and nothing more. stats-gl's GPU readout was too noisy to quote.
+- Leaf-scale shimmer under camera motion is a risk for spike 3's AA choice (D-042, fol-hch).
+
+**Placement:** sprays sit on a jittered Fibonacci lattice per lobe, not at random. At about 1× coverage, random placement leaves Poisson gaps, and those show as a hollow crown where a clump faces the camera.
+
+*Why:* the art direction spends detail at the neighbourhood vantage. Foliage was 8% of the fragment's triangles, so it had room.
+*Refines:* D-045.
+
 ---
 
 ## Open questions (not yet decided)

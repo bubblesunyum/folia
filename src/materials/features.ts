@@ -103,6 +103,8 @@ export const foliage = {
     uTranslucency: { value: 0.9 },
     uTranslucencyPower: { value: 3 },
     uJitter: { value: 0.18 },
+    uNewGrowth: { value: new Color() },
+    uGrowth: { value: 0.45 },
   },
   vertex: {
     header: 'varying vec3 vFoliageWorld;',
@@ -123,14 +125,33 @@ export const foliage = {
       uniform float uTranslucency;
       uniform float uTranslucencyPower;
       uniform float uJitter;
+      uniform vec3 uNewGrowth;
+      uniform float uGrowth;
       varying vec3 vFoliageWorld;
       float foliageHash(vec3 p) {
-        return fract(sin(dot(floor(p), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+        return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+      }
+      // Value noise, smoothly interpolated, so colour drifts across a clump
+      // instead of switching at axis-aligned cell walls.
+      float foliageNoise(vec3 p) {
+        vec3 i = floor(p);
+        vec3 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        vec2 k = vec2(0.0, 1.0);
+        return mix(
+          mix(mix(foliageHash(i + k.xxx), foliageHash(i + k.yxx), f.x),
+              mix(foliageHash(i + k.xyx), foliageHash(i + k.yyx), f.x), f.y),
+          mix(mix(foliageHash(i + k.xxy), foliageHash(i + k.yxy), f.x),
+              mix(foliageHash(i + k.xyy), foliageHash(i + k.yyy), f.x), f.y),
+          f.z);
       }`,
     chunks: {
       color_fragment: {
         after: /* glsl */ `
-          float jitter = mix(foliageHash(vFoliageWorld * 3.0), foliageHash(vFoliageWorld * 0.9), 0.5);
+          // Lobe-scale value drift, and clump-scale patches of yellower new growth.
+          float jitter = foliageNoise(vFoliageWorld * 2.5);
+          float growth = smoothstep(0.45, 0.85, foliageNoise(vFoliageWorld * 0.7 + 17.0));
+          diffuseColor.rgb = mix(diffuseColor.rgb, uNewGrowth, uGrowth * growth);
           diffuseColor.rgb *= 1.0 + uJitter * (jitter - 0.5) * 2.0;`,
       },
       normal_fragment_begin: {

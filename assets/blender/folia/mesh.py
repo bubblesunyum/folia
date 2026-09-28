@@ -23,8 +23,8 @@ class Part:
 def new_object(name, verts, faces, merge=True):
     """An object from vertex and face arrays, with outward-facing normals.
 
-    `merge` welds coincident vertices; foliage turns it off because its leaves
-    are deliberately two-sided pairs sharing positions.
+    `merge` welds coincident vertices; foliage turns it off so leaves that
+    happen to touch stay separate cards.
     """
     me = bpy.data.meshes.new(name)
     me.from_pydata([tuple(v) for v in np.asarray(verts, dtype=float)], [], [tuple(f) for f in faces])

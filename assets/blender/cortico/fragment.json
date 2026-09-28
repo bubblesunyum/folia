@@ -131,6 +131,34 @@
     ]
   },
   "planting": {
+    "overhang": 0.35,
+    "leaf_size": 0.17,
+    "leaf_aspect": 0.5,
+    "fold": 0.35,
+    "scatter": 0.45,
+    "depth": 0.3,
+    "floor": 0.35,
+    "density": 150,
+    "curl": 0.1,
+    "lobes": 4,
+    "lobe_spread": 0.75,
+    "lobe_size": [
+      0.45,
+      0.65
+    ],
+    "sharpness": 4,
+    "leaf_normal": 0.3,
+    "buried": 0.85,
+    "lobe_rise": [
+      0.5,
+      -0.15
+    ],
+    "spray": 7,
+    "spray_radius": 0.2,
+    "leaf_scatter": 0.3,
+    "spray_depth": 0.25,
+    "fan_scatter": 0.35,
+    "lattice_jitter": 0.3,
     "clumps": [
       {
         "level": 1,
@@ -204,15 +232,7 @@
           0.7
         ]
       }
-    ],
-    "overhang": 0.35,
-    "leaves": 700,
-    "leaf_size": 0.26,
-    "leaf_aspect": 0.55,
-    "fold": 0.12,
-    "scatter": 0.55,
-    "depth": 0.35,
-    "floor": 0.35
+    ]
   },
   "bake": {
     "ao_distance": 2.5,

@@ -53,6 +53,7 @@ export const materials: Readonly<Record<string, SharedMaterial>> = {
 }
 
 group.uniforms.uGroupGlowColor.value.set(palette.mint)
+foliage.uniforms.uNewGrowth.value.set(palette.lawn)
 
 /** Moves every shared material to `look`. */
 export function applyLook(look: Look): void {
