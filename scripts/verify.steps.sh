@@ -20,6 +20,8 @@ PNPM=(corepack pnpm run)
 step "typecheck" "${PNPM[@]}" typecheck
 step "lint" "${PNPM[@]}" lint
 step "build" "${PNPM[@]}" build
+# Committed GLBs match their Blender sources (D-034); no Blender needed.
+step "assets" "${PNPM[@]}" assets:check
 
 if [ "$mode" != "--quick" ]; then
   # --run: Vitest watches when stdin is a terminal, and the gate would never exit.

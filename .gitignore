@@ -28,3 +28,5 @@ playwright-report/
 
 # Blender's autosave backups beside the .blend sources.
 *.blend1
+.cache/
+__pycache__/

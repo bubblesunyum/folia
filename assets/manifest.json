@@ -1,0 +1,13 @@
+{
+  "cortico/fragment": {
+    "hash": "8367969785c139ac",
+    "bytes": 1156620,
+    "triangles": {
+      "ground": 5664,
+      "cream": 106480,
+      "gold": 6720,
+      "neon": 1616,
+      "foliage": 11200
+    }
+  }
+}

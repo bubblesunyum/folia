@@ -4,6 +4,8 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "types": ["vite/client", "node"],
     "strict": true,
@@ -16,5 +18,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "e2e", "vite.config.ts", "playwright.config.ts"]
+  "include": ["src", "e2e", "assets/pipeline", "vite.config.ts", "playwright.config.ts"]
 }

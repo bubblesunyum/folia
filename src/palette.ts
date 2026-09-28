@@ -1,16 +1,26 @@
-// The single source of color for the 3D materials and the panel CSS (D-024).
-// Entries marked provisional are stand-ins until the spike 1 look-dev sets them.
+// The single source of color for the 3D materials, the sky keyframes and the
+// panel CSS (D-024). Brand colors first, then the world's.
 export const palette = {
-  cream: '#F4EEE1', // provisional
-  gold: '#C9A24B', // provisional
+  // Structure and bold paints, from the brand.
+  cream: '#F4EEE1',
+  gold: '#C9A24B',
   tangerine: '#F19E4B',
   butter: '#EFEA5D',
   mint: '#4BFED2',
-  lavender: '#B9A7F2', // provisional
-  hotPink: '#FF4FA3', // provisional
+  lavender: '#B9A7F2',
+  hotPink: '#FF4FA3',
+  // Nature.
   forest: '#001E17',
-  skyDusk: '#F3C79B', // provisional
-  skyNight: '#0A1424', // provisional
+  lawn: '#557C33',
+  leaf: '#3F7A34',
+  // Light and sky, referenced by name from time/keyframes.json.
+  sunlight: '#FFD2A1',
+  sunGlow: '#FFA75E',
+  moonlight: '#9DB3FF',
+  skyZenith: '#8397D4',
+  skyDusk: '#F3C79B',
+  skyNight: '#0A1424',
+  skyNightHorizon: '#26325A',
 } as const
 
 export type PaletteColor = keyof typeof palette

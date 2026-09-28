@@ -1,0 +1,184 @@
+// Builds Blender assets into packed GLBs, skipping any whose sources haven't
+// changed (D-034's per-asset content hash).
+//
+//   node assets/pipeline/build.ts [asset…] [--force] [--json]   build stale assets (all by default)
+//   node assets/pipeline/build.ts --check               fail if any committed GLB is stale
+//
+// An asset is `assets/blender/<hood>/<object>.py` plus its `.json` params. The
+// packed GLB lands in `public/assets/<hood>/<object>.glb`, and its source hash
+// in `assets/manifest.json`, which is what `--check` compares against.
+
+import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join, relative, resolve } from 'node:path'
+import { promisify } from 'node:util'
+import { palette } from '../../src/palette.ts'
+import { pack } from './pack.ts'
+
+const ROOT = resolve(import.meta.dirname, '../..')
+const BLENDER_DIR = join(ROOT, 'assets/blender')
+const MANIFEST = join(ROOT, 'assets/manifest.json')
+const BLENDER = process.env.FOLIA_BLENDER ?? '/Applications/Blender.app/Contents/MacOS/Blender'
+
+export interface AssetRecord {
+  hash: string
+  bytes: number
+  triangles: Record<string, number>
+}
+
+export interface BuildResult extends AssetRecord {
+  asset: string
+  seconds: Record<string, number>
+}
+
+type Manifest = Record<string, AssetRecord>
+
+/** Every `<hood>/<object>` with both a script and a params file. */
+export function listAssets(): string[] {
+  return readdirSync(BLENDER_DIR, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name !== 'folia' && !d.name.startsWith('_'))
+    .flatMap((d) =>
+      readdirSync(join(BLENDER_DIR, d.name))
+        .filter(
+          (f) =>
+            f.endsWith('.json') &&
+            existsSync(join(BLENDER_DIR, d.name, f.replace(/\.json$/, '.py'))),
+        )
+        .map((f) => `${d.name}/${f.replace(/\.json$/, '')}`),
+    )
+    .sort()
+}
+
+/** The files an asset's output depends on, absolute and sorted. */
+export function assetSources(asset: string): string[] {
+  const shared = readdirSync(join(BLENDER_DIR, 'folia'))
+    .filter((f) => f.endsWith('.py'))
+    .map((f) => join(BLENDER_DIR, 'folia', f))
+  return [
+    ...shared,
+    join(BLENDER_DIR, 'build.py'),
+    join(BLENDER_DIR, 'VERSION'),
+    join(BLENDER_DIR, `${asset}.py`),
+    join(BLENDER_DIR, `${asset}.json`),
+    join(ROOT, 'src/palette.ts'),
+    join(ROOT, 'src/assets/batchSchema.ts'),
+    join(ROOT, 'assets/pipeline/pack.ts'),
+  ].sort()
+}
+
+// The pack step's output depends on these as much as on its source.
+const TOOLCHAIN = [
+  '@gltf-transform/core',
+  '@gltf-transform/extensions',
+  '@gltf-transform/functions',
+  'meshoptimizer',
+]
+
+function toolchainVersions(): string {
+  return TOOLCHAIN.map((name) => {
+    const manifest = join(ROOT, 'node_modules', name, 'package.json')
+    return `${name}@${JSON.parse(readFileSync(manifest, 'utf8')).version}`
+  }).join(' ')
+}
+
+export function hashAsset(asset: string): string {
+  const hash = createHash('sha256').update(toolchainVersions()).update('\0')
+  for (const file of assetSources(asset)) {
+    hash.update(relative(ROOT, file)).update('\0').update(readFileSync(file)).update('\0')
+  }
+  return hash.digest('hex').slice(0, 16)
+}
+
+export function outputPath(asset: string): string {
+  return join(ROOT, 'public/assets', `${asset}.glb`)
+}
+
+function readManifest(): Manifest {
+  return existsSync(MANIFEST) ? JSON.parse(readFileSync(MANIFEST, 'utf8')) : {}
+}
+
+function writeManifest(manifest: Manifest): void {
+  const sorted = Object.fromEntries(Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b)))
+  writeFileSync(MANIFEST, `${JSON.stringify(sorted, null, 2)}\n`)
+}
+
+/** Assets whose committed GLB no longer matches their sources. */
+export function staleAssets(): string[] {
+  const manifest = readManifest()
+  return listAssets().filter(
+    (a) => manifest[a]?.hash !== hashAsset(a) || !existsSync(outputPath(a)),
+  )
+}
+
+/** Builds one asset; null when it was already fresh and `force` is off. */
+export async function buildAsset(asset: string, force = false): Promise<BuildResult | null> {
+  const hash = hashAsset(asset)
+  const manifest = readManifest()
+  if (!force && manifest[asset]?.hash === hash && existsSync(outputPath(asset))) return null
+
+  const started = performance.now()
+  const raw = join(ROOT, '.cache/blender', `${asset}.raw.glb`)
+  const args = [
+    '-b',
+    '--factory-startup',
+    '--python-exit-code',
+    '1',
+    '--python',
+    join(BLENDER_DIR, 'build.py'),
+  ]
+  let stdout: string
+  try {
+    ;({ stdout } = await promisify(execFile)(
+      BLENDER,
+      [...args, '--', asset, '--out', raw, '--palette', JSON.stringify(palette)],
+      {
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    ))
+  } catch (error) {
+    const out = `${(error as { stdout?: string }).stdout ?? ''}${(error as { stderr?: string }).stderr ?? ''}`
+    throw new Error(`blender failed on ${asset}:\n${out.split('\n').slice(-30).join('\n')}`)
+  }
+  const line = stdout.split('\n').find((l) => l.startsWith('FOLIA_BUILD '))
+  if (!line) throw new Error(`blender printed no FOLIA_BUILD line for ${asset}`)
+  const report = JSON.parse(line.slice('FOLIA_BUILD '.length)) as {
+    triangles: Record<string, number>
+    seconds: Record<string, number>
+  }
+  const blenderDone = performance.now()
+
+  const { bytes } = await pack(raw, outputPath(asset))
+  const record = { hash, bytes, triangles: report.triangles }
+  writeManifest({ ...readManifest(), [asset]: record })
+
+  const seconds = {
+    ...report.seconds,
+    blender: round((blenderDone - started) / 1000),
+    pack: round((performance.now() - blenderDone) / 1000),
+  }
+  return { asset, ...record, seconds }
+}
+
+const round = (s: number) => Math.round(s * 100) / 100
+
+if (import.meta.main) {
+  const argv = process.argv.slice(2)
+  if (argv.includes('--check')) {
+    const stale = staleAssets()
+    if (stale.length) {
+      console.error(`stale assets (run node assets/pipeline/build.ts): ${stale.join(', ')}`)
+      process.exit(1)
+    }
+    console.log(`assets fresh (${listAssets().length})`)
+  } else {
+    const force = argv.includes('--force')
+    // --json: one JSON line per asset, null when fresh (the dev plugin reads it).
+    const json = argv.includes('--json')
+    const named = argv.filter((a) => !a.startsWith('--'))
+    for (const asset of named.length ? named : listAssets()) {
+      const result = await buildAsset(asset, force)
+      console.log(json || result ? JSON.stringify(result) : `${asset}: fresh`)
+    }
+  }
+}
