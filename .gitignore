@@ -13,3 +13,4 @@ harness/models.json
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
