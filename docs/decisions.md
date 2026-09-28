@@ -491,6 +491,59 @@ The checklist is in [spec.md](spec.md#milestone-1-one-exciting-neighborhood-cort
 *Why:* D-035 needs whole-frame GPU time and a sub-draw count that `renderer.info` can't give, and D-043 needs restore to actually recover.
 *Refines:* D-035, D-043.
 
+### D-053 Spike 1+2 result: the Blender → three round trip works end to end
+**Decision:**
+- **Pipeline contract (S-13):**
+  - Blender 5.2.2 LTS runs headless with factory settings; `build.py` refuses any other version.
+  - Procedures live in `assets/blender/folia/*.py` plus one `<hood>/<object>.py` per asset, and params in the asset's `.json`.
+  - `palette.ts` reaches Blender as JSON from the Node build, so Python never parses TypeScript.
+  - `assets/manifest.json` records a per-asset content hash (sources, the pack toolchain's versions). `pnpm assets:check` in the gate fails on a stale committed GLB, without needing Blender.
+- **Baked light (B-1):**
+  - Cycles vertex bakes into POINT attributes on the assembled asset, before it is split: `_AO` from the AO pass (2.5 m), and `_NIGHT` from a DIFFUSE direct + indirect pass with a black world and the neon as the only emitter.
+  - Both are smoothed with three edge-neighbour passes, because one noisy sample per vertex streaks across long triangles.
+  - Terrace top rings crowd toward the rim (`rim_bias`), where contact AO and spill change fastest.
+  - On Metal the bake is ~3–4 s at 128 samples for ~100k vertices, mostly fixed cost. The first run compiles kernels (~2 min, then cached), and the CPU fallback costs ~0.2 s per sample.
+- **Attribute storage (S-1, refines D-033):**
+  - Each custom attribute has one fixed storage: `_ID` u8, `_AO` u8 normalized, `_NIGHT` u16 normalized over a range of 4.
+  - Over-bright spill is scaled per vertex so it keeps its hue.
+  - POSITION is quantized at 16 bits and NORMAL at 10, over a per-mesh volume.
+  - The pack step doesn't use gltf-transform `meshopt()`: at `medium` it quantizes an `_` attribute only when its values happen to fit [-1, 1].
+  - The validator runs on the raw export and again on the packed one.
+- **Granularity (B-2):**
+  - One geometry per (asset × material × LOD).
+  - `_ID` groups (ground, terrace, canopy, shell, planting) index `uGroupState`.
+  - The fragment draws as 5 batches: 23 calls including shadows and post, 9 sub-draws.
+- **Runtime:**
+  - GLTFLoader + MeshoptDecoder. Each primitive is dequantized to Float32 in world space and its custom attributes renamed (`groupId`, `bakedAo`, `bakedNight`).
+  - Composer features: `baked`, `group`, `group-lift`, `foliage`. The program cache key is the feature keys. The depth material carries the lift.
+  - Neon is MeshBasicMaterial scaled by the keyframe's emissive.
+- **Forms:**
+  - **Voronoi canopy:** a seeded jittered triangular lattice stands in for "remesh, triangulate". Then Dual Mesh, a per-cell inset proportional to √area, deleted centres, umbrella shaping, solidify and subdivide. The cells over the trunk stay closed as a crown.
+  - **Shells:** lofted, cupped petals instead of metaballs or a voxel remesh. They're cleaner and seedable, with no remesh resolution to tune.
+  - **Foliage:** normals come analytically from each clump's ellipsoid instead of a Data Transfer. Leaves are single-sided cards drawn DoubleSide, with the back face keeping the proxy normal.
+- **Fast loop:**
+  - A dev Vite plugin watches each asset's sources, rebuilds in a fresh child process, and hot-swaps the GLB inside a transition, with no reload.
+  - Measured **7.6 s save → pixels**, against the 10 s target. A CLI rebuild is 4.8–5.4 s.
+- **Size:** the packed fragment is 1.16 MB, about 132k triangles (cream 106k).
+- **Look:** credible, not yet the boards.
+  - The forms carry the vocabulary. The canopy's dappled shadow on the terraces already reads like the boards.
+  - The gaps, largest first:
+    1. No atmosphere at golden hour: a lit object in a dark void, with no horizon or height fog (D-046 isn't built).
+    2. The cream leans salmon, with mauve shade.
+    3. The greenery sits in balls instead of spilling.
+    4. The canopy is too regular and has no branch ribs.
+    5. Night is one flat navy with a single neon run.
+    6. The shell's petals interpenetrate.
+  - Most of the gap is light and material, not scripted form. Whether to stop and fix the look before spike 3 is @bubbles' call (D-049).
+- **Deferred:**
+  - Neon's built-in fake glow (D-038).
+  - `revealHeight` in the composer (D-018).
+  - Instance colours before first render (D-043), since no batch uses them yet.
+  - The sun azimuth as keyframe data rather than a constant in `sun.ts`.
+
+*Why:* B-1, B-2, S-1 and S-13 each needed a working asset to answer rather than a plan.
+*Refines:* D-031, D-032, D-033, D-034, D-045.
+
 ---
 
 ## Open questions (not yet decided)

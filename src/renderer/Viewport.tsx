@@ -16,7 +16,7 @@ export function Viewport({ children }: { children: ReactNode }) {
         shadows="percentage"
         dpr={[1, 2]}
         gl={{ antialias: false, alpha: false }}
-        camera={{ fov: 18, near: 1, far: 200, position: [22, 16, 22] }}
+        camera={{ fov: 18, near: 1, far: 300, position: [40, 34, 40] }}
       >
         <RenderedFlag />
         <ContextLossProvider onLostChange={setContextLost}>{children}</ContextLossProvider>

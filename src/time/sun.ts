@@ -1,9 +1,14 @@
-// A placeholder sun arc, so the scrubber has something to drive until the
-// time-of-day gradient replaces it in phase 1 (D-013, D-037).
+// The sun's position by hour: a simple arc from sunrise to sunset, turned to
+// suit the town's fixed yaw. The look keyframes (look.ts) set its colour and
+// strength; the moon reuses the arc twelve hours on.
 
 const SUNRISE = 6
 const SUNSET = 20
 const MAX_ELEVATION = (65 * Math.PI) / 180
+// Turns the arc so that at golden hour the sun sits behind and to the right of
+// the fixed town yaw: rim light on foliage and gold, shadows falling toward
+// the viewer, rather than flat front light.
+const AZIMUTH_OFFSET = (95 * Math.PI) / 180
 
 export interface Sun {
   /** Unit vector pointing at the sun. */
@@ -17,7 +22,7 @@ export interface Sun {
 export function sunAt(hours: number): Sun {
   const t = (hours - SUNRISE) / (SUNSET - SUNRISE)
   const elevation = Math.sin(Math.PI * t) * MAX_ELEVATION
-  const azimuth = Math.PI * (t - 0.5)
+  const azimuth = Math.PI * (t - 0.5) + AZIMUTH_OFFSET
   const flat = Math.cos(elevation)
   return {
     direction: [flat * Math.sin(azimuth), Math.sin(elevation), flat * Math.cos(azimuth)],

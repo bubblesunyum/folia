@@ -15,8 +15,8 @@ for (const { name, time } of keyframes) {
     })
 
     await page.goto(`/?time=${time}`)
-    await expect(page.locator('canvas[data-rendered="true"]')).toBeVisible({ timeout: 30_000 })
-    await page.screenshot({ path: `/tmp/fol-scaffold-${name}.png` })
+    await expect(page.locator('canvas[data-assets="drawn"]')).toBeVisible({ timeout: 60_000 })
+    await page.screenshot({ path: `/tmp/fol-fragment-${name}.png` })
     expect(errors).toEqual([])
   })
 }

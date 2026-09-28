@@ -1,0 +1,174 @@
+{
+  "keyframes": [
+    {
+      "name": "dawn",
+      "hours": 6.5,
+      "provisional": true,
+      "look": {
+        "sky": {
+          "zenith": "skyZenith",
+          "horizon": "skyDusk",
+          "ground": "forest",
+          "glow": "sunGlow",
+          "glowIntensity": 3,
+          "glowSharpness": 10,
+          "clouds": 0.4
+        },
+        "sun": {
+          "color": "sunlight",
+          "intensity": 2.2
+        },
+        "moon": {
+          "color": "moonlight",
+          "intensity": 0
+        },
+        "env": {
+          "intensity": 0.8
+        },
+        "night": 0,
+        "emissive": 1,
+        "bloom": {
+          "intensity": 0.3,
+          "threshold": 1.1,
+          "smoothing": 0.2
+        },
+        "grade": {
+          "lift": [0, 0, 0.01],
+          "gamma": [1, 1, 1],
+          "gain": [1, 1, 1],
+          "saturation": 1.05,
+          "shadowTint": "lavender",
+          "highlightTint": "hotPink",
+          "split": 0.03
+        }
+      }
+    },
+    {
+      "name": "midday",
+      "hours": 13,
+      "provisional": true,
+      "look": {
+        "sky": {
+          "zenith": "skyZenith",
+          "horizon": "cream",
+          "ground": "forest",
+          "glow": "sunlight",
+          "glowIntensity": 1.5,
+          "glowSharpness": 24,
+          "clouds": 0.3
+        },
+        "sun": {
+          "color": "cream",
+          "intensity": 3.6
+        },
+        "moon": {
+          "color": "moonlight",
+          "intensity": 0
+        },
+        "env": {
+          "intensity": 1
+        },
+        "night": 0,
+        "emissive": 0.8,
+        "bloom": {
+          "intensity": 0.2,
+          "threshold": 1.2,
+          "smoothing": 0.2
+        },
+        "grade": {
+          "lift": [0, 0, 0],
+          "gamma": [1, 1, 1],
+          "gain": [1, 1, 1],
+          "saturation": 1.05,
+          "shadowTint": "lavender",
+          "highlightTint": "butter",
+          "split": 0.02
+        }
+      }
+    },
+    {
+      "name": "golden",
+      "hours": 18.5,
+      "look": {
+        "sky": {
+          "zenith": "skyZenith",
+          "horizon": "skyDusk",
+          "ground": "forest",
+          "glow": "sunGlow",
+          "glowIntensity": 6,
+          "glowSharpness": 12,
+          "clouds": 0.5
+        },
+        "sun": {
+          "color": "sunlight",
+          "intensity": 4.5
+        },
+        "moon": {
+          "color": "moonlight",
+          "intensity": 0
+        },
+        "env": {
+          "intensity": 0.7
+        },
+        "night": 0,
+        "emissive": 1.2,
+        "bloom": {
+          "intensity": 0.35,
+          "threshold": 1,
+          "smoothing": 0.2
+        },
+        "grade": {
+          "lift": [0, 0, 0.01],
+          "gamma": [1, 1, 1],
+          "gain": [1.03, 1, 0.96],
+          "saturation": 1.08,
+          "shadowTint": "lavender",
+          "highlightTint": "tangerine",
+          "split": 0.025
+        }
+      }
+    },
+    {
+      "name": "night",
+      "hours": 22,
+      "look": {
+        "sky": {
+          "zenith": "skyNight",
+          "horizon": "skyNightHorizon",
+          "ground": "forest",
+          "glow": "lavender",
+          "glowIntensity": 0.3,
+          "glowSharpness": 4,
+          "clouds": 0.2
+        },
+        "sun": {
+          "color": "sunlight",
+          "intensity": 0
+        },
+        "moon": {
+          "color": "moonlight",
+          "intensity": 0.6
+        },
+        "env": {
+          "intensity": 0.4
+        },
+        "night": 1,
+        "emissive": 4,
+        "bloom": {
+          "intensity": 0.9,
+          "threshold": 0.6,
+          "smoothing": 0.15
+        },
+        "grade": {
+          "lift": [0, 0.005, 0.02],
+          "gamma": [1, 1, 1],
+          "gain": [0.95, 1, 1.08],
+          "saturation": 1,
+          "shadowTint": "lavender",
+          "highlightTint": "mint",
+          "split": 0.05
+        }
+      }
+    }
+  ]
+}

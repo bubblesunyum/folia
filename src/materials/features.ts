@@ -1,0 +1,166 @@
+// The composer's features for the shared materials. Each one reads the
+// attributes the Blender pipeline bakes (D-031, D-032), renamed at load by
+// assets/batches.ts, and exposes its knobs as shared uniforms.
+
+import { Color, Vector4 } from 'three'
+import type { Feature } from './composer'
+
+/** Groups per asset the `group` feature can address; `_ID` is a byte, the array is smaller. */
+export const MAX_GROUPS = 16
+
+/**
+ * Baked AO and night spill (D-031). `_AO` stands in for three's aoMap: it
+ * darkens indirect diffuse and drives specular occlusion, never direct sun.
+ * `_NIGHT` is emission-only irradiance from the neon, added to indirect
+ * diffuse and scaled by the time of day.
+ */
+export const bakedLight = {
+  key: 'baked',
+  uniforms: {
+    uAoIntensity: { value: 1 },
+    uNightSpill: { value: 0 },
+  },
+  vertex: {
+    header: /* glsl */ `
+      attribute float bakedAo;
+      attribute vec3 bakedNight;
+      varying float vBakedAo;
+      varying vec3 vBakedNight;`,
+    chunks: {
+      begin_vertex: { after: 'vBakedAo = bakedAo;\nvBakedNight = bakedNight;' },
+    },
+  },
+  fragment: {
+    header: /* glsl */ `
+      uniform float uAoIntensity;
+      uniform float uNightSpill;
+      varying float vBakedAo;
+      varying vec3 vBakedNight;`,
+    chunks: {
+      // After lights_fragment_end, where three applies its own aoMap.
+      aomap_fragment: {
+        instead: /* glsl */ `
+          float ambientOcclusion = (vBakedAo - 1.0) * uAoIntensity + 1.0;
+          reflectedLight.indirectDiffuse *= ambientOcclusion;
+          #if defined(USE_ENVMAP) && defined(STANDARD)
+            float dotNV = saturate(dot(geometryNormal, geometryViewDir));
+            reflectedLight.indirectSpecular *=
+              computeSpecularOcclusion(dotNV, ambientOcclusion, material.roughness);
+          #endif
+          reflectedLight.indirectDiffuse += material.diffuseContribution * vBakedNight * uNightSpill;`,
+      },
+    },
+  },
+} satisfies Feature
+
+/**
+ * Per-group state (D-032): `uGroupState[_ID]` is (lift in metres, glow, 0, 0).
+ * A hover is one uniform write. Lift moves the shadow too, so it's also in
+ * the depth material.
+ */
+const groupVertex = {
+  header: /* glsl */ `
+    attribute float groupId;
+    uniform vec4 uGroupState[${MAX_GROUPS}];
+    varying float vGroupGlow;`,
+  chunks: {
+    begin_vertex: {
+      after: /* glsl */ `
+        vec4 groupState = uGroupState[int(groupId + 0.5)];
+        transformed.y += groupState.x;
+        vGroupGlow = groupState.y;`,
+    },
+  },
+}
+
+export const group = {
+  key: 'group',
+  uniforms: {
+    uGroupState: { value: Array.from({ length: MAX_GROUPS }, () => new Vector4()) },
+    uGroupGlowColor: { value: new Color() },
+  },
+  vertex: groupVertex,
+  fragment: {
+    header: 'uniform vec3 uGroupGlowColor;\nvarying float vGroupGlow;',
+    chunks: {
+      emissivemap_fragment: { after: 'totalEmissiveRadiance += uGroupGlowColor * vGroupGlow;' },
+    },
+  },
+  depthVertex: groupVertex,
+} satisfies Feature
+
+/**
+ * Foliage (D-045): leaves are single-sided cards drawn DoubleSide, shaded by
+ * their clump's proxy normals, so the back face keeps the front's normal
+ * rather than flipping. Adds wrap lighting and a back-lit translucency term
+ * from the sun, and a value jitter so clumps don't read as one flat green.
+ * The translucency ignores the sun's shadow for now.
+ */
+export const foliage = {
+  key: 'foliage',
+  uniforms: {
+    uWrap: { value: 0.5 },
+    uTranslucency: { value: 0.9 },
+    uTranslucencyPower: { value: 3 },
+    uJitter: { value: 0.18 },
+  },
+  vertex: {
+    header: 'varying vec3 vFoliageWorld;',
+    chunks: {
+      worldpos_vertex: {
+        after: /* glsl */ `
+          #ifdef USE_BATCHING
+            vFoliageWorld = (modelMatrix * batchingMatrix * vec4(transformed, 1.0)).xyz;
+          #else
+            vFoliageWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
+          #endif`,
+      },
+    },
+  },
+  fragment: {
+    header: /* glsl */ `
+      uniform float uWrap;
+      uniform float uTranslucency;
+      uniform float uTranslucencyPower;
+      uniform float uJitter;
+      varying vec3 vFoliageWorld;
+      float foliageHash(vec3 p) {
+        return fract(sin(dot(floor(p), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+      }`,
+    chunks: {
+      color_fragment: {
+        after: /* glsl */ `
+          float jitter = mix(foliageHash(vFoliageWorld * 3.0), foliageHash(vFoliageWorld * 0.9), 0.5);
+          diffuseColor.rgb *= 1.0 + uJitter * (jitter - 0.5) * 2.0;`,
+      },
+      normal_fragment_begin: {
+        after: /* glsl */ `
+          #ifdef DOUBLE_SIDED
+            normal *= faceDirection;
+          #endif`,
+      },
+      lights_fragment_end: {
+        after: /* glsl */ `
+          #if NUM_DIR_LIGHTS > 0
+            vec3 sunDir = directionalLights[0].direction;
+            vec3 sunColor = directionalLights[0].color;
+            float ndl = dot(normal, sunDir);
+            float wrapped = saturate((ndl + uWrap) / (1.0 + uWrap)) - saturate(ndl);
+            float backLit = pow(saturate(dot(-geometryViewDir, sunDir)), uTranslucencyPower);
+            float thin = 1.0 - 0.6 * saturate(ndl);
+            // On Lambert's scale (1/π), so wrap tops out below a sun-facing leaf.
+            reflectedLight.directDiffuse += sunColor * material.diffuseContribution * RECIPROCAL_PI
+              * (wrapped + uTranslucency * backLit * thin);
+          #endif`,
+      },
+    },
+  },
+} satisfies Feature
+
+/** The group lift alone, for programs with no emissive term (neon). */
+export const groupLift = {
+  key: 'group-lift',
+  uniforms: { uGroupState: group.uniforms.uGroupState },
+  vertex: groupVertex,
+  depthVertex: groupVertex,
+} satisfies Feature
