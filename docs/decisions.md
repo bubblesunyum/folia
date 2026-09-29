@@ -683,6 +683,50 @@ When ambient motion arrives, give it an explicit, visibility-aware schedule: tar
 *Why:* D-047 needed the workaround picked and the budgets set from measured bytes.
 *Refines:* D-047 (compression), D-003 (prerender shape for Phase 1).
 
+### D-060 Spike 7 result: one zoom model for three sources, detent proven
+**Decision:**
+- **The input layer is two pure modules plus a thin rig** (`src/input/`):
+  - `zoomModel.ts` owns the Place limits and the detent: zoom-in clamps at the
+    near limit, zoom-out past the far limit banks resistance and trips the
+    rise at 6 m of overscroll, and zooming back in releases the bank first.
+  - `sources.ts` normalizes each source into a signed metre delta (out
+    positive): `ctrl+wheel` in Chromium/Firefox (a plain wheel is a pan and
+    returns null), Safari `gesturestart/change` cumulative `scale` (pinch-out
+    grows it, so it negates), and iPad two-pointer finger distance. `+`/`-`
+    steps 4 m.
+  - `ZoomRig` inside the canvas applies deltas to the camera, invalidates the
+    demand loop per change, and fires `folia:rise` on the detent and on
+    Escape. OrbitControls keeps pan and rotate with its own zoom off, so there
+    is exactly one zoom path.
+- **Spike-local preset is 25–90 m** around the look-dev camera (~65 m). Per-Place
+  limits move into content data with the Phase 2 camera system (spec:
+  navigation); the rise event is consumed by routing then — for now it only
+  counts (`window.foliaRiseCount`, `canvas[data-rises]`).
+- **The visible affordance is two `+`/`−` buttons** bottom-right plus the keys,
+  per D-048's mouse-wheel cover. They send `folia:zoom-in/out` to the rig so
+  the model stays whole.
+- **Proven:** 13 Vitest tests pin the signs and the detent; 4 Playwright tests
+  drive the real canvas (ctrl+wheel dollies both ways, plain wheel is ignored,
+  20 hard pushes trip the detent, buttons move the camera). The D-056 idle
+  rest test still passes — handlers invalidate only on real input.
+- **Not proven here:** Safari `GestureEvent` and iPad two-pointer feel were
+  verified only as pure functions and synthesized DOM events. Gains
+  (`WHEEL 0.05`, `GESTURE 20`, `PINCH 0.05`) are starting points for tuning on
+  the Max trackpad and the iPad with @bubbles. Mouse-wheel notch detection
+  stays deferred per D-006.
+
+- **Review fixes (same day):** the rise is only a signal now — it never rewrites
+  zoom state, so Escape and the detent can't desync the readout from the
+  camera. Two-finger pinch suppresses OrbitControls pan while active, keys
+  ignore repeats, modifiers and editable targets, `dataset.zoom` measures the
+  camera (e2e asserts real motion plus a painted frame), and the shell/rig
+  event protocol lives in pure `sources.ts` so DOM-only code stays three-free
+  (D-047).
+
+*Why:* D-048 needed the three sources unified before breadth wires them to
+places and the router.
+*Refines:* D-006, D-048.
+
 ---
 
 ## Open questions (not yet decided)

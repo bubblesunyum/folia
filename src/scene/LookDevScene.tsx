@@ -1,6 +1,7 @@
 import { OrbitControls } from '@react-three/drei'
 import { Suspense } from 'react'
 import { renderConfig } from '../debug'
+import { ZoomRig } from '../input/ZoomRig'
 import { StressDraws } from '../perf/StressDraws'
 import { Fragment } from './Fragment'
 import { Lights } from './Lights'
@@ -13,7 +14,8 @@ import { WaterReflection } from './WaterReflection'
 export function LookDevScene() {
   return (
     <>
-      <OrbitControls makeDefault target={[0, 2, 0]} />
+      <OrbitControls makeDefault target={[0, 2, 0]} enableZoom={false} />
+      <ZoomRig />
       <SkyEnvironment />
       <Lights />
       <MaterialLook />

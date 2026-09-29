@@ -1,6 +1,7 @@
 import { advance, Canvas, useFrame } from '@react-three/fiber'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { renderConfig } from '../debug'
+import { ZoomButtons } from '../shell/ZoomButtons'
 import { ContextLossProvider } from './contextRestores'
 
 /**
@@ -34,6 +35,7 @@ export function Viewport({
         </Canvas>
       </div>
       {maxFps && <FrameCap fps={maxFps} />}
+      <ZoomButtons />
       {contextLost && <div className="context-lost">Reconnecting</div>}
     </>
   )

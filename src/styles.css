@@ -42,6 +42,36 @@ body,
   height: 100%;
 }
 
+/* The visible zoom affordance (spike 7, D-048): one-word controls over the
+   canvas for mouse-wheel users until notch detection lands. */
+.zoom-buttons {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  gap: 8px;
+}
+
+.zoom-buttons button {
+  width: 40px;
+  height: 40px;
+  font-size: 1.25rem;
+  color: var(--cream);
+  background: color-mix(in srgb, var(--forest) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cream) 30%, transparent);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.zoom-buttons button:hover {
+  border-color: var(--cream);
+}
+
+.zoom-buttons button:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
 /* The sky-first shell (spike 6): gradient first paint while the canvas chunk
    streams, and the no-JS / crawler content for `/`. */
 .sky-shell {
