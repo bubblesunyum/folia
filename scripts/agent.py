@@ -80,6 +80,33 @@ def fail(message, code=1):
     sys.exit(code)
 
 
+def require_opencode_v2():
+    """Refuse opencode 1.x, which can't read the DB the 2.x app migrates and
+    lacks the flags this script uses (--standalone, -m model#variant). Brew's
+    `opencode` formula is still 1.x; v2 is the official install script or a
+    separate formula, so `brew upgrade opencode` alone stays broken."""
+    try:
+        out = subprocess.run(["opencode", "--version"], capture_output=True,
+                             text=True, stdin=subprocess.DEVNULL, cwd=ROOT,
+                             timeout=30)
+    except FileNotFoundError:
+        fail("opencode is not on PATH — install it, or spawn the role natively")
+    except OSError as exc:
+        fail(f"opencode can't be run ({exc}) — check the install")
+    except subprocess.TimeoutExpired:
+        fail("`opencode --version` hung — check the install")
+    raw = out.stdout.strip() or out.stderr.strip()
+    version = raw.split()[-1].lstrip("v") if raw else ""
+    major = version.split(".")[0] if version else ""
+    if out.returncode != 0 or not major.isdigit() or int(major) < 2:
+        found = version or "unknown"
+        fail(f"opencode {found} is too old — this harness needs opencode 2 "
+             f"(the 2.x app migrates the session DB that 1.x can't read). "
+             f"Install it with `curl -fsSL https://opencode.ai/v2/install | bash` "
+             f"or `brew install anomalyco/tap/opencode-v2` "
+             f"(uninstall brew's 1.x `opencode` first — they conflict)")
+
+
 def parse_args(argv):
     """(role, session or None, message)."""
     if len(argv) < 2 or argv[0] in ("-h", "--help"):
@@ -195,21 +222,21 @@ def rounds_so_far(session):
     """User messages already in a session, read back from opencode itself so
     the cap can't be dodged by losing a counter file."""
     try:
-        out = subprocess.run(["opencode", "export", session], capture_output=True,
+        out = subprocess.run(["opencode", "session", "export", session], capture_output=True,
                              text=True, stdin=subprocess.DEVNULL, cwd=ROOT,
                              timeout=EXPORT_TIMEOUT_SECONDS)
     except FileNotFoundError:
         fail("opencode is not on PATH — install it, or spawn the role natively")
     except subprocess.TimeoutExpired:
-        fail(f"`opencode export {session}` hung for {EXPORT_TIMEOUT_SECONDS}s — "
+        fail(f"`opencode session export {session}` hung for {EXPORT_TIMEOUT_SECONDS}s — "
              f"the round count can't be checked, so nothing was sent")
     try:
         messages = json.loads(out.stdout)["messages"]
     except (json.JSONDecodeError, KeyError, TypeError):
         fail(f"can't read session {session} back from opencode "
-             f"(`opencode export {session}` exited {out.returncode}) — "
+             f"(`opencode session export {session}` exited {out.returncode}) — "
              f"check the id; a revision needs the session it revises")
-    return sum(1 for m in messages if m.get("info", {}).get("role") == "user")
+    return sum(1 for m in messages if m.get("type") == "user")
 
 
 def explain(error):
@@ -293,6 +320,7 @@ def run_agent(agent, model, variant, session, prompt):
 
 def main(argv):
     role, session, message = parse_args(argv)
+    require_opencode_v2()
     agent = agent_for(role)
     model = model_for(role)
     if not model:

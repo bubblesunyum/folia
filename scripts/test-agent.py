@@ -23,13 +23,18 @@ SCRIPTS = Path(__file__).resolve().parent
 # $FAKE_ROUNDS user messages, and records its argv and the config it was given.
 FAKE_OPENCODE = """#!/usr/bin/env python3
 import json, os, sys
+if len(sys.argv) > 1 and sys.argv[1] == "--version":
+    print(os.environ.get("FAKE_VERSION_STDOUT", os.environ.get("FAKE_VERSION", "opencode v2.0.19")))
+    if os.environ.get("FAKE_VERSION_STDERR"):
+        sys.stderr.write(os.environ["FAKE_VERSION_STDERR"] + "\\n")
+    sys.exit(0)
 log = os.environ["FAKE_LOG"]
 with open(log, "a") as f:
     f.write(json.dumps({"argv": sys.argv[1:],
                         "config": os.environ.get("OPENCODE_CONFIG_CONTENT")}) + "\\n")
-if sys.argv[1] == "export":
+if sys.argv[1:3] == ["session", "export"]:
     n = int(os.environ.get("FAKE_ROUNDS", "1"))
-    print(json.dumps({"messages": [{"info": {"role": "user"}}] * n}))
+    print(json.dumps({"messages": [{"type": "user"}] * n}))
     sys.exit(0)
 if sys.argv[1] == "models":
     print(os.environ.get("FAKE_MODEL", "go/vision"))
@@ -160,7 +165,7 @@ class AgentTests(unittest.TestCase):
         out = self.agent("implement", "--session", "ses_1", "again", rounds="3")
         self.assertEqual(out.returncode, 3)
         self.assertIn("Stop revising", out.stderr)
-        self.assertEqual([c["argv"][0] for c in self.calls()], ["export"])
+        self.assertEqual([c["argv"][0] for c in self.calls()], ["session"])
 
     def test_the_last_allowed_round_runs(self):
         out = self.agent("implement", "--session", "ses_1", "last", rounds="2",
@@ -227,6 +232,36 @@ class AgentTests(unittest.TestCase):
         out = self.agent("reviewer-taste", "review")
         self.assertEqual(out.returncode, 1)
         self.assertIn("opencode is not on PATH", out.stderr)
+
+    def test_opencode_1x_is_refused_with_the_upgrade(self):
+        for version in ("1.18.31", "opencode v1.18.33", "v1.18.31"):
+            with self.subTest(version=version):
+                self.log.unlink(missing_ok=True)
+                out = self.agent("reviewer-taste", "review", version=version,
+                                 events=text_event("ok"))
+                self.assertEqual(out.returncode, 1)
+                self.assertIn("needs opencode 2", out.stderr)
+                self.assertIn("opencode-v2", out.stderr)
+                self.assertEqual(self.calls(), [])
+
+    def test_a_version_on_stderr_behind_blank_stdout_still_passes(self):
+        out = self.agent("reviewer-taste", "review", version_stdout=chr(10),
+                         version_stderr="opencode v2.0.19",
+                         events=text_event("ok"))
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout.strip(), "ok")
+
+    def test_broken_shim_shadowing_path_still_fails_in_the_scripts_voice(self):
+        bad = self.root / "badbin"
+        bad.mkdir()
+        shim = bad / "opencode"
+        shim.write_text("this is not a binary")
+        shim.chmod(0o644)
+        self.env["PATH"] = str(bad)
+        out = self.agent("reviewer-taste", "review", events=text_event("ok"))
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("agent.py:", out.stderr)
+        self.assertNotIn("Traceback", out.stderr)
 
 
 if __name__ == "__main__":
