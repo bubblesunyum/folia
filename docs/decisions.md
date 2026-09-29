@@ -593,10 +593,38 @@ The checklist is in [spec.md](spec.md#milestone-1-one-exciting-neighborhood-cort
 ### D-056 Idle rendering in the static look-dev scene
 **Decision:** the normal canvas uses R3F's demand loop. OrbitControls requests frames while the camera moves and its damping settles; time-of-day changes also invalidate the sky, shared materials and post effects. With the scene untouched, the browser test records zero new WebGL draw calls over a 300 ms interval, then confirms a camera drag wakes drawing. The `?perf=base` benchmark retains its manual 60 Hz loop so the proxy is comparable run to run.
 
-When ambient motion arrives, give it an explicit, visibility-aware schedule: target about 30 Hz at rest, higher only during interaction, and pause while the tab is hidden or a panel is being read. Actual fan and power reduction on @bubbles's Mac still needs a hands-on check.
+When ambient motion arrives, give it an explicit, visibility-aware schedule: target about 30 Hz at rest, higher only during interaction, and pause while the tab is hidden or a panel is being read. @bubbles confirmed on 2026-09-29 that the Mac stays quiet with the preview open at rest.
 
 *Why:* the static scene was spending a full 120 Hz render budget while nothing changed, making the Mac's fans spin up.
 *Refines:* D-036's idle power policy.
+
+### D-057 Spike 4 result: night and water
+**Decision:**
+- **Water reflection (D-039) is a quarter-res mirrored pass**, run inside the frame before the composer, so it costs nothing while idle (D-056):
+  - The camera is mirrored in the pool's plane, and an oblique near plane (Lengyel) cuts away everything under the water. Without it, the terrace the pool sits on hides the whole pass.
+  - Only neon draws lit. The other opaque batches draw with one black `MeshBasicMaterial` as occluders, and the water and the glow shell are skipped. With no occluders, neon behind a terrace lip would reflect through solid cream.
+  - No sky in the pass: the water program's env map and Fresnel already carry it.
+  - **The streaks are a separate vertical blur**: three 9-tap passes at quarter res, with the spacing tripling each pass. Nine taps in the water shader left stacked copies of the thin neon line rather than a streak.
+  - The water program is MeshStandardMaterial (env map, Fresnel, roughness 0.06) plus a `water` feature: a still world-space ripple normal, and the blurred pass bent by the ripple. `?reflection=off` stands in for the low tier's env and Fresnel only.
+- **Neon's fake glow (D-038) is an oversized additive shell** built at runtime: the neon geometry drawn again as a derived batch (`neonGlow`), inflated 10 cm along its normals, brightest where it faces the camera. It scales with emissive × the night weight, so it's gone by day. At full strength it carries night on its own with `?bloom=off`; with bloom it runs at 25% and only softens the tube's edge. It wasn't built in Blender, which would have needed the shell kept out of the AO and spill bakes.
+- **Test surface:** a pond set into the lowest terrace, with a cream coping and a short neon run along its far rim (`forms.pool`, `water` batch, unbaked; the pond has its own seed so moving it doesn't reshuffle the fragment). A first version hugged the terrace wall under the main neon, and @bubbles read it as a spill rather than a body of water. The pond stands in for the river until the town skeleton brings the baked depth and shore texture.
+- **Cost** (saturated frame, `?perf=base`, D-055's proxy):
+
+  | Night | ms/frame | JS ms | Calls |
+  |---|---|---|---|
+  | Bloom and reflection | 1.89 | 1.05 | 33 |
+  | Reflection off | 1.74 | 0.74 | 25 |
+  | Bloom off | 1.61 | 0.78 | 21 |
+  | Both off | 1.47 | 0.45 | 13 |
+
+  Golden hour with everything on is 1.90. The pass costs about 0.15 ms and 8 calls, and most of its time is main-thread. It redraws about 156k occluder triangles at quarter res; restricting occluders to what's near the water is the first saving if it's needed.
+- **Deferred:**
+  - Additive light-pool decals, until the fragment has lanterns or paths to put them under.
+  - Moving ripples, which wait on the ambient-motion schedule (D-056). The ripple is still for now.
+  - The wisp's point light, which arrives with the wisp.
+
+*Why:* D-038 and D-039 needed a working pass on the Max to price.
+*Refines:* D-038, D-039.
 
 ---
 

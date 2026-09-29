@@ -15,6 +15,8 @@ const MSAA_SAMPLES = 4
  * Bloom and the grade follow the time of day through their uniforms, never
  * their props, so scrubbing doesn't rebuild the pass.
  *
+ * `?bloom=off` drops bloom, leaving night to neon's fake glow (D-038).
+ *
  * Antialiasing is MSAA on the scene pass by default (D-055). `?aa=smaa` runs
  * SMAA instead, in a pass of its own after the grade: merged into the effect
  * pass it would read the raw scene buffer, and its edge pixels would skip
@@ -46,7 +48,7 @@ export function Effects() {
       multisampling={renderConfig.aa === 'msaa' ? MSAA_SAMPLES : 0}
       frameBufferType={HalfFloatType}
     >
-      <Bloom ref={bloom} mipmapBlur levels={6} />
+      {renderConfig.bloom && <Bloom ref={bloom} mipmapBlur levels={6} />}
       <ToneMapping mode={ToneMappingMode.NEUTRAL} />
       <primitive object={grade} dispose={null} />
       {smaa && <primitive object={smaa} dispose={null} />}

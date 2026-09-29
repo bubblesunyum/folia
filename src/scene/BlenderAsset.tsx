@@ -3,15 +3,18 @@ import { useEffect, useMemo, useRef } from 'react'
 import type { BatchedMesh } from 'three'
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { buildBatches, geometriesByBatch } from '../assets/batches'
+import { buildBatches, geometriesByBatch, withDerived } from '../assets/batches'
 import { reportSwap, useAssetUrl } from '../assets/useAssetUrl'
-import { materials } from '../materials/shared'
+import { derivedBatches, materials } from '../materials/shared'
 
 /** A packed Blender asset, drawn as one BatchedMesh per shared material. */
 export function BlenderAsset({ asset }: { asset: string }) {
   const url = useAssetUrl(asset)
   const gltf = useLoader(GLTFLoader, url, (loader) => loader.setMeshoptDecoder(MeshoptDecoder))
-  const batches = useMemo(() => buildBatches(geometriesByBatch(gltf.scene), materials), [gltf])
+  const batches = useMemo(
+    () => buildBatches(withDerived(geometriesByBatch(gltf.scene), derivedBatches), materials),
+    [gltf],
+  )
 
   // Disposing on unmount would break StrictMode's remount, so a swap disposes
   // the batches it replaces instead.

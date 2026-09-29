@@ -246,7 +246,7 @@ Timebox each at 1–3 days, and log each result in [decisions.md](decisions.md).
   - **Measure** save-to-pixels time (target under 10 s).
   - **Settles** B-1, B-2, S-1 and S-13. If the fragment isn't exciting, stop and fix the look before anything else.
 - [x] **3. Perf proxy on the Max.** Run one test scene under `?perf=base`; the Metal GPU timer proved unstable, so use saturated-frame throughput as the provisional proxy. Set the sub-draw budget and choose between DPR 1.5 + MSAA 4× and DPR 2 + SMAA (D-055). Real low-end device testing remains deferred (D-051).
-- [ ] **4. Night and water.** Neon at night-level emissive with bloom; the fake-glow fallback with bloom off; the quarter-res neon reflection on water; baked spill and light pools (D-038, D-039).
+- [x] **4. Night and water.** Neon at night-level emissive with bloom; the fake-glow fallback with bloom off; the quarter-res neon reflection on water; baked spill and light pools (D-038, D-039).
 - [ ] **5. Shadows and dapple.** Test the Voronoi canopy's dappled shadow at the town fit and the vantage fit with 2048 PCF, and measure per-frame re-render cost with sway (D-041).
 - [ ] **6. Delivery.** A Vercel preview with a prerendered route, a client-only lazy canvas and a Meshopt `.glb` with a compression workaround. Measure transferred bytes and time-to-sky on throttled Fast 4G and Slow 4G, and set the per-route budgets (D-047).
 - [ ] **7. Input.** Safari `GestureEvent`, Chromium `ctrl+wheel` and iPad pointers normalized into one zoom model with the resistance detent, tuned on the Max and the iPad (D-048).

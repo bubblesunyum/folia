@@ -3,6 +3,7 @@
 // three's color management converts it.
 
 import {
+  AdditiveBlending,
   Color,
   DoubleSide,
   type Material,
@@ -14,6 +15,8 @@ import { palette } from '../palette'
 import type { Look } from '../time/look'
 import { composeDepthMaterial, composeMaterial, type Feature } from './composer'
 import { bakedLight, foliage, group, groupLift } from './features'
+import { neonGlow } from './neonGlow'
+import { water } from './water'
 
 export interface SharedMaterial {
   material: Material
@@ -50,14 +53,43 @@ export const materials: Readonly<Record<string, SharedMaterial>> = {
   ),
   // Neon is its own unlit program (D-038) and casts no shadow (D-035).
   neon: shared(new MeshBasicMaterial({ color: neonColor.clone() }), [groupLift], false),
+  neonGlow: shared(
+    new MeshBasicMaterial({
+      color: neonColor.clone(),
+      transparent: true,
+      blending: AdditiveBlending,
+      depthWrite: false,
+    }),
+    [groupLift, neonGlow],
+    false,
+  ),
+  // Water's own program (D-039): still, glossy, and too flat to shade anything.
+  water: shared(
+    new MeshStandardMaterial({ color: palette.poolTeal, roughness: 0.06 }),
+    [groupLift, water],
+    false,
+  ),
 }
+
+/** Batches drawn a second time from another batch's geometry: the glow shell is the neon's. */
+export const derivedBatches: Readonly<Record<string, string>> = { neonGlow: 'neon' }
+
+// With bloom, the shell only softens the tube's edge; without it, it is the glow.
+const GLOW_WITH_BLOOM = 0.25
 
 group.uniforms.uGroupGlowColor.value.set(palette.mint)
 foliage.uniforms.uNewGrowth.value.set(palette.lawn)
 
-/** Moves every shared material to `look`. */
-export function applyLook(look: Look): void {
+/**
+ * Moves every shared material to `look`. The glow shell follows the night
+ * weight as well as the emissive, so it is gone by day, when neon has no halo.
+ */
+export function applyLook(look: Look, bloom: boolean): void {
   bakedLight.uniforms.uNightSpill.value = look.night
   const neon = materials.neon?.material as MeshBasicMaterial
   neon.color.copy(neonColor).multiplyScalar(look.emissive)
+  const glow = materials.neonGlow?.material as MeshBasicMaterial
+  glow.color
+    .copy(neonColor)
+    .multiplyScalar(look.emissive * look.night * (bloom ? GLOW_WITH_BLOOM : 1))
 }

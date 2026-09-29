@@ -68,6 +68,35 @@
     ],
     "sides": 8
   },
+  "water": {
+    "seed": 11,
+    "centre": [
+      1.2,
+      -7.4
+    ],
+    "radius": 1.4,
+    "harmonics": [
+      0.12,
+      0.05
+    ],
+    "samples": 72,
+    "lift": 0.035,
+    "rim": {
+      "radius": 0.08,
+      "lift": 0.05,
+      "sides": 10
+    },
+    "neon": {
+      "arc": [
+        0.22,
+        0.52
+      ],
+      "inset": 0.1,
+      "lift": 0.075,
+      "radius": 0.03,
+      "sides": 8
+    }
+  },
   "canopy": {
     "position": [
       3.2,

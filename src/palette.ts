@@ -13,6 +13,7 @@ export const palette = {
   forest: '#001E17',
   lawn: '#557C33',
   leaf: '#3F7A34',
+  poolTeal: '#1C4A52',
   // Light and sky, referenced by name from time/keyframes.json.
   sunlight: '#FFD2A1',
   sunGlow: '#FFA75E',

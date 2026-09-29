@@ -28,8 +28,8 @@ sys.path.insert(0, str(HERE))
 from folia import bake, export  # noqa: E402
 from folia.mesh import set_point_attribute, triangle_count  # noqa: E402
 
-# Batches whose schema leaves out the baked light (neon is its own program).
-UNBAKED = {"neon": ("_AO", "_NIGHT")}
+# Batches whose schema leaves out the baked light (neon and water are their own programs).
+UNBAKED = {"neon": ("_AO", "_NIGHT"), "water": ("_AO", "_NIGHT")}
 
 
 def check_version():

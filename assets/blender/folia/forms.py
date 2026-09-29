@@ -73,6 +73,25 @@ def tube(name, points, radius, sides=8, closed=False):
     return new_object(name, verts, faces)
 
 
+def pool(name, outline, z, rings=3):
+    """A flat water surface filling a closed outline, faces up: a centre
+    vertex and `rings` scaled copies of the outline, fanned together.
+    """
+    n = len(outline)
+    centre = outline.mean(axis=0)
+    verts = [(*centre, z)]
+    for k in range(1, rings + 1):
+        ring = centre + (outline - centre) * (k / rings)
+        verts += np.c_[ring, np.full(n, z)].tolist()
+    faces = [(0, 1 + i, 1 + (i + 1) % n) for i in range(n)]
+    for k in range(rings - 1):
+        a, b = 1 + k * n, 1 + (k + 1) * n
+        for i in range(n):
+            j = (i + 1) % n
+            faces.append((a + i, b + i, b + j, a + j))
+    return new_object(name, verts, faces)
+
+
 # --- terraces ----------------------------------------------------------------
 
 

@@ -6,8 +6,9 @@ import { Fragment } from './Fragment'
 import { Lights } from './Lights'
 import { MaterialLook } from './MaterialLook'
 import { SkyEnvironment } from './SkyEnvironment'
+import { WaterReflection } from './WaterReflection'
 
-/** Spike 1+2's scene: the Cortico fragment under the real env, lights and time of day. */
+/** The look-dev scene: the Cortico fragment under the real env, lights, time of day and water. */
 export function LookDevScene() {
   return (
     <>
@@ -15,6 +16,7 @@ export function LookDevScene() {
       <SkyEnvironment />
       <Lights />
       <MaterialLook />
+      {renderConfig.reflection && <WaterReflection />}
       <Suspense fallback={null}>
         <Fragment />
       </Suspense>

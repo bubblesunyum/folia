@@ -59,14 +59,16 @@ export function packValues(
 export type BatchSchema = Readonly<Record<string, number>>
 
 const BAKED: BatchSchema = { POSITION: 3, NORMAL: 3, _ID: 1, _AO: 1, _NIGHT: 3 }
+const UNBAKED: BatchSchema = { POSITION: 3, NORMAL: 3, _ID: 1 }
 
-/** One schema per shared-material batch. Neon is its own program and bakes nothing. */
+/** One schema per shared-material batch. Neon and water are their own programs and bake nothing. */
 export const batchSchemas: Readonly<Record<string, BatchSchema>> = {
   cream: BAKED,
   gold: BAKED,
   ground: BAKED,
   foliage: BAKED,
-  neon: { POSITION: 3, NORMAL: 3, _ID: 1 },
+  neon: UNBAKED,
+  water: UNBAKED,
 }
 
 export interface AttributeInfo {

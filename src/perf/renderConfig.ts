@@ -13,6 +13,10 @@ export interface RenderConfig {
   budget: boolean
   /** Extra tiny sub-draws added to the scene, to price one (`?stress=`). */
   stress: number
+  /** Bloom in the post chain; `?bloom=off` leaves night to neon's fake glow (D-038). */
+  bloom: boolean
+  /** The water's mirrored neon pass; `?reflection=off` keeps env and Fresnel only (D-039). */
+  reflection: boolean
 }
 
 /** Base Air CSS size; the pixel buffer depends on the chosen AA mode (D-055). */
@@ -30,6 +34,8 @@ const MAX_STRESS = 16_000
  * the Air's workload. MSAA uses a 1920×1200 buffer; the other modes use
  * 2560×1600. This is a visual comparison at equal CSS size, not equal pixels.
  * `?aa=` picks the antialiasing mode and `?stress=` adds sub-draws in either case.
+ * `?bloom=off` and `?reflection=off` stand in for the low tier's night and water
+ * until quality tiers exist (D-036).
  */
 export function parseRenderConfig(search: string): RenderConfig {
   const params = new URLSearchParams(search)
@@ -40,6 +46,8 @@ export function parseRenderConfig(search: string): RenderConfig {
   const stress = Number.isFinite(requestedStress)
     ? Math.min(MAX_STRESS, Math.max(0, Math.floor(requestedStress)))
     : 0
+  const bloom = params.get('bloom') !== 'off'
+  const reflection = params.get('reflection') !== 'off'
   if (params.get('perf') !== 'base') {
     return {
       dpr: [1, DPR_FOR[aa]],
@@ -48,7 +56,18 @@ export function parseRenderConfig(search: string): RenderConfig {
       size: null,
       budget: false,
       stress,
+      bloom,
+      reflection,
     }
   }
-  return { dpr: DPR_FOR[aa], aa, maxFps: 60, size: BASE_AIR, budget: true, stress }
+  return {
+    dpr: DPR_FOR[aa],
+    aa,
+    maxFps: 60,
+    size: BASE_AIR,
+    budget: true,
+    stress,
+    bloom,
+    reflection,
+  }
 }

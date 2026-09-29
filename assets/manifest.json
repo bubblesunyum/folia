@@ -1,13 +1,14 @@
 {
   "cortico/fragment": {
-    "hash": "53565b1383102f9f",
-    "bytes": 1596848,
+    "hash": "b2415f91be44534a",
+    "bytes": 1614580,
     "triangles": {
       "ground": 5664,
-      "cream": 106480,
+      "cream": 107920,
       "gold": 6720,
-      "neon": 1616,
-      "foliage": 35980
+      "neon": 1968,
+      "foliage": 35980,
+      "water": 360
     }
   }
 }

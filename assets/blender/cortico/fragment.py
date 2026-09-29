@@ -1,6 +1,7 @@
 """Spike 1+2's hero fragment of Cortico: stacked terraces with gold trim, a
 Voronoi canopy on a fluted trunk, a petal shell, foliage clumps spilling off
-the levels and one mint neon line in the groove under a terrace lip.
+the levels, one mint neon line in the groove under a terrace lip, and a
+reflecting pool below it.
 """
 
 import math
@@ -93,5 +94,25 @@ def assemble(p, rng):
         z = levels[spot["level"]]["top"] + radii[2] * 0.35
         ob = foliage.clump(f"clump{i}", {**pl, "radii": radii}, rng)
         parts.append(Part(_place(ob, x, y, z, rng.uniform(0, TAU)), "foliage", g["planting"]))
+
+    # A pond set into the lowest terrace: water inside a cream coping, with a
+    # short neon run along its far rim for the water to reflect (D-039). Its
+    # own seed, so the pond moves without reshuffling everything above.
+    w = p["water"]
+    pond_rng = np.random.default_rng(w["seed"])
+    base = levels[0]["top"]
+    edge = forms.blob_outline(w["radius"], w["harmonics"], pond_rng, w["samples"]) + w["centre"]
+    parts.append(Part(forms.pool("pond", edge, base + w["lift"]), "water", g["terrace"]))
+    rim = w["rim"]
+    coping = forms.tube("coping", np.c_[edge, np.full(len(edge), base + rim["lift"])], rim["radius"], rim["sides"],
+                        closed=True)
+    parts.append(Part(coping, "cream", g["terrace"]))
+    rim_neon = w["neon"]
+    a, b = (int(f * len(edge)) for f in rim_neon["arc"])
+    inward = -forms.outline_normals(edge)[a:b]
+    line = edge[a:b] + inward * rim_neon["inset"]
+    run = forms.tube("pond_neon", np.c_[line, np.full(len(line), base + rim_neon["lift"])], rim_neon["radius"],
+                     rim_neon["sides"])
+    parts.append(Part(run, "neon", g["terrace"]))
 
     return parts

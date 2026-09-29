@@ -10,6 +10,8 @@ describe('parseRenderConfig', () => {
       size: null,
       budget: false,
       stress: 0,
+      bloom: true,
+      reflection: true,
     })
   })
 
@@ -21,6 +23,8 @@ describe('parseRenderConfig', () => {
       size: BASE_AIR,
       budget: true,
       stress: 0,
+      bloom: true,
+      reflection: true,
     })
   })
 
@@ -43,5 +47,13 @@ describe('parseRenderConfig', () => {
   it('ignores an unknown mode or proxy', () => {
     expect(parseRenderConfig('?aa=fxaa')).toMatchObject({ aa: 'msaa' })
     expect(parseRenderConfig('?perf=air')).toMatchObject({ size: null, budget: false })
+  })
+
+  it('turns bloom and the water reflection off on request, in either mode', () => {
+    expect(parseRenderConfig('?bloom=off')).toMatchObject({ bloom: false, reflection: true })
+    expect(parseRenderConfig('?perf=base&reflection=off')).toMatchObject({
+      bloom: true,
+      reflection: false,
+    })
   })
 })

@@ -1,5 +1,6 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect } from 'react'
+import { renderConfig } from '../debug'
 import { applyLook } from '../materials/shared'
 import { useLook } from '../time/lookContext'
 
@@ -8,7 +9,7 @@ export function MaterialLook() {
   const { look } = useLook()
   const invalidate = useThree((state) => state.invalidate)
   useEffect(() => {
-    applyLook(look)
+    applyLook(look, renderConfig.bloom)
     invalidate()
   }, [look, invalidate])
   return null

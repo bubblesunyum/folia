@@ -62,6 +62,19 @@ export function geometriesByBatch(root: Object3D): Map<string, BufferGeometry[]>
   return batches
 }
 
+/** `geometries` plus each derived batch, drawing its source batch's geometry again. */
+export function withDerived(
+  geometries: Map<string, BufferGeometry[]>,
+  derived: Readonly<Record<string, string>>,
+): Map<string, BufferGeometry[]> {
+  const out = new Map(geometries)
+  for (const [batch, source] of Object.entries(derived)) {
+    const list = geometries.get(source)
+    if (list) out.set(batch, list)
+  }
+  return out
+}
+
 /** One BatchedMesh per batch, each geometry added once as an identity instance. */
 export function buildBatches(
   geometries: Map<string, BufferGeometry[]>,
