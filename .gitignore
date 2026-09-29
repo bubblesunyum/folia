@@ -30,3 +30,6 @@ playwright-report/
 *.blend1
 .cache/
 __pycache__/
+
+# Agent scratch — created here, removed when done, never committed.
+.tmp/
