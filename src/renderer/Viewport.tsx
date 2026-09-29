@@ -9,7 +9,13 @@ import { ContextLossProvider } from './contextRestores'
  * PCFShadowMap with shadows enabled once at boot and never toggled. Its size,
  * DPR and frame cap come from `renderConfig` (`?perf=base`, `?aa=`).
  */
-export function Viewport({ children }: { children: ReactNode }) {
+export function Viewport({
+  children,
+  onFirstFrame,
+}: {
+  children: ReactNode
+  onFirstFrame?: () => void
+}) {
   const [contextLost, setContextLost] = useState(false)
   const { dpr, maxFps, size } = renderConfig
   return (
@@ -23,7 +29,7 @@ export function Viewport({ children }: { children: ReactNode }) {
           gl={{ antialias: false, alpha: false }}
           camera={{ fov: 18, near: 1, far: 300, position: [40, 34, 40] }}
         >
-          <RenderedFlag />
+          <RenderedFlag onFirstFrame={onFirstFrame} />
           <ContextLossProvider onLostChange={setContextLost}>{children}</ContextLossProvider>
         </Canvas>
       </div>
@@ -60,11 +66,18 @@ const FRAMES_BEFORE_RENDERED = 1
 
 // Marks the canvas once real frames have been drawn, so tests can wait on
 // pixels rather than on a timeout.
-function RenderedFlag() {
+function RenderedFlag({ onFirstFrame }: { onFirstFrame?: () => void }) {
   const frames = useRef(0)
+  const reported = useRef(false)
   useFrame(({ gl }) => {
     frames.current += 1
-    if (frames.current === FRAMES_BEFORE_RENDERED) gl.domElement.dataset.rendered = 'true'
+    if (frames.current === FRAMES_BEFORE_RENDERED) {
+      gl.domElement.dataset.rendered = 'true'
+      if (!reported.current) {
+        reported.current = true
+        onFirstFrame?.()
+      }
+    }
   })
   return null
 }

@@ -41,3 +41,45 @@ body,
   width: 100%;
   height: 100%;
 }
+
+/* The sky-first shell (spike 6): gradient first paint while the canvas chunk
+   streams, and the no-JS / crawler content for `/`. */
+.sky-shell {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.sky-shell-gradient {
+  position: absolute;
+  inset: 0;
+  /* Hex fallbacks mirror palette.ts so the gradient paints before JS publishes
+     the `--*` properties (and with JS disabled). */
+  background: linear-gradient(
+    to bottom,
+    var(--skyZenith, #8397d4),
+    var(--skyDusk, #f3c79b) 62%,
+    var(--cream, #f4eee1)
+  );
+}
+
+.sky-shell-content {
+  position: absolute;
+  inset: auto 0 max(8vh, 48px) 0;
+  text-align: center;
+}
+
+.sky-shell-content h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--forest, #001e17);
+}
+
+.sky-shell-content p {
+  margin: 8px 0 0;
+  font-size: 1rem;
+  color: var(--forest, #001e17);
+  opacity: 0.75;
+}

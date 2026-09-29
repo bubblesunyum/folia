@@ -30,6 +30,7 @@ export function PerfHud() {
 function FrameMeters() {
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
+  const invalidate = useThree((state) => state.invalidate)
 
   useEffect(() => {
     // stats-gl's own GPU query would collide with ours: only one runs at a time.
@@ -45,7 +46,9 @@ function FrameMeters() {
     const timer = createGpuTimer(gl.getContext() as WebGL2RenderingContext)
     const unmark = timer ? markFrameSegments(gl, scene, timer) : () => {}
     const frames: FrameTiming[] = []
-    let lastReadout = 0
+    // Against navigation start, so the first painted frame always writes the
+    // readout: under a demand frame loop there may never be a second one.
+    let lastReadout = Number.NEGATIVE_INFINITY
 
     if (renderConfig.budget) {
       window.foliaBench = (count = 240, warmup?: number) =>
@@ -91,6 +94,10 @@ function FrameMeters() {
       })
     })
 
+    // The demand loop may have painted its last frame before this effect
+    // subscribed; request one more so the readout always gets real counters.
+    invalidate()
+
     return () => {
       stopBefore()
       stopAfter()
@@ -103,7 +110,7 @@ function FrameMeters() {
       stats.dom.remove()
       readout.remove()
     }
-  }, [gl, scene])
+  }, [gl, scene, invalidate])
 
   return null
 }

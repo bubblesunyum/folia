@@ -1,14 +1,17 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { debug } from './debug'
-import { Effects } from './renderer/Effects'
-import { Viewport } from './renderer/Viewport'
-import { LookDevScene } from './scene/LookDevScene'
-import { LookProvider } from './time/LookProvider'
+import { CanvasBoundary } from './shell/CanvasBoundary'
+import { SkyShell } from './shell/SkyShell'
 
 const LevaPanel = lazy(() => import('leva').then((module) => ({ default: module.Leva })))
-const PerfHud = lazy(() => import('./perf/PerfHud').then((module) => ({ default: module.PerfHud })))
+const TownCanvas = lazy(() =>
+  import('./canvas/TownCanvas').then((module) => ({ default: module.TownCanvas })),
+)
 
 export function App() {
+  // The shell stays up through the chunk load AND the first-frame window
+  // (context creation, shader compile), so first paint never flashes dark.
+  const [sky, setSky] = useState(false)
   return (
     <>
       {debug.panel && (
@@ -16,17 +19,12 @@ export function App() {
           <LevaPanel hidden={false} collapsed />
         </Suspense>
       )}
-      <Viewport>
-        <LookProvider>
-          <LookDevScene />
-          <Effects />
-        </LookProvider>
-        {debug.hud && (
-          <Suspense fallback={null}>
-            <PerfHud />
-          </Suspense>
-        )}
-      </Viewport>
+      {!sky && <SkyShell />}
+      <CanvasBoundary>
+        <Suspense fallback={null}>
+          <TownCanvas onSky={() => setSky(true)} />
+        </Suspense>
+      </CanvasBoundary>
     </>
   )
 }

@@ -661,6 +661,28 @@ When ambient motion arrives, give it an explicit, visibility-aware schedule: tar
 *Why:* D-041 needed a working shadow on the Max to price.
 *Refines:* D-041.
 
+### D-059 Spike 6 result: delivery — preview live, shell first, Vercel compresses the GLB
+**Decision:**
+- **Preview:** `https://folia-ny0rvnd77-samerces-projects.vercel.app` (Vercel project `folia`, linked by CLI; Deployment Protection SSO is on, so the public `noindex` subdomain from D-026 still lands later). The GitHub auto-deploy connect failed (`bubblesunyum/folia` not reachable); deploys are CLI-driven until that's fixed.
+- **Prerendered `/`:** `dist/index.html` serves the route shell — title, meta description, `h1` and the sky gradient — with JS disabled. It hand-mirrors `SkyShell` in `index.html` until React Router v8 prerender generates it in the Phase 1 vertical slice (full framework-mode migration is explicitly out of this spike).
+- **Client-only lazy canvas:** `App` renders `SkyShell` immediately and lazy-loads `TownCanvas` (the `Viewport` and everything WebGL). The initial chunk is 224 KB / 70 KB gz with zero three/R3F in it (grep-verified); the canvas chunk is 1.21 MB / 359 KB gz and streams after the shell paints. three, R3F and the scene stay out of the initial module graph, which is the same boundary SSR prerender needs.
+- **No `.glb` workaround needed — the D-047 premise is outdated.** Vercel Brotli-compresses `model/gltf-binary` (`content-encoding: br` verified on the preview): the 1.61 MB fragment transfers as 1.25 MB. JS gets `br` too. `vercel.json` sets `immutable` on `/assets/*` (GLBs are hash-versioned by `useAssetUrl`); `/` stays `must-revalidate`.
+- **Cost** (`.tmp/measure-delivery.mjs`, production build on `vite preview`, CDP-emulated network, SwiftShader so CPU compile inflates absolutes; bytes are exact):
+
+  | Profile (emulated) | Time to sky frame | Time to scene drawn | Bytes (local raw) |
+  |---|---|---|---|
+  | Unthrottled | 5.3 s | 5.3 s | 2.04 MB |
+  | Fast 4G (1.6 Mbps, 150 ms RTT) | 3.0 s | 11.3 s | 2.04 MB |
+  | Slow 4G (400 Kbps, 400 ms RTT) | 10.1 s | 43.0 s | 2.04 MB |
+
+  Raw bytes: HTML 1 KB + CSS 1 KB + shell JS 70 KB + canvas JS 357 KB + GLB 1.61 MB (local preview already gzips JS; only the GLB rides raw). Vercel-encoded total is ~1.6 MB. The GLB is 79% of the bytes: the single look-dev fragment already costs 8 s of Fast-4G scene time and 32 s on Slow 4G, so per-route hero streams — not the whole town — are what deep links can afford (D-047's `/cortico` note).
+- **Per-route budgets for `/` (provisional, same standing as the GPU proxy):** Fast 4G sky ≤ 3 s, scene ≤ 12 s; Slow 4G sky ≤ 11 s, scene ≤ 45 s; transfer ≤ 1.7 MB Vercel-encoded. Real-radio and real-GPU calibration stays deferred with D-051.
+- **Found (two PerfHud races the lazy split exposed):** the readout skipped any frame inside 250 ms of navigation start, and the demand loop (D-056) may have painted its last frame before the HUD effect subscribes — leaving `?hud` blank. The first painted frame now always writes, and mounting the HUD invalidates one more frame so the counters are real.
+- **Deferred:** RR v8 migration with the persistent canvas and `/cortico` routes (Phase 1); GitHub connect + preview subdomain (D-026); shrinking the hero stream (quantization/LOD are pipeline work, not transport); shell typeface (system-ui until fonts load — a preload + swap later).
+
+*Why:* D-047 needed the workaround picked and the budgets set from measured bytes.
+*Refines:* D-047 (compression), D-003 (prerender shape for Phase 1).
+
 ---
 
 ## Open questions (not yet decided)
