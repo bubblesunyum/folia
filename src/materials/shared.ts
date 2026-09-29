@@ -11,7 +11,7 @@ import {
   type MeshDepthMaterial,
   MeshStandardMaterial,
 } from 'three'
-import { palette } from '../palette'
+import { type PaletteColors, palette } from '../palette'
 import type { Look } from '../time/look'
 import { composeDepthMaterial, composeMaterial, type Feature } from './composer'
 import { bakedLight, foliage, group, groupLift, sway } from './features'
@@ -81,10 +81,24 @@ group.uniforms.uGroupGlowColor.value.set(palette.mint)
 foliage.uniforms.uNewGrowth.value.set(palette.lawn)
 
 /**
- * Moves every shared material to `look`. The glow shell follows the night
- * weight as well as the emissive, so it is gone by day, when neon has no halo.
+ * Moves every shared material to `look`. The base palette goes on first, so
+ * the look-dev panel's draft recolors the scene live in one ordered pass
+ * (D-034): base colors, then everything the look derives from them.
  */
-export function applyLook(look: Look, bloom: boolean): void {
+export function applyLook(look: Look, bloom: boolean, pal: PaletteColors = palette): void {
+  neonColor.set(pal.mint)
+  group.uniforms.uGroupGlowColor.value.set(pal.mint)
+  foliage.uniforms.uNewGrowth.value.set(pal.lawn)
+  const bases: ReadonlyArray<readonly [string, string]> = [
+    ['cream', pal.cream],
+    ['gold', pal.gold],
+    ['ground', pal.lawn],
+    ['foliage', pal.leaf],
+    ['water', pal.poolTeal],
+  ]
+  for (const [batch, hex] of bases) {
+    ;(materials[batch]?.material as MeshStandardMaterial | undefined)?.color.set(hex)
+  }
   bakedLight.uniforms.uNightSpill.value = look.night
   const neon = materials.neon?.material as MeshBasicMaterial
   neon.color.copy(neonColor).multiplyScalar(look.emissive)

@@ -26,9 +26,12 @@ export const palette = {
 
 export type PaletteColor = keyof typeof palette
 
+/** Palette values by name; accepts the module palette and editable drafts. */
+export type PaletteColors = { readonly [K in PaletteColor]: string }
+
 /** Publishes the palette as `--<name>` custom properties, so CSS reads the same source. */
-export function applyPaletteToCss(root: HTMLElement): void {
-  for (const [name, value] of Object.entries(palette)) {
+export function applyPaletteToCss(root: HTMLElement, pal: PaletteColors = palette): void {
+  for (const [name, value] of Object.entries(pal)) {
     root.style.setProperty(`--${name}`, value)
   }
 }

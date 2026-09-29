@@ -6,11 +6,14 @@ import { useLook } from '../time/lookContext'
 
 /** Keeps the shared materials on the current look; mounted once per scene, not per asset. */
 export function MaterialLook() {
-  const { look } = useLook()
+  const { look, palette } = useLook()
+  const canvas = useThree((state) => state.gl.domElement)
   const invalidate = useThree((state) => state.invalidate)
   useEffect(() => {
-    applyLook(look, renderConfig.bloom)
+    applyLook(look, renderConfig.bloom, palette)
+    // Tests read this rather than pixels.
+    canvas.dataset.sun = look.sun.intensity.toFixed(2)
     invalidate()
-  }, [look, invalidate])
+  }, [look, palette, canvas, invalidate])
   return null
 }

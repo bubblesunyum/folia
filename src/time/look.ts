@@ -2,7 +2,7 @@
 // palette colors, get resolved to linear RGB once, and are interpolated by
 // hour. Everything that changes with the time of day reads one `Look`.
 
-import { type PaletteColor, palette } from '../palette'
+import { type PaletteColor, type PaletteColors, palette } from '../palette'
 import source from './keyframes.json'
 
 export type RGB = readonly [number, number, number]
@@ -50,31 +50,31 @@ export interface Keyframe {
 
 const srgbToLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
 
-/** A palette color in linear RGB. */
-export function linear(name: PaletteColor): RGB {
-  const hex = palette[name]
+/** A palette color in linear RGB, resolved through `pal` (the module palette by default). */
+export function linear(name: PaletteColor, pal: PaletteColors = palette): RGB {
+  const hex = pal[name]
   if (!hex) throw new Error(`keyframes name "${name}", which isn't in palette.ts`)
   const channel = (i: number) =>
     srgbToLinear(Number.parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16) / 255)
   return [channel(0), channel(1), channel(2)]
 }
 
-function resolve(src: LookSource): Look {
+function resolve(src: LookSource, pal: PaletteColors = palette): Look {
   return {
     ...src,
     sky: {
       ...src.sky,
-      zenith: linear(src.sky.zenith),
-      horizon: linear(src.sky.horizon),
-      ground: linear(src.sky.ground),
-      glow: linear(src.sky.glow),
+      zenith: linear(src.sky.zenith, pal),
+      horizon: linear(src.sky.horizon, pal),
+      ground: linear(src.sky.ground, pal),
+      glow: linear(src.sky.glow, pal),
     },
-    sun: { ...src.sun, color: linear(src.sun.color) },
-    moon: { ...src.moon, color: linear(src.moon.color) },
+    sun: { ...src.sun, color: linear(src.sun.color, pal) },
+    moon: { ...src.moon, color: linear(src.moon.color, pal) },
     grade: {
       ...src.grade,
-      shadowTint: linear(src.grade.shadowTint),
-      highlightTint: linear(src.grade.highlightTint),
+      shadowTint: linear(src.grade.shadowTint, pal),
+      highlightTint: linear(src.grade.highlightTint, pal),
     },
   }
 }
@@ -93,12 +93,15 @@ export function lerpLook(a: Look, b: Look, t: number): Look {
   return lerpTree(a, b, t)
 }
 
-/** Keyframes from their JSON, sorted by hour, colors resolved. */
-export function loadKeyframes(json: { keyframes: readonly unknown[] }): Keyframe[] {
+/** Keyframes from their JSON, sorted by hour, colors resolved through `pal`. */
+export function loadKeyframes(
+  json: { keyframes: readonly unknown[] },
+  pal: PaletteColors = palette,
+): Keyframe[] {
   return (
     json.keyframes as { name: string; hours: number; provisional?: boolean; look: LookSource }[]
   )
-    .map((k) => ({ ...k, look: resolve(k.look) }))
+    .map((k) => ({ ...k, look: resolve(k.look, pal) }))
     .sort((a, b) => a.hours - b.hours)
 }
 
@@ -114,4 +117,31 @@ export function lookAt(hours: number, keyframes: readonly Keyframe[] = KEYFRAMES
   const span = (next.hours - prev.hours + 24) % 24 || 24
   const t = ((h - prev.hours + 24) % 24) / span
   return lerpLook(prev.look, next.look, t * t * (3 - 2 * t))
+}
+
+/** One keyframe as the look-dev panel edits it: structure fixed, values live. */
+export interface DraftKeyframe {
+  name: string
+  hours: number
+  provisional?: boolean
+  look: LookSource
+}
+
+/** The panel's working copy: palette values plus keyframe sources, by name. */
+export interface LookDraft {
+  palette: Record<PaletteColor, string>
+  keyframes: DraftKeyframe[]
+}
+
+/** The working copy the panel starts from: the files as they are on disk. */
+export function initialDraft(): LookDraft {
+  return {
+    palette: { ...palette },
+    keyframes: structuredClone(source.keyframes) as unknown as DraftKeyframe[],
+  }
+}
+
+/** The look at `hours` under a working copy, colors resolved through its palette. */
+export function resolveDraft(draft: LookDraft, hours: number): Look {
+  return lookAt(hours, loadKeyframes({ keyframes: draft.keyframes }, draft.palette))
 }

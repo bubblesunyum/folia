@@ -45,6 +45,31 @@ export function foliaAssets(): Plugin {
       return `export default ${JSON.stringify(hashes)}\nexport const groupSlots = ${JSON.stringify(slots)}`
     },
     async configureServer(server) {
+      // The look-dev write-back (fol-qbb, D-034): the panel POSTs its working
+      // copy here; the files are fixed names, never client-controlled paths.
+      // Imported at runtime like the builder below, for the same reason.
+      server.middlewares.use('/__folia/look', (req, res, next) => {
+        if (req.method !== 'POST') return next()
+        let body = ''
+        req.on('data', (chunk: unknown) => {
+          body += chunk
+        })
+        req.on('end', () => {
+          void (async () => {
+            try {
+              const { parseLookRequest, writeLookFile } = await import('./lookback.ts')
+              const { file, data } = parseLookRequest(JSON.parse(body))
+              await writeLookFile(file, data)
+              res.setHeader('content-type', 'application/json')
+              res.end('{"ok":true}')
+            } catch (error) {
+              res.statusCode = 400
+              res.setHeader('content-type', 'application/json')
+              res.end(JSON.stringify({ error: (error as Error).message }))
+            }
+          })()
+        })
+      })
       // Imported at runtime, not bundled into the config: otherwise every edit
       // to the pipeline or the batch schema would restart the dev server. Only
       // the source listing comes from here; builds run in a fresh process, so
