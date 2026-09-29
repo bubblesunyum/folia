@@ -107,6 +107,20 @@ def agent_for(role):
          f"or check the role name against harness/models.json")
 
 
+def catalog_accepts_images(model):
+    """Whether opencode's cached models.dev catalog lists `model` as taking
+    images. opencode 2 dropped `models --verbose`; the catalog it refreshes
+    is what's left to ask."""
+    provider, _, name = model.partition("/")
+    cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "opencode/models.json"
+    try:
+        catalog = json.loads(cache.read_text())
+        inputs = catalog[provider]["models"][name]["modalities"]["input"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    return isinstance(inputs, list) and "image" in inputs
+
+
 def require_image_model(model):
     """Refuse a visual review unless OpenCode says its model accepts images."""
     provider, separator, _ = model.partition("/")
@@ -119,6 +133,8 @@ def require_image_model(model):
     except (OSError, subprocess.TimeoutExpired):
         fail(f"cannot verify image support for {model}; run reviewer-design natively")
     if out.returncode != 0:
+        if catalog_accepts_images(model):
+            return
         fail(f"cannot verify image support for {model}; run reviewer-design natively")
     lines = out.stdout.splitlines(keepends=True)
     for index, line in enumerate(lines):
@@ -230,13 +246,15 @@ def parse_events(stdout, session):
 def run_agent(agent, model, variant, session, prompt):
     """(reply, session id, refused permissions) from one `opencode run`, or
     fail loudly."""
-    command = ["opencode", "run", "--format", "json", "--agent", agent,
-               "-m", model]
-    if variant:
-        # No generated file carries it, so the flag is the whole mechanism —
-        # including for `implement`, which runs opencode's own build agent
-        # with no file of ours at all.
-        command += ["--variant", variant]
+    # No generated file carries the variant, so the model suffix is the whole
+    # mechanism — including for `implement`, which runs opencode's own build
+    # agent with no file of ours at all. opencode 2 dropped `--variant` for
+    # `-m provider/model#variant`.
+    # `--standalone`: opencode 2 otherwise hands the run to a shared background
+    # service, which never sees this process's OPENCODE_CONFIG_CONTENT (so no
+    # agent promotion and no /tmp grant) and interrupts runs sharing it.
+    command = ["opencode", "run", "--standalone", "--format", "json", "--agent", agent,
+               "-m", f"{model}#{variant}" if variant else model]
     if session:
         command += ["--session", session]
     env = dict(os.environ)

@@ -96,8 +96,9 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(out.stdout.strip(), "no findings")
         self.assertIn("session ses_fake", out.stderr)
         call = self.calls()[0]
-        self.assertEqual(call["argv"][:7],
-                         ["run", "--format", "json", "--agent", "reviewer-taste", "-m", "go/taste"])
+        self.assertEqual(call["argv"][:8],
+                         ["run", "--standalone", "--format", "json", "--agent", "reviewer-taste",
+                          "-m", "go/taste"])
         self.assertEqual(call["argv"][-2:], ["--", "review it"])
         settings = json.loads(call["config"])["agent"]["reviewer-taste"]
         self.assertEqual(settings["mode"], "primary")
@@ -128,16 +129,18 @@ class AgentTests(unittest.TestCase):
         out = self.agent("implement", "go", events=text_event("done"))
         self.assertIn("on go/impl (xhigh)", out.stderr)
         argv = self.calls()[0]["argv"]
-        self.assertEqual(argv[argv.index("--variant") + 1], "xhigh")
+        self.assertEqual(argv[argv.index("-m") + 1], "go/impl#xhigh")
         self.agent("reviewer-taste", "go", events=text_event("ok"))
-        self.assertNotIn("--variant", self.calls()[-1]["argv"])
+        argv = self.calls()[-1]["argv"]
+        self.assertNotIn("#", argv[argv.index("-m") + 1])
 
     def test_visual_reviewer_runs_only_with_an_image_capable_model(self):
         out = self.agent("reviewer-design", "review", events=text_event("visual ok"))
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertEqual(out.stdout.strip(), "visual ok")
         self.assertEqual([c["argv"][0] for c in self.calls()], ["models", "run"])
-        self.assertEqual(self.calls()[1]["argv"][7:9], ["--variant", "xhigh"])
+        argv = self.calls()[1]["argv"]
+        self.assertEqual(argv[argv.index("-m") + 1], "go/vision#xhigh")
 
     def test_visual_reviewer_refuses_a_text_only_or_unknown_model(self):
         for fake in ({"image": "false"}, {"model": "go/other"},

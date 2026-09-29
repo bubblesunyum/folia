@@ -26,8 +26,8 @@ roster; `budget` never prompts, so review.sh can call it from hooks and gates.
 
 A role may also name a "variant" — the provider's reasoning effort (minimal,
 low, medium, high, xhigh, max; which exist depends on the model, and
-`opencode models --verbose` lists them). It reaches opencode as agent.py's
-`--variant` — the only path; no generated file carries one. Absent, the
+opencode's models.dev cache lists them). It reaches opencode through agent.py
+as `-m provider/model#variant` — the only path; no generated file carries one. Absent, the
 model's own default applies.
 """
 

@@ -228,7 +228,8 @@ roster still picks the model everywhere a model is actually chosen:
 `scripts/agent.py` passes it as `-m`.
 
 A role's roster entry may add a `variant` — the provider's reasoning effort,
-such as `xhigh` — which becomes agent.py's `--variant`. Only there: no
+such as `xhigh` — which agent.py appends to `-m` as `provider/model#variant`
+(opencode 2 dropped `--variant`). Only there: no
 generated file carries one, and `implement` runs opencode's own build agent,
 which has no generated file at all.
 
@@ -255,8 +256,10 @@ it:
   without it — including reads outside the project, which is where review.sh
   puts the packet. Reviewers are granted `/tmp`, and any other refusal makes
   the script exit non-zero rather than pass on a reply written blind.
-- `reviewer-design` checks `opencode models --verbose` for image input on its
-  selected model before running. Unknown or text-only models fail, leaving the
+- `reviewer-design` checks `opencode models --verbose` (opencode 1) or, when
+  that flag is gone (opencode 2), the models.dev cache opencode keeps at
+  `~/.cache/opencode/models.json`, for image input on its selected model before
+  running. Unknown or text-only models fail, leaving the
   visual pass to the native reviewer instead of accepting a blind reply.
 
 The revision cap lives in the script rather than in the `delegate` skill's prose
