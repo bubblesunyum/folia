@@ -5,6 +5,6 @@ import { foliaAssets } from './assets/pipeline/vitePlugin.ts'
 export default defineConfig({
   plugins: [react(), foliaAssets()],
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'assets/pipeline/**/*.test.ts'],
   },
 })

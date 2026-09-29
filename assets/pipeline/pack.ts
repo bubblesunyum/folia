@@ -5,8 +5,6 @@
 // quantizes any attribute that happens to fall in [-1, 1], which would store
 // `_AO` as Uint16 in one asset and Float32 in the next depending on its values.
 
-import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import { type Document, Logger, NodeIO } from '@gltf-transform/core'
 import { EXTMeshoptCompression, KHRMeshQuantization } from '@gltf-transform/extensions'
 import { quantize, reorder } from '@gltf-transform/functions'
@@ -18,6 +16,7 @@ import {
   parseMeshName,
   validateBatch,
 } from '../../src/assets/batchSchema.ts'
+import { writeFileAtomic } from './atomic.ts'
 
 // 16-bit positions because a batch spans a whole placed neighborhood; normals
 // at 10 bits so glossy cream and gold don't band (D-033).
@@ -106,7 +105,8 @@ export async function pack(rawPath: string, outPath: string): Promise<{ bytes: n
   if (after.length) throw new Error(after.join('\n'))
 
   const glb = await nodeIO.writeBinary(doc)
-  await mkdir(dirname(outPath), { recursive: true })
-  await writeFile(outPath, glb)
+  // Atomic publish: the dev server serves this path live, so a concurrent
+  // CLI build must never leave a half-written GLB behind (fol-4rq).
+  await writeFileAtomic(outPath, glb)
   return { bytes: glb.byteLength }
 }

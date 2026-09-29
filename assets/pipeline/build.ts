@@ -9,16 +9,20 @@
 // in `assets/manifest.json`, which is what `--check` compares against.
 
 import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createHash, randomBytes } from 'node:crypto'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { palette } from '../../src/palette.ts'
+import { withFileLock, writeFileAtomic } from './atomic.ts'
 import { pack } from './pack.ts'
 
 const ROOT = resolve(import.meta.dirname, '../..')
 const BLENDER_DIR = join(ROOT, 'assets/blender')
 const MANIFEST = join(ROOT, 'assets/manifest.json')
+// Gitignored, shared by every concurrent builder on this machine (fol-4rq).
+const MANIFEST_LOCK = join(ROOT, '.cache', 'manifest.lock')
 const BLENDER = process.env.FOLIA_BLENDER ?? '/Applications/Blender.app/Contents/MacOS/Blender'
 
 export interface AssetRecord {
@@ -98,9 +102,9 @@ function readManifest(): Manifest {
   return existsSync(MANIFEST) ? JSON.parse(readFileSync(MANIFEST, 'utf8')) : {}
 }
 
-function writeManifest(manifest: Manifest): void {
+async function writeManifest(manifest: Manifest): Promise<void> {
   const sorted = Object.fromEntries(Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b)))
-  writeFileSync(MANIFEST, `${JSON.stringify(sorted, null, 2)}\n`)
+  await writeFileAtomic(MANIFEST, `${JSON.stringify(sorted, null, 2)}\n`)
 }
 
 /** Assets whose committed GLB no longer matches their sources. */
@@ -118,7 +122,13 @@ export async function buildAsset(asset: string, force = false): Promise<BuildRes
   if (!force && manifest[asset]?.hash === hash && existsSync(outputPath(asset))) return null
 
   const started = performance.now()
-  const raw = join(ROOT, '.cache/blender', `${asset}.raw.glb`)
+  // Per-invocation raw path: the dev plugin and a CLI build share nothing,
+  // so concurrent Blender runs can't clobber each other's output (fol-4rq).
+  const raw = join(
+    ROOT,
+    '.cache/blender',
+    `${asset}.${process.pid}.${randomBytes(4).toString('hex')}.raw.glb`,
+  )
   const args = [
     '-b',
     '--factory-startup',
@@ -148,16 +158,23 @@ export async function buildAsset(asset: string, force = false): Promise<BuildRes
   }
   const blenderDone = performance.now()
 
-  const { bytes } = await pack(raw, outputPath(asset))
-  const record = { hash, bytes, triangles: report.triangles }
-  writeManifest({ ...readManifest(), [asset]: record })
+  let bytes = 0
+  try {
+    ;({ bytes } = await pack(raw, outputPath(asset)))
+    const record = { hash, bytes, triangles: report.triangles }
+    // Serialized across processes: without the lock two concurrent builders
+    // read the same manifest and the second write loses the first (fol-4rq).
+    await withFileLock(MANIFEST_LOCK, () => writeManifest({ ...readManifest(), [asset]: record }))
+  } finally {
+    await rm(raw, { force: true })
+  }
 
   const seconds = {
     ...report.seconds,
     blender: round((blenderDone - started) / 1000),
     pack: round((performance.now() - blenderDone) / 1000),
   }
-  return { asset, ...record, seconds }
+  return { asset, hash, bytes, triangles: report.triangles, seconds }
 }
 
 const round = (s: number) => Math.round(s * 100) / 100
