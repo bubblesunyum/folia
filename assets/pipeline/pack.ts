@@ -87,10 +87,34 @@ function packCustomAttributes(doc: Document): void {
   }
 }
 
-/** Packs `rawPath` into `outPath`; throws with every violation if the contract breaks. */
-export async function pack(rawPath: string, outPath: string): Promise<{ bytes: number }> {
+/** Rewrites every `_ID` value through `idRemap`; throws on an unmapped id. */
+function remapIds(doc: Document, idRemap: ReadonlyMap<number, number>): void {
+  for (const mesh of doc.getRoot().listMeshes()) {
+    for (const prim of mesh.listPrimitives()) {
+      const source = prim.getAttribute('_ID')?.getArray()
+      if (!(source instanceof Float32Array)) continue
+      for (let i = 0; i < source.length; i++) {
+        const slot = idRemap.get(source[i] ?? NaN)
+        if (slot === undefined) throw new Error(`local _ID ${source[i]} has no global slot`)
+        source[i] = slot
+      }
+    }
+  }
+}
+
+/** Packs `rawPath` into `outPath`, remapping local `_ID`s to global slots first; throws with every violation if the contract breaks. */
+export async function pack(
+  rawPath: string,
+  outPath: string,
+  idRemap: ReadonlyMap<number, number>,
+): Promise<{ bytes: number }> {
   const nodeIO = await io()
   const doc = await nodeIO.read(rawPath)
+  // Global slots (D-061): Blender bakes per-asset local `_ID`s; remap to the
+  // town-wide slots first, so a second asset reusing 0..N can't collide once
+  // two assets share a batch (fol-716). Required, never skipped: an unmapped
+  // pack would validate fine and collide silently.
+  remapIds(doc, idRemap)
   const before = validateDocument(doc, 'raw')
   if (before.length) throw new Error(before.join('\n'))
 

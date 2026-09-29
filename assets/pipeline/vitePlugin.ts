@@ -33,11 +33,16 @@ export function foliaAssets(): Plugin {
     resolveId: (source) => (source === ID ? RESOLVED : undefined),
     load(id) {
       if (id !== RESOLVED) return
-      const manifest = JSON.parse(readFileSync(join(root, 'assets/manifest.json'), 'utf8'))
-      const hashes = Object.fromEntries(
-        Object.entries(manifest as Record<string, { hash: string }>).map(([a, r]) => [a, r.hash]),
+      const manifest = JSON.parse(
+        readFileSync(join(root, 'assets/manifest.json'), 'utf8'),
+      ) as Record<string, { hash: string; groups?: Record<string, number> }>
+      const hashes = Object.fromEntries(Object.entries(manifest).map(([a, r]) => [a, r.hash]))
+      // Global group slots (D-061): the hover writer addresses groups by
+      // name; picking reads the slot straight from the geometry.
+      const slots = Object.fromEntries(
+        Object.entries(manifest).map(([a, r]) => [a, r.groups ?? {}]),
       )
-      return `export default ${JSON.stringify(hashes)}`
+      return `export default ${JSON.stringify(hashes)}\nexport const groupSlots = ${JSON.stringify(slots)}`
     },
     async configureServer(server) {
       // Imported at runtime, not bundled into the config: otherwise every edit

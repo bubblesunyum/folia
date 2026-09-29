@@ -16,6 +16,7 @@ import { join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { palette } from '../../src/palette.ts'
 import { withFileLock, writeFileAtomic } from './atomic.ts'
+import { allocateSlots, assetLocalIds, type GroupRegistry, type GroupTable } from './groups.ts'
 import { pack } from './pack.ts'
 
 const ROOT = resolve(import.meta.dirname, '../..')
@@ -29,6 +30,8 @@ export interface AssetRecord {
   hash: string
   bytes: number
   triangles: Record<string, number>
+  /** Group name → global `uGroupState` slot (D-061). */
+  groups: GroupTable
 }
 
 export interface BuildResult extends AssetRecord {
@@ -67,7 +70,9 @@ export function assetSources(asset: string): string[] {
     join(BLENDER_DIR, `${asset}.json`),
     join(ROOT, 'src/palette.ts'),
     join(ROOT, 'src/assets/batchSchema.ts'),
+    join(ROOT, 'src/materials/features.ts'),
     join(ROOT, 'assets/pipeline/pack.ts'),
+    join(ROOT, 'assets/pipeline/groups.ts'),
   ].sort()
 }
 
@@ -111,7 +116,10 @@ async function writeManifest(manifest: Manifest): Promise<void> {
 export function staleAssets(): string[] {
   const manifest = readManifest()
   return listAssets().filter(
-    (a) => manifest[a]?.hash !== hashAsset(a) || !existsSync(outputPath(a)),
+    (a) =>
+      manifest[a]?.hash !== hashAsset(a) ||
+      manifest[a]?.groups == null ||
+      !existsSync(outputPath(a)),
   )
 }
 
@@ -119,7 +127,13 @@ export function staleAssets(): string[] {
 export async function buildAsset(asset: string, force = false): Promise<BuildResult | null> {
   const hash = hashAsset(asset)
   const manifest = readManifest()
-  if (!force && manifest[asset]?.hash === hash && existsSync(outputPath(asset))) return null
+  if (
+    !force &&
+    manifest[asset]?.hash === hash &&
+    manifest[asset]?.groups != null &&
+    existsSync(outputPath(asset))
+  )
+    return null
 
   const started = performance.now()
   // Per-invocation raw path: the dev plugin and a CLI build share nothing,
@@ -159,12 +173,29 @@ export async function buildAsset(asset: string, force = false): Promise<BuildRes
   const blenderDone = performance.now()
 
   let bytes = 0
+  let groups: GroupTable = {}
   try {
-    ;({ bytes } = await pack(raw, outputPath(asset)))
-    const record = { hash, bytes, triangles: report.triangles }
-    // Serialized across processes: without the lock two concurrent builders
-    // read the same manifest and the second write loses the first (fol-4rq).
-    await withFileLock(MANIFEST_LOCK, () => writeManifest({ ...readManifest(), [asset]: record }))
+    // Allocation, pack and record land in one lock hold: two concurrent
+    // first-builds of different assets must not claim the same slot, and
+    // the pack remap must match the recorded table (fol-4rq's lock,
+    // fol-716's registry). Pack takes ~0.2 s; Blender already ran.
+    await withFileLock(MANIFEST_LOCK, async () => {
+      const live = readManifest()
+      // Drop records for deleted assets so their slots return to the pool;
+      // the current asset always survives (its params just read). Safe under
+      // the lock: a concurrent build of a pruned asset reallocates and
+      // rewrites its own record and GLB together.
+      const known = new Set(listAssets())
+      const kept = Object.fromEntries(Object.entries(live).filter(([a]) => known.has(a)))
+      const registry: GroupRegistry = Object.fromEntries(
+        Object.entries(kept).map(([a, r]) => [a, r.groups ?? {}]),
+      )
+      const allocated = allocateSlots(asset, assetLocalIds(asset), registry)
+      groups = allocated.table
+      ;({ bytes } = await pack(raw, outputPath(asset), allocated.remap))
+      const record: AssetRecord = { hash, bytes, triangles: report.triangles, groups }
+      await writeManifest({ ...kept, [asset]: record })
+    })
   } finally {
     await rm(raw, { force: true })
   }
@@ -174,7 +205,7 @@ export async function buildAsset(asset: string, force = false): Promise<BuildRes
     blender: round((blenderDone - started) / 1000),
     pack: round((performance.now() - blenderDone) / 1000),
   }
-  return { asset, hash, bytes, triangles: report.triangles, seconds }
+  return { asset, hash, bytes, triangles: report.triangles, groups, seconds }
 }
 
 const round = (s: number) => Math.round(s * 100) / 100

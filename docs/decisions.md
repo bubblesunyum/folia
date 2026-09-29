@@ -727,6 +727,28 @@ When ambient motion arrives, give it an explicit, visibility-aware schedule: tar
 places and the router.
 *Refines:* D-006, D-048.
 
+### D-061 Group slots are global, allocated at build (fol-716)
+**Decision:**
+- `_ID` values are per-asset small ints (`groups` in each asset's params
+  JSON: the fragment uses 0–4), but `uGroupState[16]` is one global array
+  shared by every material. The second asset reusing 0..N would lift and glow
+  with the first's once two assets share a batch.
+- The manifest is the registry: each record carries `groups` (name → global
+  slot), allocated append-only under the manifest lock and never renumbered,
+  so unrelated assets' committed GLBs stay valid when one asset gains a group
+  (a rename leaks its old slot instead). `pack` remaps local `_ID`s to slots
+  before validation; the build throws past MAX_GROUPS.
+- `virtual:folia-assets` also serves `groupSlots` for the future hover writer
+  (keyboard focus addresses groups by name); picking reads the slot straight
+  from the geometry.
+- Rejected: per-asset material clones (breaks the `materials` singleton and
+  `applyLook`, dies at town-wide mesh merge). The town outgrowing 16 slots is
+  D-032's tiny-texture path, with this same registry feeding it.
+
+*Why:* Keeps D-032's "a hover is one uniform write" across the whole town
+instead of per asset.
+*Refines:* D-032, D-034.
+
 ---
 
 ## Open questions (not yet decided)

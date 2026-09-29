@@ -5,7 +5,7 @@
 import { Color, Vector4 } from 'three'
 import type { Feature } from './composer'
 
-/** Groups per asset the `group` feature can address; `_ID` is a byte, the array is smaller. */
+/** Global `uGroupState` slots, allocated town-wide at build time (D-061); `_ID` is a byte, the array is smaller. */
 export const MAX_GROUPS = 16
 
 /**

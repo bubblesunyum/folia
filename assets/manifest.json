@@ -1,6 +1,6 @@
 {
   "cortico/fragment": {
-    "hash": "6435f5e2f3e1b7ce",
+    "hash": "89a9360ba1677c65",
     "bytes": 1614580,
     "triangles": {
       "ground": 5664,
@@ -9,6 +9,13 @@
       "neon": 1968,
       "foliage": 35980,
       "water": 360
+    },
+    "groups": {
+      "canopy": 0,
+      "ground": 1,
+      "planting": 2,
+      "shell": 3,
+      "terrace": 4
     }
   }
 }
