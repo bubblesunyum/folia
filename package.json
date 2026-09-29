@@ -14,6 +14,7 @@
     "assets:check": "node assets/pipeline/build.ts --check",
     "typecheck": "tsc -p .",
     "lint": "biome check .",
+    "check:ssr": "node scripts/check-ssr-boundary.mjs",
     "format": "biome check --write .",
     "test": "vitest run",
     "test:e2e": "playwright test"
