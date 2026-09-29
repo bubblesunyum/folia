@@ -14,7 +14,7 @@ import {
 import { palette } from '../palette'
 import type { Look } from '../time/look'
 import { composeDepthMaterial, composeMaterial, type Feature } from './composer'
-import { bakedLight, foliage, group, groupLift } from './features'
+import { bakedLight, foliage, group, groupLift, sway } from './features'
 import { neonGlow } from './neonGlow'
 import { water } from './water'
 
@@ -49,7 +49,7 @@ export const materials: Readonly<Record<string, SharedMaterial>> = {
   ground: shared(new MeshStandardMaterial({ color: palette.lawn, roughness: 0.95 }), lit),
   foliage: shared(
     new MeshStandardMaterial({ color: palette.leaf, roughness: 0.8, side: DoubleSide }),
-    [...lit, foliage],
+    [...lit, foliage, sway],
   ),
   // Neon is its own unlit program (D-038) and casts no shadow (D-035).
   neon: shared(new MeshBasicMaterial({ color: neonColor.clone() }), [groupLift], false),

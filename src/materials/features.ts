@@ -185,3 +185,40 @@ export const groupLift = {
   vertex: groupVertex,
   depthVertex: groupVertex,
 } satisfies Feature
+
+/**
+ * Sway (spike 5, D-041): a procedural breeze over foliage, driven by `Sway`'s
+ * clock. No baked weights: the phase varies with world position so clumps
+ * flutter rather than sliding rigidly. It moves the shadow too, so it's also
+ * in the depth material — freezing shadows while sway runs detaches them
+ * (D-041's static fallback).
+ */
+const swayVertex = {
+  header: /* glsl */ `
+    uniform float uSwayTime;
+    uniform float uSwayStrength;`,
+  chunks: {
+    begin_vertex: {
+      after: /* glsl */ `
+        float swayPhase = uSwayTime * 1.6 + position.x * 0.35 + position.z * 0.45;
+        transformed.x += sin(swayPhase) * uSwayStrength;
+        transformed.z += cos(swayPhase * 0.83) * uSwayStrength * 0.6;`,
+    },
+  },
+}
+
+export const sway = {
+  key: 'sway',
+  uniforms: {
+    uSwayTime: { value: 0 },
+    // Zero until `Sway` mounts and claims it: the feature is composed
+    // unconditionally, so a nonzero default would freeze a warped pose into
+    // every still render with the clock stopped.
+    uSwayStrength: { value: 0 },
+  },
+  vertex: swayVertex,
+  depthVertex: swayVertex,
+} satisfies Feature
+
+/** Peak sway in metres, claimed by `Sway` while it drives the clock. */
+export const SWAY_STRENGTH = 0.05

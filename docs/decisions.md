@@ -628,6 +628,41 @@ When ambient motion arrives, give it an explicit, visibility-aware schedule: tar
 
 ---
 
+## 2026-09-29: Milestone 1 spikes (continued)
+
+### D-058 Spike 5 result: shadows and dapple — live 2048 PCF stands, sway is free
+**Decision:**
+- **Fits:** town ±16 m and vantage ±8 m, both power-of-two quantized with the
+  light texel-snapped every frame (`src/scene/shadowFit.ts`, `Lights`);
+  `?fit=vantage` selects the tight box. Fits stay per-preset: the vantage box
+  doesn't cover the 18 m ground disc, so breadth sizes each fit to its preset's
+  subject.
+- **Dapple:** the canopy's holes resolve fully at both fits at fragment scale
+  (features ≫ 1.56 cm town texels). Captures `/tmp/fol-shadow-town.png` vs
+  `-vantage` differ only in sub-pixel resampling (0.5% of pixels), so the
+  vantage fit's payoff lands at town scale, where town-fit texels grow.
+- **Cost** (saturated frame, `?perf=base`, D-055's proxy): the shadow pass is
+  4 calls / 4 sub-draws / ~156k tris at 2048² (33→29 calls, 16→12 sub-draws,
+  475k→319k tris frozen with `?shadows=static`). Live vs frozen interleaves
+  fully in run noise (±0.2 ms): default 1.94–2.08, sway 1.95–2.29, static
+  1.98–2.69. Per-frame re-render with sway costs nothing resolvable, so
+  **D-041's live default stands** and the static fallback stays a town-scale
+  lever.
+- **Sway:** a procedural composer feature on foliage (5 cm peak, phase from
+  world position so clumps flutter), in the depth material too. `?sway=on`
+  drives it from a clock that opts out of the idle rest; off by default so
+  D-056 holds (the e2e rest test proves it).
+- **Found:** at night the sun's shadow pass still renders at full cost (475k
+  tris) with daylight at 0. Breadth skips shadow updates while the sun is down.
+- **Deferred:** a view-tracking frustum (the boxes are light-fitted and static,
+  so no per-frame shimmer by construction) and the scrolling light-cookie
+  dapple fake (unneeded while live re-render is free).
+
+*Why:* D-041 needed a working shadow on the Max to price.
+*Refines:* D-041.
+
+---
+
 ## Open questions (not yet decided)
 - When to revisit WebGPU after launch.
 - Gallery exhibit stops: what one looks like and how many per case study.

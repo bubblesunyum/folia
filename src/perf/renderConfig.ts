@@ -1,6 +1,15 @@
 /** The antialiasing modes spike 3 compares (D-042). */
 export type AaMode = 'none' | 'msaa' | 'smaa'
 
+/** The shadow frustum fits spike 5 compares (D-041). */
+export type ShadowFit = 'town' | 'vantage'
+
+/** The shadow-map refresh policy: live every frame, or frozen (D-041). */
+export type ShadowPolicy = 'live' | 'static'
+
+/** Half-extent in metres of the square shadow ortho box, by fit. */
+export const SHADOW_FITS: Record<ShadowFit, number> = { town: 16, vantage: 8 }
+
 export interface RenderConfig {
   /** A fixed DPR, or R3F's [min, max] range when the canvas follows the display. */
   dpr: number | [number, number]
@@ -17,6 +26,12 @@ export interface RenderConfig {
   bloom: boolean
   /** The water's mirrored neon pass; `?reflection=off` keeps env and Fresnel only (D-039). */
   reflection: boolean
+  /** Foliage sway; on it opts out of the idle rest (D-056), so it defaults off. */
+  sway: boolean
+  /** Shadow frustum fit: the wide town box or the tight vantage box (spike 5, D-041). */
+  shadowFit: ShadowFit
+  /** Shadow refresh: live every frame, or frozen after each sun move (D-041). */
+  shadowPolicy: ShadowPolicy
 }
 
 /** Base Air CSS size; the pixel buffer depends on the chosen AA mode (D-055). */
@@ -48,6 +63,9 @@ export function parseRenderConfig(search: string): RenderConfig {
     : 0
   const bloom = params.get('bloom') !== 'off'
   const reflection = params.get('reflection') !== 'off'
+  const sway = params.get('sway') === 'on'
+  const shadowFit: ShadowFit = params.get('fit') === 'vantage' ? 'vantage' : 'town'
+  const shadowPolicy: ShadowPolicy = params.get('shadows') === 'static' ? 'static' : 'live'
   if (params.get('perf') !== 'base') {
     return {
       dpr: [1, DPR_FOR[aa]],
@@ -58,6 +76,9 @@ export function parseRenderConfig(search: string): RenderConfig {
       stress,
       bloom,
       reflection,
+      sway,
+      shadowFit,
+      shadowPolicy,
     }
   }
   return {
@@ -69,5 +90,8 @@ export function parseRenderConfig(search: string): RenderConfig {
     stress,
     bloom,
     reflection,
+    sway,
+    shadowFit,
+    shadowPolicy,
   }
 }

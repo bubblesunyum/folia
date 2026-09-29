@@ -12,6 +12,9 @@ describe('parseRenderConfig', () => {
       stress: 0,
       bloom: true,
       reflection: true,
+      sway: false,
+      shadowFit: 'town',
+      shadowPolicy: 'live',
     })
   })
 
@@ -25,6 +28,9 @@ describe('parseRenderConfig', () => {
       stress: 0,
       bloom: true,
       reflection: true,
+      sway: false,
+      shadowFit: 'town',
+      shadowPolicy: 'live',
     })
   })
 
@@ -54,6 +60,19 @@ describe('parseRenderConfig', () => {
     expect(parseRenderConfig('?perf=base&reflection=off')).toMatchObject({
       bloom: true,
       reflection: false,
+    })
+  })
+
+  it('reads the spike-5 shadow knobs, defaulting to still town-live', () => {
+    expect(parseRenderConfig('?sway=on&fit=vantage&shadows=static')).toMatchObject({
+      sway: true,
+      shadowFit: 'vantage',
+      shadowPolicy: 'static',
+    })
+    expect(parseRenderConfig('?sway=yes&fit=wide&shadows=off')).toMatchObject({
+      sway: false,
+      shadowFit: 'town',
+      shadowPolicy: 'live',
     })
   })
 })

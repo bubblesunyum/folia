@@ -6,6 +6,7 @@ import { Fragment } from './Fragment'
 import { Lights } from './Lights'
 import { MaterialLook } from './MaterialLook'
 import { SkyEnvironment } from './SkyEnvironment'
+import { Sway } from './Sway'
 import { WaterReflection } from './WaterReflection'
 
 /** The look-dev scene: the Cortico fragment under the real env, lights, time of day and water. */
@@ -16,6 +17,7 @@ export function LookDevScene() {
       <SkyEnvironment />
       <Lights />
       <MaterialLook />
+      {renderConfig.sway && <Sway />}
       {renderConfig.reflection && <WaterReflection />}
       <Suspense fallback={null}>
         <Fragment />
