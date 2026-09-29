@@ -32,4 +32,4 @@ Each of these is a decision because it has bitten someone before.
 - `<Canvas flat gl={{ antialias: false, alpha: false }}>`. Tone mapping belongs to the composer (D-043).
 - three and R3F stay out of the SSR module graph (D-047).
 - Vercel doesn't compress `.glb` (D-047).
-- Perf is measured as GPU ms via the timer query, not FPS. The budget is ≤3 ms GPU on the Max under `?perf=base` (D-035, D-051).
+- Perf is judged with the saturated-frame benchmark under `?perf=base`; timer-query GPU ms in the HUD is indicative on Metal. The provisional ≤3 ms direct-GPU budget still needs calibration (D-035, D-055).

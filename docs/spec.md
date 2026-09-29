@@ -213,9 +213,9 @@ Performance is a first-class requirement: fast and beautiful, never one at the e
   - Each neighborhood streams in its own Suspense boundary (R-011). Don't unload in Milestone 1; revisit at 3+ neighborhoods.
 - **Measure (D-035):**
   - The HUD shows FPS, **GPU ms** (timer query, Chrome), CPU ms, `render.calls`, **multi-draw sub-draws**, triangles and texture memory from day one.
-  - `?perf=base` renders at the base Air's pixel count (2560×1600) and caps at 60 Hz. For now the proxy on the Max is the only performance check. Calibration on real low-end hardware (a base Air, a mid-range Android, in-app browsers) is deferred until before launch (D-051).
+  - `?perf=base` fixes the base Air's 1280×800 CSS size and caps at 60 Hz. The buffer is 1920×1200 with the chosen DPR 1.5 + MSAA mode, or 2560×1600 with DPR 2 modes (D-055). For now the proxy on the Max is the only performance check. Calibration on real low-end hardware (a base Air, a mid-range Android, in-app browsers) is deferred until before launch (D-051).
   - **Budget** (conservative, because it isn't calibrated on real devices):
-    - ≤ 3 ms GPU on the M1 Max at 2560×1600.
+    - Provisional ≤ 3 ms direct GPU time on the M1 Max at 2560×1600; the current spike uses saturated-frame throughput as a proxy because Metal timer readings are unstable (D-055).
     - Under ~100 `render.calls`, plus a sub-draw budget.
     - Download and time-to-sky budgets per entry route and network profile, e.g. "`/` on Fast 4G: sky within 1.5 s" (D-047).
   - On phones, cap the pixel ratio at 1.5–2.
@@ -245,7 +245,7 @@ Timebox each at 1–3 days, and log each result in [decisions.md](decisions.md).
   - **Render it** with the real material composer, env scene and grade, at golden hour and at night. Compare it side by side with the boards.
   - **Measure** save-to-pixels time (target under 10 s).
   - **Settles** B-1, B-2, S-1 and S-13. If the fragment isn't exciting, stop and fix the look before anything else.
-- [ ] **3. Perf proxy on the Max.** Run one test scene under `?perf=base` with the GPU timer. Set the sub-draw budget, and choose between DPR 1.5 + MSAA 4× and DPR 2 + SMAA. There's no real low-end device testing for now (D-035, D-042, D-051).
+- [x] **3. Perf proxy on the Max.** Run one test scene under `?perf=base`; the Metal GPU timer proved unstable, so use saturated-frame throughput as the provisional proxy. Set the sub-draw budget and choose between DPR 1.5 + MSAA 4× and DPR 2 + SMAA (D-055). Real low-end device testing remains deferred (D-051).
 - [ ] **4. Night and water.** Neon at night-level emissive with bloom; the fake-glow fallback with bloom off; the quarter-res neon reflection on water; baked spill and light pools (D-038, D-039).
 - [ ] **5. Shadows and dapple.** Test the Voronoi canopy's dappled shadow at the town fit and the vantage fit with 2048 PCF, and measure per-frame re-render cost with sway (D-041).
 - [ ] **6. Delivery.** A Vercel preview with a prerendered route, a client-only lazy canvas and a Meshopt `.glb` with a compression workaround. Measure transferred bytes and time-to-sky on throttled Fast 4G and Slow 4G, and set the per-route budgets (D-047).

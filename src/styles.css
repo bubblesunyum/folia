@@ -28,6 +28,16 @@ body,
     11px / 1.4 ui-monospace,
     monospace;
   color: var(--mint);
+  white-space: pre;
   background: var(--forest);
   pointer-events: none;
+}
+
+.perf-readout[data-over="true"] {
+  color: var(--hotPink);
+}
+
+.viewport {
+  width: 100%;
+  height: 100%;
 }

@@ -309,7 +309,7 @@ Source: [reviews/2026-09-27-spec-review.md](reviews/2026-09-27-spec-review.md). 
 
 *Why:* The Max has about 4× the ALU and 6× the bandwidth of a base Air. This plan is bandwidth-heavy (bloom, HalfFloat targets, shadow fill), and rAF on a vsync-locked display can't show headroom.
 *Replaces:* D-020's proxy definition and its "≤ ~4 ms" target.
-*Refined by:* D-051. Real-device calibration is deferred until before launch.
+*Refined by:* D-051 (real-device calibration deferred), D-055 (Metal timer queries are indicative and the spike uses saturated throughput).
 
 ### D-036 Quality tier ladder (S-12, C-6, C-7, C-10, C-14, N-7)
 **Decision:**
@@ -324,6 +324,7 @@ Source: [reviews/2026-09-27-spec-review.md](reviews/2026-09-27-spec-review.md). 
 - **Power:** when idle (no input for N seconds) or while a panel is being read, ambient motion drops to ~30 fps.
 
 *Replaces:* D-020's ladder order and its "higher DPR" upgrade.
+*Refined by:* D-056 (the present static scene stops drawing entirely while idle).
 
 ### D-037 Time of day in Milestone 1: two keyframes (S-12)
 **Decision:**
@@ -556,11 +557,46 @@ The checklist is in [spec.md](spec.md#milestone-1-one-exciting-neighborhood-cort
 - The fragment's foliage goes from 11.2k to 36.0k triangles, and the GLB from 1.16 MB to 1.60 MB.
 - **Not yet verified against the D-051 budget.** Perf is GPU ms under `?perf=base` (D-035), and that measurement is spike 3's. The dev HUD still pins at the 120 Hz vsync cap on the M1 Max, which shows no regression large enough to drop frames, and nothing more. stats-gl's GPU readout was too noisy to quote.
 - Leaf-scale shimmer under camera motion is a risk for spike 3's AA choice (D-042, fol-hch).
+- *Refined by D-055:* the chosen MSAA mode takes about 1.8 ms per saturated frame at 1920×1200, and settles the shimmer. This is a throughput proxy, not a direct GPU-time measurement.
 
 **Placement:** sprays sit on a jittered Fibonacci lattice per lobe, not at random. At about 1× coverage, random placement leaves Poisson gaps, and those show as a hollow crown where a clump faces the camera.
 
 *Why:* the art direction spends detail at the neighbourhood vantage. Foliage was 8% of the fragment's triangles, so it had room.
 *Refines:* D-045.
+
+### D-055 Spike 3 result: how GPU cost is measured, the AA mode and the sub-draw budget
+**Decision:**
+- **This spike uses saturated frame throughput as a practical proxy, not isolated GPU time.** `scripts/bench.mjs` loads `?perf=base` on this Mac's real GPU (headless Playwright, ANGLE Metal) and calls `window.foliaBench`: draw 240 frames back to back, sync on a one-pixel read, and divide the wall time. The median of four bursts includes CPU submission and GPU work. The HUD's per-pass GPU ms stays as a live indicator only; the D-035 direct-GPU-time budget remains unverified. Two things make timer queries unusable as the budget number here:
+  - Apple GPUs clock down in the idle gap between capped frames, so a 60 Hz frame reads 2–3× its full-clock cost and swings from run to run.
+  - On ANGLE's Metal backend, once frames overlap, a `TIME_ELAPSED` query spans queueing as well as work. A saturated burst read about 7 ms for every pass, `pre` included.
+- **Close other active scene tabs before benching.** Before D-056, even an idle background preview drew at 120 Hz and roughly doubled the benchmark result. The always-on loop also caused the reported fan noise; D-056 removes it from the normal view.
+- **The spike 1+2 fragment takes about 1.8 ms per saturated frame at golden hour and 2.0 ms at night** with MSAA 4× at DPR 1.5, a 1920×1200 buffer, 23 calls and 311k triangles. Without AA at DPR 2 (2560×1600), it takes about 1.7 ms. MSAA at DPR 2 takes about 2.8 ms. These are full-frame throughput measurements on the Max; none establishes direct GPU time on a base Air. The 36k-triangle foliage (D-054) fits this proxy.
+- **AA: MSAA 4× at DPR 1.5 is the default** (`?aa=msaa`; `none` and `smaa` stay selectable for comparison). Per D-042, the steadier mode in motion wins. Temporal shimmer was measured over a slow sub-pixel orbit, as the second frame difference, lower being steadier:
+
+  | Mode | ms/frame | Clump shimmer | Canopy shimmer |
+  |---|---|---|---|
+  | None, DPR 2 | 1.72 | 5.32 | 3.16 |
+  | SMAA, DPR 2 (own pass after the grade) | 2.26 | 4.76 | 2.37 |
+  | **MSAA 4×, DPR 1.5** | **1.80** | **2.30** | **1.80** |
+  | MSAA 4×, DPR 2 | 2.76 | 3.55 | 2.36 |
+
+  - SMAA cleans the long edges but can't recover sub-pixel leaves, so the foliage still sparkles. It needs a pass of its own after the grade: merged into the effect pass, its edge pixels read the raw scene buffer and skip bloom, tone mapping and grade.
+  - The cost of MSAA at DPR 1.5 is a slight softness from the 1.5→2 upscale, most visible on the gold trim's highlight at 2× zoom. The design review judged it closer to the boards' soft light than the crisp modes.
+  - At night it resolves cleanly under bloom, with no halo on the neon.
+  - MSAA at DPR 2 buys crispness, not steadiness, and nearly fills the budget with one fragment. It's a candidate upgrade step for when tiers are built (D-036), not a default.
+  - The foliage is opaque cards, not cutouts, so D-042's `alphaToCoverage` doesn't apply yet.
+- **Sub-draw budget: 3,000 per frame, both passes counted.** `?stress=N` adds N tiny shadow-casting instances to the cream program, and each one is two sub-draws (shadow and main pass). Up to about 2k sub-draws the frame stays GPU-bound and they cost nothing visible. Past that, each costs about 0.3 µs of main-thread time. The time goes in Chrome's WebGL multi-draw path, not in three's per-instance culling or sorting: turning both off saved under 5%. The Air's CPU cores are the same class as the Max's, so this figure carries over roughly 1:1. Phones are the reason for the margin. The ~100 `render.calls` limit from D-035 stands.
+
+*Why:* D-035 and D-051 needed a number that repeats, and D-042 needed a winner in motion. The first readings, from stats-gl and from timer queries under a 60 Hz cap, swung 2× between runs.
+*Refines:* D-035 (how GPU cost is measured), D-042 (settled), D-052 (the HUD's GPU readout is indicative only).
+
+### D-056 Idle rendering in the static look-dev scene
+**Decision:** the normal canvas uses R3F's demand loop. OrbitControls requests frames while the camera moves and its damping settles; time-of-day changes also invalidate the sky, shared materials and post effects. With the scene untouched, the browser test records zero new WebGL draw calls over a 300 ms interval, then confirms a camera drag wakes drawing. The `?perf=base` benchmark retains its manual 60 Hz loop so the proxy is comparable run to run.
+
+When ambient motion arrives, give it an explicit, visibility-aware schedule: target about 30 Hz at rest, higher only during interaction, and pause while the tab is hidden or a panel is being read. Actual fan and power reduction on @bubbles's Mac still needs a hands-on check.
+
+*Why:* the static scene was spending a full 120 Hz render budget while nothing changed, making the Mac's fans spin up.
+*Refines:* D-036's idle power policy.
 
 ---
 

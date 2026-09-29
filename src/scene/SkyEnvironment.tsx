@@ -52,6 +52,7 @@ function createEnvironment(gl: WebGLRenderer) {
 export function SkyEnvironment() {
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
+  const invalidate = useThree((state) => state.invalidate)
   const restores = useContextRestores()
   const { look, sun } = useLook()
   const environment = useRef<ReturnType<typeof createEnvironment> | null>(null)
@@ -77,7 +78,8 @@ export function SkyEnvironment() {
     scene.environment = env.render()
     scene.background = env.background
     scene.environmentIntensity = look.env.intensity
-  }, [scene, look, sun, restores])
+    invalidate()
+  }, [scene, look, sun, restores, invalidate])
 
   return null
 }

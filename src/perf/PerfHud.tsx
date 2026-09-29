@@ -1,30 +1,39 @@
 import { addAfterEffect, addEffect, useThree } from '@react-three/fiber'
 import { useEffect } from 'react'
 import Stats from 'stats-gl'
+import { renderConfig } from '../debug'
 import { useContextRestores } from '../renderer/contextRestores'
+import { type BenchResult, runBurst } from './bench'
+import { markFrameSegments } from './frameSegments'
+import { createGpuTimer, type FrameTiming, summarize } from './gpuTimer'
 import { tallySubDraws } from './subDrawTally'
 
 const READOUT_INTERVAL_MS = 250
+// Two seconds at 60 Hz: long enough that the median holds still.
+const WINDOW = 120
+const SEGMENTS = ['shadow', 'scene', 'post'] as const
 
 /**
- * The perf HUD (D-035): stats-gl for FPS, CPU ms and GPU ms from the timer
- * query, plus the draw counters renderer.info can't give on its own.
+ * The perf HUD (D-035): stats-gl for FPS and CPU ms, GPU ms from our own timer
+ * query split by pass, and the draw counters renderer.info can't give on its
+ * own. GPU ms is the median and p95 over a two-second window, since single
+ * frames are too noisy to read. On Metal it is indicative only (D-055); the
+ * repeatable budget proxy is the saturated-frame benchmark.
  *
- * GPU time is measured around the whole frame (every pass, the shadow map
- * included) rather than per `render()` call, and the counters accumulate across
- * passes instead of resetting inside each one.
+ * The counters accumulate across passes instead of resetting inside each one.
  */
 export function PerfHud() {
-  // Rebuilt on restore: stats-gl caches the timer-query extension, which a
-  // context restore invalidates.
+  // Rebuilt on restore: the timer's queries and extension die with the context.
   return <FrameMeters key={useContextRestores()} />
 }
 
 function FrameMeters() {
   const gl = useThree((state) => state.gl)
+  const scene = useThree((state) => state.scene)
 
   useEffect(() => {
-    const stats = new Stats({ trackGPU: true, logsPerSecond: 4 })
+    // stats-gl's own GPU query would collide with ours: only one runs at a time.
+    const stats = new Stats({ trackGPU: false, logsPerSecond: 4 })
     void stats.init(gl.domElement)
     stats.dom.classList.add('perf-stats')
     const readout = document.createElement('div')
@@ -33,34 +42,77 @@ function FrameMeters() {
 
     gl.info.autoReset = false
     const subDraws = tallySubDraws(gl)
+    const timer = createGpuTimer(gl.getContext() as WebGL2RenderingContext)
+    const unmark = timer ? markFrameSegments(gl, scene, timer) : () => {}
+    const frames: FrameTiming[] = []
     let lastReadout = 0
+
+    if (renderConfig.budget) {
+      window.foliaBench = (count = 240, warmup?: number) =>
+        runBurst(gl.getContext() as WebGL2RenderingContext, count, warmup)
+    }
 
     const stopBefore = addEffect(() => {
       stats.begin()
       gl.info.reset()
       subDraws.reset()
+      timer?.mark('pre')
     })
-    const stopAfter = addAfterEffect((now) => {
+    const stopAfter = addAfterEffect(() => {
+      timer?.endFrame()
       stats.end()
       stats.update()
+      if (timer) {
+        frames.push(...timer.poll())
+        frames.splice(0, frames.length - WINDOW)
+      }
+      // Our own clock: the timestamp R3F passes is in seconds under ?perf=base.
+      const now = performance.now()
       if (now - lastReadout < READOUT_INTERVAL_MS) return
       lastReadout = now
       const { calls, triangles } = gl.info.render
-      readout.textContent = `calls ${calls} · sub-draws ${subDraws.count} · tris ${formatCount(triangles)}`
+      const counts = `calls ${calls} · sub-draws ${subDraws.count} · tris ${formatCount(triangles)}`
+      if (!timer || frames.length === 0) {
+        readout.textContent = counts
+        return
+      }
+      const gpu = summarize(frames.map((frame) => frame.total))
+      const split = SEGMENTS.map((label) => {
+        const { median } = summarize(frames.map((frame) => frame.segments[label] ?? 0))
+        return `${label} ${median.toFixed(2)}`
+      })
+      readout.textContent = `gpu estimate ${gpu.median.toFixed(2)} ms · p95 ${gpu.p95.toFixed(2)}\n${split.join(' · ')}\n${counts}`
+      readout.dataset.json = JSON.stringify({
+        gpu,
+        frames: frames.length,
+        calls,
+        subDraws: subDraws.count,
+        triangles,
+      })
     })
 
     return () => {
       stopBefore()
       stopAfter()
+      unmark()
+      timer?.dispose()
+      delete window.foliaBench
       subDraws.restore()
       gl.info.autoReset = true
       stats.dispose()
       stats.dom.remove()
       readout.remove()
     }
-  }, [gl])
+  }, [gl, scene])
 
   return null
+}
+
+declare global {
+  interface Window {
+    /** Under `?perf=base`: time `count` frames drawn back to back (see `runBurst`). */
+    foliaBench?: (count?: number, warmup?: number) => BenchResult
+  }
 }
 
 function formatCount(n: number): string {

@@ -1,5 +1,7 @@
 import { OrbitControls } from '@react-three/drei'
 import { Suspense } from 'react'
+import { renderConfig } from '../debug'
+import { StressDraws } from '../perf/StressDraws'
 import { Fragment } from './Fragment'
 import { Lights } from './Lights'
 import { MaterialLook } from './MaterialLook'
@@ -16,6 +18,7 @@ export function LookDevScene() {
       <Suspense fallback={null}>
         <Fragment />
       </Suspense>
+      {renderConfig.stress > 0 && <StressDraws count={renderConfig.stress} />}
     </>
   )
 }
