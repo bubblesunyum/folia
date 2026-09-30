@@ -15,6 +15,7 @@
     "typecheck": "tsc -p .",
     "lint": "biome check .",
     "check:ssr": "node scripts/check-ssr-boundary.mjs",
+    "budget": "node scripts/budget.mjs",
     "format": "biome check --write .",
     "test": "vitest run",
     "test:e2e": "playwright test"

@@ -59,7 +59,7 @@ itself in `bd remember`.
 
 ```bash
 scripts/verify.sh          # build + tests
-scripts/verify.sh --quick  # build only
+scripts/verify.sh --quick  # fast lane: everything but tests and e2e
 scripts/verify.sh --full   # + slow checks and any smoke run
 ```
 

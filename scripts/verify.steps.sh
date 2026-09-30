@@ -26,16 +26,34 @@ step "build" "${PNPM[@]}" build
 # Committed GLBs match their Blender sources (D-034); no Blender needed.
 step "assets" "${PNPM[@]}" assets:check
 
-if [ "$mode" != "--quick" ]; then
-  # --run: Vitest watches when stdin is a terminal, and the gate would never exit.
-  step "tests" "${PNPM[@]}" test --run
+# Deterministic delivery signals (fol-00p): per-neighborhood GLB byte+tri
+# allowance plus shell/canvas JS gz caps, checked on exact local bytes —
+# network-independent by construction, a stand-in for timing budgets until
+# there's more town. Allowance set 2026-09-30 from cortico at 1.82 MB /
+# 171,540 tris, shell 70 KB / canvas 360 KB gz: one more hero fragment fits,
+# whole-town breadth trips the gate. Runs in every lane: it needs only
+# public/assets, the manifest, and dist/, no browser, seconds at most.
+# The program lives in scripts/budget.mjs so `pnpm budget` by hand runs
+# exactly what the gate runs.
+step "budget" node scripts/budget.mjs
+
+# The signals, like the test count below: "ok" alone can't tell a 1.8 MB
+# neighborhood from a 5 MB one.
+if [ -f "$LOGS/budget.log" ]; then
+  grep "^budget: " "$LOGS/budget.log" | sed -e 's/^/        /'
+fi
+
+# The suite is the slow lane: probe_step runs it everywhere but --quick, where
+# it skips loudly instead of vanishing silently.
+# --run: Vitest watches when stdin is a terminal, and the gate would never exit.
+probe_step "tests" "${PNPM[@]}" test --run
 
   # Vitest's summary line, e.g. "Tests  12 passed (12)" — "ok" alone can't tell
-  # a green suite from one that ran nothing.
-  if [ -f "$LOGS/tests.log" ]; then
+  # a green suite from one that ran nothing. Mode-guarded: under --quick the
+  # step above skips and any log left is from an older run.
+  if [ "$mode" != "--quick" ] && [ -f "$LOGS/tests.log" ]; then
     grep -oE "[0-9]+ (passed|tests?)[^.]*" "$LOGS/tests.log" | tail -1 | sed -e 's/^/        /'
   fi
-fi
 
 if [ "$mode" = "--full" ]; then
   # Needs a browser: route smoke tests and the golden-hour / night captures,
