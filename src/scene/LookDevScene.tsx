@@ -2,6 +2,9 @@ import { OrbitControls } from '@react-three/drei'
 import { Suspense } from 'react'
 import { renderConfig } from '../debug'
 import { ZoomRig } from '../input/ZoomRig'
+import { PanelCameraRig } from '../panel/PanelCameraRig'
+import { PedestalNavigate } from '../panel/PedestalNavigate'
+import { WispLight } from '../panel/WispLight'
 import { StressDraws } from '../perf/StressDraws'
 import { Fragment } from './Fragment'
 import { HoverHighlight } from './HoverHighlight'
@@ -19,6 +22,7 @@ export function LookDevScene() {
       <ZoomRig />
       <SkyEnvironment />
       <Lights />
+      <WispLight />
       <MaterialLook />
       {renderConfig.sway && <Sway />}
       {renderConfig.reflection && <WaterReflection />}
@@ -26,6 +30,8 @@ export function LookDevScene() {
         <Fragment />
       </Suspense>
       <HoverHighlight />
+      <PedestalNavigate />
+      <PanelCameraRig />
       {renderConfig.stress > 0 && <StressDraws count={renderConfig.stress} />}
     </>
   )

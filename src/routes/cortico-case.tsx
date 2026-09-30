@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, MetaFunction } from 'react-router'
 import { type CaseDoc, loadProject } from '../content/load'
-import { rendererFor } from '../content/registry'
+import { PanelPresenter } from '../panel/PanelPresenter'
 
 interface CasePage extends CaseDoc {
   projectSlug: string
@@ -25,6 +25,5 @@ export const meta: MetaFunction<typeof loader> = ({ loaderData }) => [
 ]
 
 export default function CorticoCase({ loaderData }: { loaderData: CasePage }) {
-  const Panel = rendererFor(loaderData.kind)
-  return <Panel content={loaderData} />
+  return <PanelPresenter content={loaderData} />
 }

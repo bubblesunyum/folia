@@ -207,3 +207,139 @@ body,
 .route-content a {
   color: inherit;
 }
+
+/* The case side sheet (fol-l1r.5, D-022/D-050): a solid sheet on the right —
+   ~45% of the width capped at readable measure — scrolling internally while
+   the world stays live behind it. Solid, never backdrop-filter: Safari would
+   re-blur it every frame. Below 900px it docks to the bottom instead. */
+.case-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  width: min(45vw, 640px);
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+  color: var(--forest, #001e17);
+  background: var(--cream, #f4eee1);
+  border-top-left-radius: 16px;
+  border-bottom-left-radius: 16px;
+  animation: case-panel-in 450ms ease;
+}
+
+/* The registry's panel renderer roots in .route-content (a fixed card on
+   place pages); inside the sheet it flows as plain content instead. */
+.case-panel .route-content {
+  position: static;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+}
+
+/* The panel header row: the wisp's neon breadcrumb (D-023) with the wisp
+   placeholder perched beside it, grouped so the two read as one figure
+   holding the sheet open. In-flow, so the perch can never clip off an edge. */
+.case-panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+/* The wisp's neon breadcrumb (D-023): cortico › slug, above the content. */
+.case-breadcrumb {
+  display: inline-block;
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  color: var(--mint, #4bfed2);
+  background: var(--forest, #001e17);
+  border-radius: 999px;
+}
+
+/* The wisp placeholder herself, perched on the sheet's top edge as if
+   holding it open (D-023): a mint glow bobbing gently beside her sign. */
+.wisp-perch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--mint, #4bfed2);
+  box-shadow:
+    0 0 8px 2px var(--mint, #4bfed2),
+    0 0 20px 6px color-mix(in srgb, var(--mint, #4bfed2) 45%, transparent);
+  animation: wisp-bob 2.8s ease-in-out infinite;
+}
+
+.case-panel button {
+  margin: 12px 0 0;
+  padding: 8px 18px;
+  font-size: 1rem;
+  letter-spacing: 0.06em;
+  color: var(--cream, #f4eee1);
+  cursor: pointer;
+  background: var(--forest, #001e17);
+  border: none;
+  border-radius: 999px;
+}
+
+.case-panel button:hover {
+  outline: 2px solid var(--mint, #4bfed2);
+  outline-offset: 2px;
+}
+
+.case-panel button:focus-visible {
+  outline: 2px solid var(--mint, #4bfed2);
+  outline-offset: 2px;
+}
+
+@keyframes case-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(48px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes wisp-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@media (max-width: 899px) {
+  .case-panel {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-height: 50vh;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    border-bottom-left-radius: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .case-panel {
+    animation: none;
+  }
+  .wisp-perch {
+    animation: none;
+  }
+}

@@ -2,6 +2,8 @@ import type { MetaFunction } from 'react-router'
 import { Link } from 'react-router'
 import { loadProject, type ProjectDoc } from '../content/load'
 import { MarkdownView } from '../content/MarkdownView'
+import { signalFocusLift } from '../input/intent'
+import { usePedestalRouteSync } from '../panel/usePedestalRouteSync'
 
 export function loader(): ProjectDoc {
   return loadProject()
@@ -13,6 +15,9 @@ export const meta: MetaFunction<typeof loader> = ({ loaderData }) => [
 ]
 
 export default function Cortico({ loaderData }: { loaderData: ProjectDoc }) {
+  // Pedestal clicks land here from the canvas rig; case-link focus drives
+  // the same 3D lift+glow as hover through the intent layer (spec keyboard).
+  usePedestalRouteSync()
   return (
     <article className="route-content">
       <h1>{loaderData.title}</h1>
@@ -21,13 +26,24 @@ export default function Cortico({ loaderData }: { loaderData: ProjectDoc }) {
       <ul>
         {loaderData.cases.map((c) => (
           <li key={c.slug}>
-            <Link to={`/cortico/${c.slug}`} prefetch="intent">
-              {c.title}
-            </Link>{' '}
-            — {c.summary}
+            <CaseLink slug={c.slug} title={c.title} /> — {c.summary}
           </li>
         ))}
       </ul>
     </article>
+  )
+}
+
+function CaseLink({ slug, title }: { slug: string; title: string }) {
+  return (
+    <Link
+      to={`/cortico/${slug}`}
+      prefetch="intent"
+      data-pedestal={slug}
+      onFocus={() => signalFocusLift(slug)}
+      onBlur={() => signalFocusLift('')}
+    >
+      {title}
+    </Link>
   )
 }

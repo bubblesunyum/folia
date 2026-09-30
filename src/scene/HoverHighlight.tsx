@@ -5,11 +5,19 @@
 // target. Slots are written through `materials/groupState` (one texel upload
 // per write) only while still moving, so the demand loop settles once the
 // hover rests (D-056).
+//
+// fol-l1r.5: under /cortico only the three pedestal slots lift (D-021) — the
+// floor (slot 7) and the rest of town report through `data-hover` but never
+// take lift, so one rig proves "only that pedestal" with no second system.
+// Keyboard focus on the case links drives the same lift through the intent
+// layer's FOCUS_LIFT_EVENT (spec: keyboard), mapped slug → slot here.
 
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { type BatchedMesh, Raycaster, Vector2, Vector3 } from 'three'
+import { FOCUS_LIFT_EVENT, type FocusLiftDetail } from '../input/intent'
 import { clearGroupSlot, setGroupSlot } from '../materials/groupState'
+import { isPedestalSlot, pedestalOnlyForPath, slotForSlug } from '../panel/pedestals'
 import { glowForNight, HOVER_LIFT, slotFromGroupId, springTowards } from '../picking/hover'
 import { clearProjector, setCanvasHook, setProjector } from '../testHooks'
 import { useLook } from '../time/lookContext'
@@ -27,7 +35,10 @@ export function HoverHighlight() {
     pointer: new Vector2(),
     dirty: false,
     hovered: null as number | null,
-    // Slot → current lift/glow easing toward (hovered ? on : off).
+    // Keyboard focus on a case link lifts that pedestal like a hover (spec:
+    // keyboard). Pointer hover and focus compose: both lift while held.
+    focusSlot: null as number | null,
+    // Slot → current lift/glow easing toward (targeted ? on : off).
     springs: new Map<number, { lift: number; glow: number }>(),
   })
 
@@ -76,11 +87,21 @@ export function HoverHighlight() {
         y: rect.top + ((1 - ndc.y) / 2) * rect.height,
       }
     })
+    const onFocusLift = (event: Event) => {
+      const targetId = (event as CustomEvent<FocusLiftDetail>).detail?.targetId ?? ''
+      const slot = targetId === '' ? null : slotForSlug(targetId)
+      if (slot === rig.current.focusSlot) return
+      rig.current.focusSlot = slot
+      setCanvasHook(canvas, 'hoverSettled', '')
+      invalidate()
+    }
+    window.addEventListener(FOCUS_LIFT_EVENT, onFocusLift)
     canvas.addEventListener('pointermove', onPointerMove)
     canvas.addEventListener('pointerdown', onPointerDown)
     canvas.addEventListener('pointerup', onPointerUp)
     canvas.addEventListener('pointerleave', onPointerLeave)
     return () => {
+      window.removeEventListener(FOCUS_LIFT_EVENT, onFocusLift)
       canvas.removeEventListener('pointermove', onPointerMove)
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointerup', onPointerUp)
@@ -118,11 +139,26 @@ export function HoverHighlight() {
       }
     }
     const glowTarget = glowForNight(night)
-    const targets = new Set(r.springs.keys())
-    if (r.hovered !== null) targets.add(r.hovered)
+    // Under /cortico only pedestals take lift (D-021); the raw hovered slot
+    // still reports through data-hover, so the filter itself is observable.
+    const pedestalOnly = pedestalOnlyForPath(window.location.pathname)
+    const candidates = new Set<number>()
+    if (r.hovered !== null) candidates.add(r.hovered)
+    if (r.focusSlot !== null) candidates.add(r.focusSlot)
+    const targets = new Set<number>()
+    for (const slot of candidates) {
+      if (!pedestalOnly || isPedestalSlot(slot)) targets.add(slot)
+    }
+    for (const slot of r.springs.keys()) targets.add(slot)
+    // Easing-out slots stay in the set until they delete themselves at rest;
+    // only allowed slots ease toward on.
+    const lifting = new Set<number>()
+    for (const slot of candidates) {
+      if (!pedestalOnly || isPedestalSlot(slot)) lifting.add(slot)
+    }
     for (const slot of targets) {
       const current = r.springs.get(slot) ?? { lift: 0, glow: 0 }
-      const on = slot === r.hovered
+      const on = lifting.has(slot)
       const lift = springTowards(current.lift, on ? HOVER_LIFT : 0, dt)
       const glow = springTowards(current.glow, on ? glowTarget : 0, dt)
       if (!on && lift === 0 && glow === 0) {
@@ -134,13 +170,21 @@ export function HoverHighlight() {
       r.springs.set(slot, { lift, glow })
       setGroupSlot(slot, lift, glow)
     }
-    const hovered = r.hovered === null ? null : (r.springs.get(r.hovered) ?? { lift: 0, glow: 0 })
+    const atRest = (slot: number): boolean => {
+      const state = r.springs.get(slot)
+      return state !== undefined && state.lift === HOVER_LIFT && state.glow === glowTarget
+    }
     const settled =
-      !r.dirty &&
-      (r.hovered === null
-        ? r.springs.size === 0
-        : hovered !== null && hovered.lift === HOVER_LIFT && hovered.glow === glowTarget)
+      !r.dirty && (lifting.size === 0 ? r.springs.size === 0 : [...lifting].every(atRest))
     setCanvasHook(gl.domElement, 'hoverSettled', settled ? 'true' : '')
+    // Which slots hold lift right now: the e2e proof that only the pedestal
+    // lifts (data-hover still reports the raw slot, filtered or not).
+    const lifted = [...r.springs.entries()]
+      .filter(([, state]) => state.lift > 0)
+      .map(([slot]) => slot)
+      .sort((a, b) => a - b)
+      .join(',')
+    setCanvasHook(gl.domElement, 'lifted', lifted)
     // Settle-driven: any frame that leaves the hover easing (or a fresh
     // pointer unpicked) asks for the next one, so the loop can neither stall
     // early nor spin once everything rests.

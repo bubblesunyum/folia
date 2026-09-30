@@ -25,6 +25,10 @@ export type CanvasHookName =
   | 'drawnAssets'
   | 'hover'
   | 'hoverSettled'
+  | 'lifted'
+  | 'panel'
+  | 'viewOffset'
+  | 'focus'
 
 /** Anything with a `dataset` we write hooks onto (a real canvas, or a fake). */
 export interface DatasetHost {
@@ -87,8 +91,11 @@ export function recordRise(canvas: DatasetHost, host: RiseCountHost): number {
   return next
 }
 
+/** A world position in metres (three.js x, y-up, z), for projector calls. */
+export type WorldPoint = readonly [number, number, number]
+
 /** Test-only projector: world position → canvas CSS pixels (fol-xo6). */
-export type FoliaProjector = (world: readonly [number, number, number]) => {
+export type FoliaProjector = (world: WorldPoint) => {
   x: number
   y: number
 }
