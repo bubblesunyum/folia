@@ -1,4 +1,18 @@
 #!/usr/bin/env sh
+# --- Git LFS (D-062), outside the beads markers so bd leaves it alone ---
+# Uploads the GLB objects a push references; without it GitHub gets pointers
+# with nothing behind them. git hands the refs on stdin once, so they're kept
+# in a file and replayed to the beads section below.
+if ! command -v git-lfs >/dev/null 2>&1; then
+  echo >&2 "pre-push: GLBs live in Git LFS (D-062) but git-lfs isn't on PATH; install it (brew install git-lfs)."
+  exit 2
+fi
+_lfs_refs=$(mktemp) || exit 1
+cat > "$_lfs_refs"
+git lfs pre-push "$@" < "$_lfs_refs" || { rm -f "$_lfs_refs"; exit 1; }
+exec < "$_lfs_refs"
+rm -f "$_lfs_refs"
+# --- end Git LFS ---
 # --- BEGIN BEADS INTEGRATION v1.1.2 ---
 # This section is managed by beads. Do not remove these markers.
 if command -v bd >/dev/null 2>&1; then

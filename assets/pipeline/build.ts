@@ -2,7 +2,7 @@
 // changed (D-034's per-asset content hash).
 //
 //   node assets/pipeline/build.ts [asset…] [--force] [--json]   build stale assets (all by default)
-//   node assets/pipeline/build.ts --check               fail if any committed GLB is stale
+//   node assets/pipeline/build.ts --check               fail if any committed GLB is stale or an LFS pointer
 //
 // An asset is `assets/blender/<hood>/<object>.py` plus its `.json` params. The
 // packed GLB lands in `public/assets/<hood>/<object>.glb`, and its source hash
@@ -17,6 +17,7 @@ import { promisify } from 'node:util'
 import { palette } from '../../src/palette.ts'
 import { withFileLock, writeFileAtomic } from './atomic.ts'
 import { allocateSlots, assetLocalIds, type GroupRegistry, type GroupTable } from './groups.ts'
+import { isLfsPointer } from './lfs.ts'
 import { pack } from './pack.ts'
 
 const ROOT = resolve(import.meta.dirname, '../..')
@@ -213,6 +214,16 @@ const round = (s: number) => Math.round(s * 100) / 100
 if (import.meta.main) {
   const argv = process.argv.slice(2)
   if (argv.includes('--check')) {
+    const pointers = listAssets().filter(
+      (a) => existsSync(outputPath(a)) && isLfsPointer(outputPath(a)),
+    )
+    if (pointers.length) {
+      console.error(
+        `GLBs are Git LFS pointers, not files (D-062): ${pointers.join(', ')}\n` +
+          'install git-lfs, then run: git lfs install --local --skip-repo && git lfs pull',
+      )
+      process.exit(1)
+    }
     const stale = staleAssets()
     if (stale.length) {
       console.error(`stale assets (run node assets/pipeline/build.ts): ${stale.join(', ')}`)

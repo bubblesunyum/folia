@@ -749,6 +749,20 @@ places and the router.
 instead of per asset.
 *Refines:* D-032, D-034.
 
+### D-062 Packed GLBs are committed through Git LFS (fol-7fm)
+**Decision:**
+- `public/assets/**/*.glb` is tracked by Git LFS (`.gitattributes`). The GLBs stay committed, as D-053 chose, so every environment runs, tests and deploys without Blender 5.2.2, and the served file is the exact bake that was art-directed (a Cycles re-bake on another machine's CPU needn't match Metal's).
+- `.beads/hooks/pre-push` runs `git lfs pre-push` above the beads-managed section, replaying git's stdin ref list to both. Without it a push sends pointers with nothing behind them. It fails the push if git-lfs is missing.
+- `pnpm assets:check` (the gate's `assets` step) fails on an LFS pointer and says what to run (`git lfs install --local --skip-repo && git lfs pull`), because GLTFLoader's parse error names nothing useful.
+- Existing history keeps its six raw GLB blobs; nothing is rewritten.
+- **Rejected:**
+  - GLBs as uncommitted build output: every clone, cloud agent, CI run and Vercel build would need Blender, and re-bakes drift from what was reviewed.
+  - `git lfs migrate` over history: it rewrites every commit to save ~10 MB.
+- **Before GitHub-connected Vercel deploys (D-026):** enable Git LFS in the Vercel project settings. CLI deploys upload the working tree and are unaffected. GitHub's LFS bandwidth quota is the one to watch as cloud agents clone.
+
+*Why:* Each rebuild committed a new 1.6 MB blob to plain git (review 2026-09-29).
+*Refines:* D-053.
+
 ---
 
 ## Open questions (not yet decided)
