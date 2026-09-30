@@ -246,10 +246,10 @@ Timebox each at 1–3 days, and log each result in [decisions.md](decisions.md).
   - **Measure** save-to-pixels time (target under 10 s).
   - **Settles** B-1, B-2, S-1 and S-13. If the fragment isn't exciting, stop and fix the look before anything else.
 - [x] **3. Perf proxy on the Max.** Run one test scene under `?perf=base`; the Metal GPU timer proved unstable, so use saturated-frame throughput as the provisional proxy. Set the sub-draw budget and choose between DPR 1.5 + MSAA 4× and DPR 2 + SMAA (D-055). Real low-end device testing remains deferred (D-051).
-- [x] **4. Night and water.** Neon at night-level emissive with bloom; the fake-glow fallback with bloom off; the quarter-res neon reflection on water; baked spill and light pools (D-038, D-039).
+- [x] **4. Night and water.** Neon at night-level emissive with bloom; the fake-glow fallback with bloom off; the quarter-res neon reflection on water; baked spill. Light-pool decals deferred to fol-0sj (D-038, D-039, D-057).
 - [x] **5. Shadows and dapple.** The Voronoi canopy's dappled shadow resolves at the town fit and the vantage fit with 2048 PCF; per-frame re-render with sway costs nothing resolvable, so D-041's live default stands (D-058).
 - [x] **6. Delivery.** A Vercel preview with a prerendered route, a client-only lazy canvas and a Meshopt `.glb` with a compression workaround. Measure transferred bytes and time-to-sky on throttled Fast 4G and Slow 4G, and set the per-route budgets (D-047).
-- [x] **7. Input.** Safari `GestureEvent`, Chromium `ctrl+wheel` and iPad pointers normalized into one zoom model with the resistance detent, tuned on the Max and the iPad (D-048, D-060).
+- [x] **7. Input.** Safari `GestureEvent`, Chromium `ctrl+wheel` and iPad pointers normalized into one zoom model with the resistance detent (D-048, D-060). On-device tuning on the Max and the iPad deferred to fol-j08.
 
 ### Phase 1: vertical slice
 - [ ] React Router v8 prerender with the persistent canvas; routes `/cortico` and `/cortico/<slug>`; the MDX + Zod content schema and kind registry
