@@ -17,6 +17,7 @@ import {
 } from 'three'
 import { water } from '../materials/water'
 import { createStreakBlur } from '../renderer/streakBlur'
+import { useTownBatches } from './TownBatches'
 
 /** Batches the mirrored pass draws lit; everything else opaque draws black, to occlude. */
 const EMISSIVE = new Set(['neon'])
@@ -38,7 +39,7 @@ const BIAS = new Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0
  */
 export function WaterReflection() {
   const gl = useThree((state) => state.gl)
-  const scene = useThree((state) => state.scene)
+  const { meshes } = useTownBatches()
   const pass = useMemo(() => {
     return {
       target: new WebGLRenderTarget(1, 1, { type: HalfFloatType }),
@@ -76,8 +77,9 @@ export function WaterReflection() {
     }
   }, [pass])
 
-  useFrame(({ camera }) => {
-    const pool = scene.getObjectByName('water') as BatchedMesh | undefined
+  useFrame(({ camera, scene }) => {
+    // The town-wide batches, straight from the registry that owns them.
+    const pool = meshes.get('water')
     if (!pool) return
     const p = pass
 
@@ -136,9 +138,8 @@ export function WaterReflection() {
     const autoShadows = gl.shadowMap.autoUpdate
     const clearAlpha = gl.getClearAlpha()
     gl.getClearColor(p.clearColor)
-    for (const child of scene.children) {
-      const batch = child as BatchedMesh
-      if (!batch.isBatchedMesh || EMISSIVE.has(batch.name)) continue
+    for (const batch of meshes.values()) {
+      if (EMISSIVE.has(batch.name)) continue
       p.swapped.set(batch, { material: batch.material, visible: batch.visible })
       if (SKIPPED.has(batch.name)) batch.visible = false
       else batch.material = p.occluder

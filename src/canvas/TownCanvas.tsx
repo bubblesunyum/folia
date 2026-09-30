@@ -3,6 +3,7 @@ import { debug } from '../debug'
 import { Effects } from '../renderer/Effects'
 import { Viewport } from '../renderer/Viewport'
 import { LookDevScene } from '../scene/LookDevScene'
+import { TownBatches } from '../scene/TownBatches'
 import { LookProvider } from '../time/LookProvider'
 
 const PerfHud = lazy(() =>
@@ -17,7 +18,9 @@ export function TownCanvas({ onSky }: { onSky: () => void }) {
   return (
     <Viewport onFirstFrame={onSky}>
       <LookProvider>
-        <LookDevScene />
+        <TownBatches>
+          <LookDevScene />
+        </TownBatches>
         <Effects />
       </LookProvider>
       {debug.hud && (

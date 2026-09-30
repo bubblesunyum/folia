@@ -35,14 +35,22 @@ export function foliaAssets(): Plugin {
       if (id !== RESOLVED) return
       const manifest = JSON.parse(
         readFileSync(join(root, 'assets/manifest.json'), 'utf8'),
-      ) as Record<string, { hash: string; groups?: Record<string, number> }>
-      const hashes = Object.fromEntries(Object.entries(manifest).map(([a, r]) => [a, r.hash]))
-      // Global group slots (D-061): the hover writer addresses groups by
-      // name; picking reads the slot straight from the geometry.
-      const slots = Object.fromEntries(
-        Object.entries(manifest).map(([a, r]) => [a, r.groups ?? {}]),
-      )
-      return `export default ${JSON.stringify(hashes)}\nexport const groupSlots = ${JSON.stringify(slots)}`
+      ) as Record<
+        string,
+        { hash: string; groups?: Record<string, number>; triangles?: Record<string, number> }
+      >
+      // One pass over the manifest for every client export: the content hash
+      // per asset, the global group slots (D-061), and the baked triangles per
+      // batch sizing the town registry (D-032).
+      const hashes: Record<string, string> = {}
+      const slots: Record<string, Record<string, number>> = {}
+      const triangles: Record<string, Record<string, number>> = {}
+      for (const [asset, record] of Object.entries(manifest)) {
+        hashes[asset] = record.hash
+        slots[asset] = record.groups ?? {}
+        triangles[asset] = record.triangles ?? {}
+      }
+      return `export default ${JSON.stringify(hashes)}\nexport const groupSlots = ${JSON.stringify(slots)}\nexport const assetTriangles = ${JSON.stringify(triangles)}`
     },
     async configureServer(server) {
       // The look-dev write-back (fol-qbb, D-034): the panel POSTs its working

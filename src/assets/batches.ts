@@ -3,15 +3,7 @@
 // so the batch never inherits a storage type from whichever geometry came
 // first, and custom attributes are renamed to what the material features read.
 
-import {
-  BatchedMesh,
-  BufferAttribute,
-  BufferGeometry,
-  type Material,
-  type Mesh,
-  type MeshDepthMaterial,
-  type Object3D,
-} from 'three'
+import { BufferAttribute, BufferGeometry, type Mesh, type Object3D } from 'three'
 import { customStorage, parseMeshName } from './batchSchema'
 
 /** glTF semantic, as GLTFLoader lowercases it → the shader attribute name. */
@@ -41,12 +33,6 @@ export function dequantize(mesh: Mesh): BufferGeometry {
   return out
 }
 
-export interface BatchMaterial {
-  material: Material
-  depth: MeshDepthMaterial
-  castShadow: boolean
-}
-
 /** Every mesh under `root`, grouped by the material segment of its `<hood>.<object>.<material>.<lod>` name. */
 export function geometriesByBatch(root: Object3D): Map<string, BufferGeometry[]> {
   root.updateMatrixWorld(true)
@@ -73,24 +59,4 @@ export function withDerived(
     if (list) out.set(batch, list)
   }
   return out
-}
-
-/** One BatchedMesh per batch, each geometry added once as an identity instance. */
-export function buildBatches(
-  geometries: Map<string, BufferGeometry[]>,
-  materials: Readonly<Record<string, BatchMaterial>>,
-): BatchedMesh[] {
-  return [...geometries].map(([batch, list]) => {
-    const shared = materials[batch]
-    if (!shared) throw new Error(`no shared material for batch "${batch}"`)
-    const vertices = list.reduce((n, g) => n + (g.attributes.position?.count ?? 0), 0)
-    const indices = list.reduce((n, g) => n + (g.index?.count ?? 0), 0)
-    const mesh = new BatchedMesh(list.length, vertices, indices, shared.material)
-    for (const geometry of list) mesh.addInstance(mesh.addGeometry(geometry))
-    mesh.name = batch
-    mesh.customDepthMaterial = shared.depth
-    mesh.castShadow = shared.castShadow
-    mesh.receiveShadow = true
-    return mesh
-  })
 }

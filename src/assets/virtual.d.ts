@@ -6,4 +6,9 @@ declare module 'virtual:folia-assets' {
   const groupSlots: Readonly<Record<string, Readonly<Record<string, number>>>>
 
   export { groupSlots }
+
+  /** Asset → batch → baked triangles, sizing the town batch registry (D-032). */
+  const assetTriangles: Readonly<Record<string, Readonly<Record<string, number>>>>
+
+  export { assetTriangles }
 }
