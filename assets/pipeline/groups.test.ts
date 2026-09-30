@@ -50,7 +50,40 @@ describe('allocateSlots', () => {
     const full: GroupRegistry = {
       a: Object.fromEntries(Array.from({ length: MAX_GROUPS }, (_, i) => [`g${i}`, i])),
     }
-    expect(() => allocateSlots('b', { fresh: 0 }, full)).toThrowError(/no uGroupState slot left/)
+    expect(() => allocateSlots('b', { fresh: 0 }, full)).toThrowError(/no group slot left/)
+  })
+
+  it('reuses a renamed group\u2019s slot instead of leaking it', () => {
+    const registry: GroupRegistry = {
+      'cortico/forum': { deck: 5, rail: 6 },
+    }
+    const { table, remap } = allocateSlots('cortico/forum', { concourse: 1, deck: 0 }, registry)
+    expect(table).toEqual({ concourse: 6, deck: 5 })
+    expect([...remap]).toEqual([
+      [1, 6],
+      [0, 5],
+    ])
+  })
+
+  it('a removed group frees its slot for the next new group, then mints', () => {
+    const registry: GroupRegistry = {
+      'cortico/fragment': { ground: 0, terrace: 1, canopy: 2, shell: 3, planting: 4 },
+      'cortico/forum': { deck: 5, rail: 6 },
+    }
+    const { table } = allocateSlots('cortico/forum', { arcade: 0, deck: 1, stair: 2 }, registry)
+    expect(table).toEqual({ arcade: 6, deck: 5, stair: 7 })
+  })
+
+  it('never hands another asset\u2019s slot to a rename', () => {
+    const registry: GroupRegistry = {
+      'cortico/fragment': { ground: 0, terrace: 1 },
+      'cortico/forum': { deck: 1, rail: 6 },
+    }
+    // forum's deck collides with fragment's terrace in this corrupt registry:
+    // fail closed rather than merging two groups into slot 1.
+    expect(() => allocateSlots('cortico/forum', { deck: 0, rail: 1 }, registry)).toThrowError(
+      /already taken/,
+    )
   })
 
   it('throws on duplicate local _IDs instead of merging two groups', () => {

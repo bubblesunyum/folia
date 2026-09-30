@@ -1,12 +1,17 @@
 // Global group slots (fol-716, D-061).
 //
 // `_ID` values are per-asset small ints (`groups` in each asset's params
-// JSON), but `uGroupState` is one global array shared by every material. Once
-// two assets share a batch, the second asset's re-used 0..N would lift and
-// glow with the first's. So Blender keeps baking local ids and the pipeline
-// remaps them to town-wide slots: the manifest is the registry, each record
-// carrying its `groups` (name → slot), allocated append-only under the
-// manifest lock and never renumbered.
+// JSON), but the group-state texture is one town-wide strip shared by every
+// material. Once two assets share a batch, the second asset's re-used 0..N
+// would lift and glow with the first's. So Blender keeps baking local ids and
+// the pipeline remaps them to town-wide slots: the manifest is the registry,
+// each record carrying its `groups` (name → slot), allocated under the
+// manifest lock.
+//
+// Slots are stable, never renumbered while their name survives: existing
+// names keep theirs, so unrelated assets' committed GLBs stay valid when one
+// asset gains a group. A removed or renamed group's slot returns to the pool
+// and the next new group reuses it, so renames don't leak slots.
 
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -37,18 +42,41 @@ export interface SlotAllocation {
 }
 
 /**
- * `asset`'s slots against the persistent `registry`. Names never seen get
- * fresh slots, append-only; existing names keep theirs, so unrelated assets'
- * committed GLBs stay valid when one asset gains a group (at the cost of a
- * leaked slot on rename). Throws past MAX_GROUPS: the town outgrowing the
- * uniform array is D-032's tiny-texture path.
+ * `asset`'s slots against the persistent `registry`. Existing names keep
+ * theirs; removed names' slots return to the pool and the next new names
+ * reuse them (smallest first) before minting fresh ones, so a rename swaps
+ * its slot instead of leaking it. Throws past MAX_GROUPS: the town
+ * outgrowing the group-state texture is D-032's cue to raise it (the texture
+ * width and the shader keys follow automatically).
  */
 export function allocateSlots(
   asset: string,
   localIds: Record<string, number>,
   registry: GroupRegistry,
 ): SlotAllocation {
-  const used = new Set(Object.values(registry).flatMap((table) => Object.values(table)))
+  const ownTable = registry[asset] ?? {}
+  // Reserved by other assets: the current asset's own old table is excluded,
+  // so its freed slots are reusable rather than permanently marked used.
+  const used = new Set<number>()
+  for (const [name, table] of Object.entries(registry)) {
+    if (name === asset) continue
+    for (const slot of Object.values(table)) used.add(slot)
+  }
+  // Claim the slots this asset keeps first, so reuse and minting below can
+  // never collide with them. Fail closed on a corrupted registry instead of
+  // merging two groups into one slot.
+  for (const name of Object.keys(localIds)) {
+    const kept = ownTable[name]
+    if (kept === undefined) continue
+    if (used.has(kept))
+      throw new Error(`slot ${kept} for ${asset} group "${name}" is already taken`)
+    used.add(kept)
+  }
+  const freed = Object.entries(ownTable)
+    .filter(([name]) => !(name in localIds))
+    .map(([, slot]) => slot)
+    .filter((slot) => !used.has(slot))
+    .sort((a, b) => a - b)
   const table: GroupTable = {}
   const remap = new Map<number, number>()
   let next = 0
@@ -56,8 +84,8 @@ export function allocateSlots(
     while (used.has(next)) next += 1
     if (next >= MAX_GROUPS) {
       throw new Error(
-        `no uGroupState slot left for ${asset} (MAX_GROUPS=${MAX_GROUPS}); ` +
-          `the town outgrew the uniform array — see D-032's tiny-texture path`,
+        `no group slot left for ${asset} (MAX_GROUPS=${MAX_GROUPS}); ` +
+          `the town outgrew the group-state texture — raise MAX_GROUPS (D-032)`,
       )
     }
     used.add(next)
@@ -70,7 +98,10 @@ export function allocateSlots(
     if (remap.has(local)) {
       throw new Error(`duplicate local _ID ${local} for ${asset} groups (one is "${name}")`)
     }
-    const slot = registry[asset]?.[name] ?? fresh()
+    const kept = ownTable[name]
+    const reuse = freed.find((slot) => !used.has(slot))
+    const slot = kept ?? reuse ?? fresh()
+    if (slot !== kept) used.add(slot)
     table[name] = slot
     remap.set(local, slot)
   }

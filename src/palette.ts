@@ -29,6 +29,22 @@ export type PaletteColor = keyof typeof palette
 /** Palette values by name; accepts the module palette and editable drafts. */
 export type PaletteColors = { readonly [K in PaletteColor]: string }
 
+/**
+ * One signature glow color per neighborhood (D-024): Cortico reads mint.
+ * Wave 2 adds the remaining hoods and threads the current one through
+ * `applyLook`; until then everything reads Cortico's.
+ */
+export const neighborhoodSignature = {
+  cortico: 'mint',
+} as const satisfies Record<string, PaletteColor>
+
+/** The palette hex behind a neighborhood's signature glow; throws on an unmapped hood. */
+export function signatureColor(hood: string, pal: PaletteColors = palette): string {
+  const key = (neighborhoodSignature as Readonly<Record<string, PaletteColor>>)[hood]
+  if (key === undefined) throw new Error(`no signature color for hood "${hood}"`)
+  return pal[key]
+}
+
 /** Publishes the palette as `--<name>` custom properties, so CSS reads the same source. */
 export function applyPaletteToCss(root: HTMLElement, pal: PaletteColors = palette): void {
   for (const [name, value] of Object.entries(pal)) {

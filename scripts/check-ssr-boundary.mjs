@@ -13,15 +13,23 @@
 // LevaPanel) and is not followed; statement-level `import type` is erased at
 // build and is not followed either.
 
-import { existsSync, readFileSync, statSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const SRC = join(ROOT, 'src')
 
 /** The only bare packages the initial graph may contain. */
-const ALLOWLIST = [/^react(-dom)?(\/|$)/]
+const ALLOWLIST = [
+  /^react(-dom)?(\/|$)/,
+  // The framework runtime: every route module imports its Link/loader/meta
+  // types from here, and it ships no three.
+  /^react-router(\/|$)/,
+  // Frontmatter validation runs in the route loaders (prerender + client
+  // navigation), so the schema library is in the initial graph by design.
+  /^zod(\/|$)/,
+]
 /** Three-ecosystem patterns, for a diagnostic that names the real problem. */
 const DENYLIST = [/three/i, /^@react-three\//, /^stats-gl(\/|$)/]
 
@@ -158,10 +166,47 @@ function inString(spans, pos) {
 }
 
 /**
+ * Graph roots. Framework mode (D-003) has no index.html: the document shell
+ * is `src/root.tsx` and every route in `src/routes/` renders into it, so
+ * those are the initial graph. `src/routes.ts` is build-time config (it
+ * imports `@react-router/dev`) and is deliberately not a root. The legacy
+ * index.html path is kept while the file exists, so the checker fails
+ * usefully mid-migration instead of crashing on ENOENT.
+ */
+function entryUnits() {
+  if (existsSync(join(ROOT, 'index.html'))) return legacyEntryUnits()
+  const roots = ['src/root.tsx']
+  const routesDir = join(SRC, 'routes')
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith('.') || entry.name === '__tests__') continue
+      // Colocated unit tests import vitest and never ship; walking them
+      // would fail the gate on a bare import outside ALLOWLIST.
+      if (/[.-](test|spec)\.(ts|tsx|js|jsx)$/.test(entry.name)) continue
+      const abs = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        walk(abs)
+        continue
+      }
+      if (/\.(ts|tsx)$/.test(entry.name)) roots.push(relative(ROOT, abs))
+    }
+  }
+  if (existsSync(routesDir)) walk(routesDir)
+  const units = []
+  for (const root of roots) {
+    const file = join(ROOT, root)
+    if (!existsSync(file)) fail(`${root}: framework entry not found`)
+    units.push({ key: file, dir: dirname(file), file })
+  }
+  if (units.length === 0) fail('no framework entries found (src/root.tsx, src/routes/)')
+  return units
+}
+
+/**
  * Module scripts in index.html are the graph roots: external `src` files plus
  * inline bodies (walked as units rooted at ROOT).
  */
-function entryUnits() {
+function legacyEntryUnits() {
   const html = readFileSync(join(ROOT, 'index.html'), 'utf8')
   const units = []
   for (const open of html.matchAll(SCRIPT_OPEN)) {
@@ -275,6 +320,13 @@ while (stack.length > 0) {
   if (text === null) fail(`entry not found: ${relativePath(unit.file)}`)
   const where = (line) => `${unit.label ?? relativePath(unit.file)}:${line}`
   for (const { spec, line } of collectImports(blankComments(text))) {
+    if (spec.includes('?')) {
+      // Query-suffixed imports (`?raw`, `?url`) inline the file as a string
+      // or URL: they contribute no module to the graph, so they are neither
+      // walked nor allowlisted. (The MDX content rides `?raw` for exactly
+      // this reason — D-047.)
+      continue
+    }
     if (!spec.startsWith('.') && !spec.startsWith('/')) {
       // Bare specifier: node_modules is never walked, so the allowlist is
       // the whole decision. Exotic loaders (virtual:, ?worker) land here too.
@@ -298,7 +350,7 @@ if (violations.length > 0) {
   fail(
     'initial module graph violation:',
     ...violations,
-    'move it behind dynamic import() (see App.tsx) so it leaves the initial graph.',
+    'move it behind dynamic import() (see CanvasHost.tsx) so it leaves the initial graph.',
   )
 }
 

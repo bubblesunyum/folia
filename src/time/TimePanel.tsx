@@ -2,7 +2,7 @@ import { button, useControls } from 'leva'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { applyPaletteToCss, type PaletteColor, palette } from '../palette'
 import { clearBenchStatus, reportBenchStatus } from './benchStatus'
-import type { LookDraft, LookSource } from './look'
+import { KEYFRAMES, type LookDraft, type LookSource } from './look'
 import { postLookDraft } from './lookSave'
 
 interface TimePanelProps {
@@ -27,9 +27,24 @@ export default function TimePanel({
   initialDraft,
   onDraft,
 }: TimePanelProps) {
-  const { hours } = useControls('time of day', {
+  // Setter latch: the schema closes over the ref rather than the setter,
+  // which doesn't exist until the hook returns. Clicks only happen after
+  // mount, so the effect below has always filled it by then.
+  const setTime = useRef((_patch: { hours: number }): void => {})
+  const [{ hours }, set] = useControls('time of day', () => ({
     hours: { value: initialHours, min: 0, max: 23.99, step: 0.05 },
-  })
+    // One jump button per keyframe, generated from the dataset so a
+    // rename or addition flows through instead of going stale.
+    ...Object.fromEntries(
+      KEYFRAMES.map((keyframe) => [
+        keyframe.name,
+        button(() => setTime.current({ hours: keyframe.hours })),
+      ]),
+    ),
+  }))
+  useEffect(() => {
+    setTime.current = set
+  }, [set])
   useEffect(() => {
     onChange(hours)
   }, [hours, onChange])

@@ -11,10 +11,10 @@ import {
   type MeshDepthMaterial,
   MeshStandardMaterial,
 } from 'three'
-import { type PaletteColors, palette } from '../palette'
+import { type PaletteColors, palette, signatureColor } from '../palette'
 import type { Look } from '../time/look'
 import { composeDepthMaterial, composeMaterial, type Feature } from './composer'
-import { bakedLight, foliage, group, groupLift, sway } from './features'
+import { bakedLight, foliage, group, groupLift, reveal, revealBasic, sway } from './features'
 import { neonGlow } from './neonGlow'
 import { water } from './water'
 
@@ -22,6 +22,8 @@ export interface SharedMaterial {
   material: Material
   depth: MeshDepthMaterial
   castShadow: boolean
+  /** The composed features, so tests can pin each program's coverage. */
+  features: readonly Feature[]
 }
 
 function shared(
@@ -33,11 +35,14 @@ function shared(
     material: composeMaterial(material, features),
     depth: composeDepthMaterial(features),
     castShadow,
+    features,
   }
 }
 
-const lit = [bakedLight, group]
-const neonColor = new Color(palette.mint)
+const lit = [bakedLight, group, reveal]
+// The town-wide default signature until wave 2 threads the current hood.
+const DEFAULT_HOOD = 'cortico'
+const neonColor = new Color(signatureColor(DEFAULT_HOOD))
 
 /** Batch name → its shared material. The batch names are batchSchema's. */
 export const materials: Readonly<Record<string, SharedMaterial>> = {
@@ -52,7 +57,11 @@ export const materials: Readonly<Record<string, SharedMaterial>> = {
     [...lit, foliage, sway],
   ),
   // Neon is its own unlit program (D-038) and casts no shadow (D-035).
-  neon: shared(new MeshBasicMaterial({ color: neonColor.clone() }), [groupLift], false),
+  neon: shared(
+    new MeshBasicMaterial({ color: neonColor.clone() }),
+    [groupLift, revealBasic],
+    false,
+  ),
   neonGlow: shared(
     new MeshBasicMaterial({
       color: neonColor.clone(),
@@ -60,13 +69,13 @@ export const materials: Readonly<Record<string, SharedMaterial>> = {
       blending: AdditiveBlending,
       depthWrite: false,
     }),
-    [groupLift, neonGlow],
+    [groupLift, neonGlow, revealBasic],
     false,
   ),
   // Water's own program (D-039): still, glossy, and too flat to shade anything.
   water: shared(
     new MeshStandardMaterial({ color: palette.poolTeal, roughness: 0.06 }),
-    [groupLift, water],
+    [groupLift, water, reveal],
     false,
   ),
 }
@@ -77,7 +86,9 @@ export const derivedBatches: Readonly<Record<string, string>> = { neonGlow: 'neo
 // With bloom, the shell only softens the tube's edge; without it, it is the glow.
 const GLOW_WITH_BLOOM = 0.25
 
-group.uniforms.uGroupGlowColor.value.set(palette.mint)
+group.uniforms.uGroupGlowColor.value.set(signatureColor(DEFAULT_HOOD))
+group.uniforms.uGroupTintColor.value.set(signatureColor(DEFAULT_HOOD))
+reveal.uniforms.uRevealColor.value.set(palette.cream)
 foliage.uniforms.uNewGrowth.value.set(palette.lawn)
 
 /**
@@ -86,8 +97,10 @@ foliage.uniforms.uNewGrowth.value.set(palette.lawn)
  * (D-034): base colors, then everything the look derives from them.
  */
 export function applyLook(look: Look, bloom: boolean, pal: PaletteColors = palette): void {
-  neonColor.set(pal.mint)
-  group.uniforms.uGroupGlowColor.value.set(pal.mint)
+  neonColor.set(signatureColor(DEFAULT_HOOD, pal))
+  group.uniforms.uGroupGlowColor.value.set(signatureColor(DEFAULT_HOOD, pal))
+  group.uniforms.uGroupTintColor.value.set(signatureColor(DEFAULT_HOOD, pal))
+  reveal.uniforms.uRevealColor.value.set(pal.cream)
   foliage.uniforms.uNewGrowth.value.set(pal.lawn)
   const bases: ReadonlyArray<readonly [string, string]> = [
     ['cream', pal.cream],

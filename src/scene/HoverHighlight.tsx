@@ -1,14 +1,15 @@
 // Hover highlight on the town-wide batches (D-032, fol-xo6): thin rig over
 // `picking/hover`. Pointer movement raycasts the registry's BatchedMeshes,
-// the hit vertex's `groupId` is already the global `uGroupState` slot (pack
+// the hit vertex's `groupId` is already the global group-state slot (pack
 // remapped it), and a per-slot spring eases lift+glow toward the hovered
-// target. Uniforms are written only while a slot is still moving, so the
-// demand loop settles once the hover rests (D-056).
+// target. Slots are written through `materials/groupState` (one texel upload
+// per write) only while still moving, so the demand loop settles once the
+// hover rests (D-056).
 
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
-import { type BatchedMesh, Raycaster, Vector2, Vector3, type Vector4 } from 'three'
-import { group } from '../materials/features'
+import { type BatchedMesh, Raycaster, Vector2, Vector3 } from 'three'
+import { clearGroupSlot, setGroupSlot } from '../materials/groupState'
 import { glowForNight, HOVER_LIFT, slotFromGroupId, springTowards } from '../picking/hover'
 import { clearProjector, setCanvasHook, setProjector } from '../testHooks'
 import { useLook } from '../time/lookContext'
@@ -86,8 +87,7 @@ export function HoverHighlight() {
       canvas.removeEventListener('pointerleave', onPointerLeave)
       clearProjector(window)
       // Leave no lifted groups behind on unmount.
-      const states = group.uniforms.uGroupState.value as Vector4[]
-      for (const slot of rig.current.springs.keys()) states[slot]?.set(0, 0, 0, 0)
+      for (const slot of rig.current.springs.keys()) clearGroupSlot(slot)
       rig.current.springs.clear()
       rig.current.hovered = null
     }
@@ -118,7 +118,6 @@ export function HoverHighlight() {
       }
     }
     const glowTarget = glowForNight(night)
-    const states = group.uniforms.uGroupState.value as Vector4[]
     const targets = new Set(r.springs.keys())
     if (r.hovered !== null) targets.add(r.hovered)
     for (const slot of targets) {
@@ -127,13 +126,13 @@ export function HoverHighlight() {
       const lift = springTowards(current.lift, on ? HOVER_LIFT : 0, dt)
       const glow = springTowards(current.glow, on ? glowTarget : 0, dt)
       if (!on && lift === 0 && glow === 0) {
-        if (r.springs.delete(slot)) states[slot]?.set(0, 0, 0, 0)
+        if (r.springs.delete(slot)) clearGroupSlot(slot)
         continue
       }
       // At rest the values already equal the target: no write, no frame.
       if (lift === current.lift && glow === current.glow && r.springs.has(slot)) continue
       r.springs.set(slot, { lift, glow })
-      states[slot]?.set(lift, glow, 0, 0)
+      setGroupSlot(slot, lift, glow)
     }
     const hovered = r.hovered === null ? null : (r.springs.get(r.hovered) ?? { lift: 0, glow: 0 })
     const settled =

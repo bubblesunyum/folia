@@ -3,6 +3,13 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { type RiseCountHost, recordRise, setCanvasHook } from '../testHooks'
 import {
+  isDismissKey,
+  isPanelOpen,
+  readReducedMotion,
+  requestPanelClose,
+  resolveEscape,
+} from './intent'
+import {
   gestureToZoomDelta,
   KEY_STEP,
   keyToZoomDelta,
@@ -296,11 +303,29 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
-      if (isEditableTarget(event.target)) return
-      if (event.key === 'Escape') {
-        signalRise()
+      // One keyboard-intent layer (fol-l1r.10): Escape resolves through the
+      // pure intent module — focused input, then panel close, then rise —
+      // so the rig holds no branching of its own.
+      if (isDismissKey(event.key)) {
+        const resolved = resolveEscape({
+          panelOpen: isPanelOpen(),
+          focusInEditable: isEditableTarget(event.target),
+          // Routing owns place depth in Phase 2; until then there is always
+          // a level above, so Escape rises (today's behaviour).
+          canRise: true,
+          reducedMotion: readReducedMotion(),
+        })
+        if (resolved.action === 'close-panel') {
+          requestPanelClose(resolved.reducedMotion)
+          return
+        }
+        if (resolved.action === 'rise-level') {
+          signalRise()
+          return
+        }
         return
       }
+      if (isEditableTarget(event.target)) return
       const delta = keyToZoomDelta(event.key)
       if (delta !== null) zoomStepped(delta)
     }

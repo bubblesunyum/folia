@@ -18,5 +18,12 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "e2e", "assets/pipeline", "vite.config.ts", "playwright.config.ts"]
+  "include": [
+    "src",
+    "e2e",
+    "assets/pipeline",
+    "vite.config.ts",
+    "react-router.config.ts",
+    "playwright.config.ts"
+  ]
 }

@@ -2,9 +2,11 @@
 // attributes the Blender pipeline bakes (D-031, D-032), renamed at load by
 // assets/batches.ts, and exposes its knobs as shared uniforms.
 
-import { Color, Vector4 } from 'three'
+import { Color } from 'three'
 import { MAX_GROUPS } from '../groupSlots'
 import type { Feature } from './composer'
+import { groupStateTexture } from './groupState'
+import { REVEAL_BAND_M, REVEAL_GLOSS, REVEAL_PARKED_M } from './revealModel'
 
 /**
  * Baked AO and night spill (D-031). `_AO` stands in for three's aoMap: it
@@ -52,35 +54,45 @@ export const bakedLight = {
 } satisfies Feature
 
 /**
- * Per-group state (D-032): `uGroupState[_ID]` is (lift in metres, glow, 0, 0).
- * A hover is one uniform write. Lift moves the shadow too, so it's also in
- * the depth material.
+ * Per-group state (D-032's tiny-texture path): one RGBA float texel per slot
+ * (lift in metres, glow, tint amount, reserved), written via
+ * `materials/groupState.ts`. A hover is one texel write plus one upload, and
+ * every material program samples the same texture object. Lift moves the
+ * shadow too, so it's also in the depth material.
  */
 const groupVertex = {
   header: /* glsl */ `
     attribute float groupId;
-    uniform vec4 uGroupState[${MAX_GROUPS}];
-    varying float vGroupGlow;`,
+    uniform sampler2D uGroupState;
+    varying float vGroupGlow;
+    varying float vGroupTint;`,
   chunks: {
     begin_vertex: {
       after: /* glsl */ `
-        vec4 groupState = uGroupState[int(groupId + 0.5)];
+        vec4 groupState = texture2D(uGroupState, vec2((groupId + 0.5) / float(${MAX_GROUPS}), 0.5));
         transformed.y += groupState.x;
-        vGroupGlow = groupState.y;`,
+        vGroupGlow = groupState.y;
+        vGroupTint = groupState.z;`,
     },
   },
 }
 
 export const group = {
-  key: 'group',
+  key: `group-tex-${MAX_GROUPS}`,
   uniforms: {
-    uGroupState: { value: Array.from({ length: MAX_GROUPS }, () => new Vector4()) },
+    uGroupState: { value: groupStateTexture },
     uGroupGlowColor: { value: new Color() },
+    uGroupTintColor: { value: new Color() },
   },
   vertex: groupVertex,
   fragment: {
-    header: 'uniform vec3 uGroupGlowColor;\nvarying float vGroupGlow;',
+    header:
+      'uniform vec3 uGroupGlowColor;\nuniform vec3 uGroupTintColor;\nvarying float vGroupGlow;\nvarying float vGroupTint;',
     chunks: {
+      color_fragment: {
+        after:
+          'diffuseColor.rgb = mix(diffuseColor.rgb, uGroupTintColor, clamp(vGroupTint, 0.0, 1.0));',
+      },
       emissivemap_fragment: { after: 'totalEmissiveRadiance += uGroupGlowColor * vGroupGlow;' },
     },
   },
@@ -178,10 +190,77 @@ export const foliage = {
 
 /** The group lift alone, for programs with no emissive term (neon). */
 export const groupLift = {
-  key: 'group-lift',
+  key: `group-lift-tex-${MAX_GROUPS}`,
   uniforms: { uGroupState: group.uniforms.uGroupState },
   vertex: groupVertex,
   depthVertex: groupVertex,
+} satisfies Feature
+
+/**
+ * The loading reveal (D-018, D-044): the town rises through the opaque cream
+ * ocean, which hides what's below by depth, while a thin glossy cream band
+ * just above `revealHeight` reads as liquid flowing off — a color and
+ * roughness blend, never a `discard`. Parked below the town (see
+ * `revealModel.ts`) the mix is exactly zero. It moves no vertices, so it has
+ * no depth stage: the shadow already agrees with the mesh.
+ */
+const revealUniforms = {
+  uRevealHeight: { value: REVEAL_PARKED_M },
+  uRevealColor: { value: new Color() },
+  uRevealBand: { value: REVEAL_BAND_M },
+  uRevealGloss: { value: REVEAL_GLOSS },
+}
+
+const revealVertex = {
+  header: 'varying float vRevealY;',
+  chunks: {
+    // World-baked batches carry world height in local Y, so the band needs no
+    // batch/instance path and reads identically in every program.
+    begin_vertex: { after: 'vRevealY = position.y;' },
+  },
+}
+
+const revealHeader = /* glsl */ `
+  uniform float uRevealHeight;
+  uniform vec3 uRevealColor;
+  uniform float uRevealBand;
+  uniform float uRevealGloss;
+  varying float vRevealY;
+  float revealMix(float y) {
+    return 1.0 - smoothstep(uRevealHeight, uRevealHeight + uRevealBand, y);
+  }`
+
+const revealColorChunk = {
+  color_fragment: {
+    after: 'diffuseColor.rgb = mix(diffuseColor.rgb, uRevealColor, revealMix(vRevealY));',
+  },
+} as const
+
+export const reveal = {
+  key: 'reveal',
+  uniforms: revealUniforms,
+  vertex: revealVertex,
+  fragment: {
+    header: revealHeader,
+    chunks: {
+      ...revealColorChunk,
+      roughnessmap_fragment: {
+        after: 'roughnessFactor = mix(roughnessFactor, uRevealGloss, revealMix(vRevealY));',
+      },
+    },
+  },
+} satisfies Feature
+
+/** The reveal's color band alone, for programs with no roughness term (neon).
+ * Shares `reveal`'s uniform objects, so one `applyLook` write drives both. */
+export const revealBasic = {
+  key: 'reveal-basic',
+  uniforms: revealUniforms,
+  vertex: revealVertex,
+  fragment: {
+    header: revealHeader,
+    chunks: { ...revealColorChunk },
+  },
 } satisfies Feature
 
 /**

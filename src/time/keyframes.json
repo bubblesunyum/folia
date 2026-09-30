@@ -32,6 +32,12 @@
           "threshold": 1.1,
           "smoothing": 0.2
         },
+        "fog": {
+          "color": "lavender",
+          "density": 0.004,
+          "heightFalloff": 0.06,
+          "baseHeight": 2
+        },
         "grade": {
           "lift": [0, 0, 0.01],
           "gamma": [1, 1, 1],
@@ -75,6 +81,12 @@
           "threshold": 1.2,
           "smoothing": 0.2
         },
+        "fog": {
+          "color": "cream",
+          "density": 0.002,
+          "heightFalloff": 0.04,
+          "baseHeight": 4
+        },
         "grade": {
           "lift": [0, 0, 0],
           "gamma": [1, 1, 1],
@@ -117,6 +129,12 @@
           "threshold": 1,
           "smoothing": 0.2
         },
+        "fog": {
+          "color": "skyDusk",
+          "density": 0.0032,
+          "heightFalloff": 0.05,
+          "baseHeight": 2.5
+        },
         "grade": {
           "lift": [0, 0, 0.01],
           "gamma": [1, 1, 1],
@@ -158,6 +176,12 @@
           "intensity": 0.9,
           "threshold": 0.6,
           "smoothing": 0.15
+        },
+        "fog": {
+          "color": "skyNightHorizon",
+          "density": 0.0045,
+          "heightFalloff": 0.07,
+          "baseHeight": 1.5
         },
         "grade": {
           "lift": [0, 0.005, 0.02],

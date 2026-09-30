@@ -26,6 +26,19 @@ interface LookShape<Color> {
   /** Neon emissive multiplier (D-038). */
   emissive: number
   bloom: { intensity: number; threshold: number; smoothing: number }
+  fog: {
+    color: Color
+    /** Exponential distance density (three's FogExp2). */
+    density: number
+    /**
+     * Height falloff rate; larger hugs the ground. Interpolated and tested,
+     * but with no consumer yet: the height half needs a composer injection
+     * (D-046) that doesn't exist, so distance fog carries the look for now.
+     */
+    heightFalloff: number
+    /** Height where the fog sits thickest. Same note as heightFalloff. */
+    baseHeight: number
+  }
   grade: {
     lift: RGB
     gamma: RGB
@@ -39,6 +52,17 @@ interface LookShape<Color> {
 
 export type Look = LookShape<RGB>
 export type LookSource = LookShape<PaletteColor>
+
+/** Keyframe sources that predate fog (panel fixtures, old files) omit it. */
+type LookSourceInput = LookSource & { fog?: LookSource['fog'] }
+
+/** Neutral stand-in for a missing fog: thin, high, cream. Real files carry fog. */
+const DEFAULT_FOG: LookSource['fog'] = {
+  color: 'cream',
+  density: 0.002,
+  heightFalloff: 0.04,
+  baseHeight: 4,
+}
 
 export interface Keyframe {
   name: string
@@ -59,7 +83,8 @@ export function linear(name: PaletteColor, pal: PaletteColors = palette): RGB {
   return [channel(0), channel(1), channel(2)]
 }
 
-function resolve(src: LookSource, pal: PaletteColors = palette): Look {
+function resolve(src: LookSourceInput, pal: PaletteColors = palette): Look {
+  const fog = src.fog ?? DEFAULT_FOG
   return {
     ...src,
     sky: {
@@ -71,6 +96,7 @@ function resolve(src: LookSource, pal: PaletteColors = palette): Look {
     },
     sun: { ...src.sun, color: linear(src.sun.color, pal) },
     moon: { ...src.moon, color: linear(src.moon.color, pal) },
+    fog: { ...fog, color: linear(fog.color, pal) },
     grade: {
       ...src.grade,
       shadowTint: linear(src.grade.shadowTint, pal),
@@ -99,7 +125,12 @@ export function loadKeyframes(
   pal: PaletteColors = palette,
 ): Keyframe[] {
   return (
-    json.keyframes as { name: string; hours: number; provisional?: boolean; look: LookSource }[]
+    json.keyframes as {
+      name: string
+      hours: number
+      provisional?: boolean
+      look: LookSourceInput
+    }[]
   )
     .map((k) => ({ ...k, look: resolve(k.look, pal) }))
     .sort((a, b) => a.hours - b.hours)

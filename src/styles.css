@@ -86,8 +86,46 @@ body,
   outline-offset: 2px;
 }
 
-/* The sky-first shell (spike 6): gradient first paint while the canvas chunk
-   streams, and the no-JS / crawler content for `/`. */
+/* The sky-first shell (spike 6, restyled for the router handoff): gradient
+   first paint while the canvas chunk streams, and the no-JS / crawler
+   content for a route. The stops match the canvas first frame — golden-hour
+   sky into the dark-green ground hemisphere (D-040) — so the canvas
+   crossfades in instead of cutting from light to dark. */
+.canvas-host {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* The behind-canvas backdrop: gradient only, aria-hidden. It stays mounted
+   through the first frame and unmounts after the canvas crossfades in. */
+.shell-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+/* The canvas fades in over the shell once it paints its first frame. */
+.canvas-fade {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  opacity: 0;
+}
+
+.canvas-fade.is-ready {
+  opacity: 1;
+  /* Matches CROSSFADE_MS in shell/CanvasHost.tsx; keep the two in sync. */
+  transition: opacity 700ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-fade.is-ready {
+    transition: none;
+  }
+}
+
 .sky-shell {
   position: fixed;
   inset: 0;
@@ -102,8 +140,8 @@ body,
   background: linear-gradient(
     to bottom,
     var(--skyZenith, #8397d4),
-    var(--skyDusk, #f3c79b) 62%,
-    var(--cream, #f4eee1)
+    var(--skyDusk, #f3c79b) 45%,
+    var(--forest, #001e17)
   );
 }
 
@@ -118,12 +156,54 @@ body,
   font-size: 1.5rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--forest, #001e17);
+  color: var(--cream, #f4eee1);
 }
 
 .sky-shell-content p {
   margin: 8px 0 0;
   font-size: 1rem;
-  color: var(--forest, #001e17);
+  color: var(--cream, #f4eee1);
   opacity: 0.75;
+}
+
+/* Route UI lives in a stacking position above the canvas without disturbing
+   its layout until wave 2 styles the panel. Solid sheet, no backdrop-filter (D-050). */
+.route-content {
+  position: fixed;
+  left: max(16px, 4vw);
+  bottom: max(16px, 5vh);
+  z-index: 2;
+  max-width: min(560px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow: auto;
+  padding: 16px 20px;
+  color: var(--forest, #001e17);
+  background: var(--cream, #f4eee1);
+  border-radius: 12px;
+}
+
+.route-content h1,
+.route-content h2 {
+  margin: 16px 0 8px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+}
+
+.route-content h1:first-child,
+.route-content h2:first-child {
+  margin-top: 0;
+}
+
+.route-content p {
+  margin: 8px 0 0;
+}
+
+.route-content ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.route-content a {
+  color: inherit;
 }
