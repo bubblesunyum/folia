@@ -21,25 +21,64 @@ const _right = new Vector3()
 const _up = new Vector3()
 const _delta = new Vector3()
 
+/** Unsnapped base transform a snap is derived from. The rig's target base is
+ *  always the scene origin; snapping is its only other writer. */
+export interface ShadowSnapBase {
+  position: Vector3
+  target: Vector3
+}
+
+/**
+ * Pure texel-snap step: the lateral shift that moves `position`'s projection
+ * on the `right`/`up` axes to whole texels. Same inputs give bitwise the same
+ * delta, which is what makes the snap idempotent.
+ */
+export function computeSnapDelta(
+  position: Vector3,
+  right: Vector3,
+  up: Vector3,
+  texel: number,
+  out: Vector3,
+): Vector3 {
+  out.set(0, 0, 0)
+  for (const axis of [right, up]) {
+    const along = position.dot(axis)
+    const snapped = Math.round(along / texel) * texel
+    out.addScaledVector(axis, snapped - along)
+  }
+  return out
+}
+
 /**
  * Snaps the light and its target so the ortho frustum stays texel-aligned:
  * each one's projection on the shadow camera's right/up axes moves to a whole
- * texel. Direction is preserved — both move by the same delta. With a static
- * light-fitted frustum this is a no-op frame to frame; it pays off once the
- * frustum tracks the view, or when the sun moves under `?time=`.
+ * texel. Direction is preserved — both move by the same delta.
+ *
+ * The snap is always derived from `base`, never from the light's current
+ * (already-snapped) transform: positions reset to the base first, then the
+ * shadow camera re-syncs to that base before the axes are read. So repeated
+ * calls with the same base are a fixed point, and a sun sweep A→B→A lands
+ * back on A instead of walking the target (the old cumulative `add` drifted,
+ * because R3F re-derives `position` from the sun direction while the target
+ * kept every past delta).
  */
-export function snapShadowToTexels(light: DirectionalLight, extent: number): void {
+export function snapShadowToTexels(
+  light: DirectionalLight,
+  extent: number,
+  base: ShadowSnapBase,
+): void {
+  light.position.copy(base.position)
+  light.target.position.copy(base.target)
+  light.updateMatrixWorld()
+  light.target.updateMatrixWorld()
+  // The renderer's own sync (runs again at shadow render; cheap matrix math
+  // here buys axes from the base instead of last frame's snapped state).
+  light.shadow.updateMatrices(light)
   const texel = texelSize(extent, light.shadow.mapSize.x)
   const camera = light.shadow.camera
-  camera.updateMatrixWorld()
   _right.setFromMatrixColumn(camera.matrixWorld, 0)
   _up.setFromMatrixColumn(camera.matrixWorld, 1)
-  _delta.set(0, 0, 0)
-  for (const axis of [_right, _up]) {
-    const along = light.position.dot(axis)
-    const snapped = Math.round(along / texel) * texel
-    _delta.addScaledVector(axis, snapped - along)
-  }
+  computeSnapDelta(light.position, _right, _up, texel, _delta)
   light.position.add(_delta)
   light.target.position.add(_delta)
   light.target.updateMatrixWorld()

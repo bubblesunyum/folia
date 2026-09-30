@@ -60,6 +60,24 @@ export interface LookRequest {
   data: unknown
 }
 
+/** Shape-checks the write-back origin. The dev panel's `fetch` to a relative
+ * URL always carries the dev server's own origin, while a foreign page (or a
+ * headerless client like curl) must never reach `writeLookFile`. Fail closed:
+ * anything but an http(s) origin whose host matches the `Host` header —
+ * including missing or multi-valued headers — returns false. */
+export function isAllowedLookOrigin(origin: unknown, host: unknown): boolean {
+  if (typeof origin !== 'string' || typeof host !== 'string') return false
+  if (origin === '' || host === '') return false
+  let url: URL
+  try {
+    url = new URL(origin)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false
+  return url.host.toLowerCase() === host.toLowerCase()
+}
+
 /** Shape-checks a POST body; the file is a fixed name, never a path. */
 export function parseLookRequest(body: unknown): LookRequest {
   const record = (body ?? {}) as Record<string, unknown>

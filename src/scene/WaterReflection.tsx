@@ -4,6 +4,7 @@ import {
   type BatchedMesh,
   Box3,
   Color,
+  Frustum,
   HalfFloatType,
   type Material,
   Matrix4,
@@ -15,14 +16,19 @@ import {
   Vector4,
   WebGLRenderTarget,
 } from 'three'
+import { renderConfig } from '../debug'
+import { materials } from '../materials/shared'
 import { water } from '../materials/water'
 import { createStreakBlur } from '../renderer/streakBlur'
+import { useLook } from '../time/lookContext'
 import { useTownBatches } from './TownBatches'
+import {
+  classifyWaterBatch,
+  NIGHT_REFLECTION_CUTOFF,
+  pondTouchesFrustum,
+  shouldSkipReflection,
+} from './waterReflectionSkip'
 
-/** Batches the mirrored pass draws lit; everything else opaque draws black, to occlude. */
-const EMISSIVE = new Set(['neon'])
-/** Batches left out of the mirrored pass entirely. */
-const SKIPPED = new Set(['water', 'neonGlow'])
 const BLACK = new Color(0, 0, 0)
 /** Keeps the oblique near plane just under the water, so the pool's own edge doesn't clip. */
 const CLIP_BIAS = 0.003
@@ -36,10 +42,16 @@ const BIAS = new Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0
  * blurred into vertical streaks. The water program reads it through
  * `uReflectionMatrix`. Runs
  * inside the frame, before the composer, so it costs nothing while idle (D-056).
+ *
+ * The pass sits frames out (fol-4zo): `?reflection=off`, `look.night` near
+ * zero, no water batch in the registry, or every pond off-frustum. Skipped
+ * frames do no GL work and ask for no invalidate, and the water falls back to
+ * env and Fresnel via `uReflectionStrength` 0.
  */
 export function WaterReflection() {
   const gl = useThree((state) => state.gl)
   const { meshes } = useTownBatches()
+  const night = useLook().look.night
   const pass = useMemo(() => {
     return {
       target: new WebGLRenderTarget(1, 1, { type: HalfFloatType }),
@@ -50,6 +62,9 @@ export function WaterReflection() {
       size: new Vector2(),
       clearColor: new Color(),
       box: new Box3(),
+      world: new Box3(),
+      frustum: new Frustum(),
+      viewProj: new Matrix4(),
       plane: new Plane(),
       normal: new Vector3(0, 1, 0),
       point: new Vector3(),
@@ -64,9 +79,26 @@ export function WaterReflection() {
     }
   }, [])
 
+  // The mirrored pass's roles by material identity, never by batch name: a
+  // renamed batch, a second water batch on the same shared material, or
+  // batches nested in groups all land by what they draw.
+  const roles = useMemo(
+    () => ({
+      waterMaterial: materials.water?.material ?? null,
+      emissiveMaterials: new Set<Material>(materials.neon ? [materials.neon.material] : []),
+      hiddenMaterials: new Set<Material>(
+        [materials.water?.material, materials.neonGlow?.material].filter(
+          (m): m is Material => m != null,
+        ),
+      ),
+    }),
+    [],
+  )
+
   useEffect(() => {
     water.uniforms.uReflection.value = pass.streaks.texture
-    water.uniforms.uReflectionStrength.value = 1
+    // 0 until a mirrored draw lands: every skip path leaves env + Fresnel only.
+    water.uniforms.uReflectionStrength.value = 0
     return () => {
       water.uniforms.uReflection.value = null
       water.uniforms.uReflectionStrength.value = 0
@@ -78,10 +110,48 @@ export function WaterReflection() {
   }, [pass])
 
   useFrame(({ camera, scene }) => {
-    // The town-wide batches, straight from the registry that owns them.
-    const pool = meshes.get('water')
-    if (!pool) return
+    // Cheap gates first: no discovery, no bounds, no GL when the pass is
+    // off by flag or by night. The frustum/discovery work below only runs
+    // when a mirrored draw is actually possible.
+    if (!renderConfig.reflection || !(night > NIGHT_REFLECTION_CUTOFF)) {
+      water.uniforms.uReflectionStrength.value = 0
+      return
+    }
     const p = pass
+
+    // Pass one: classify the town-wide batches in place (no arrays, no
+    // clones) and union every water batch's world bounds into the scratch
+    // box. Unknown bounds mirror nothing: fail closed into the skip below.
+    p.box.makeEmpty()
+    let pools = 0
+    for (const batch of meshes.values()) {
+      if (classifyWaterBatch(batch.material, roles) !== 'pool') continue
+      if (!batch.boundingBox) batch.computeBoundingBox()
+      const local = batch.boundingBox
+      if (!local) continue
+      pools += 1
+      p.world.copy(local).applyMatrix4(batch.matrixWorld)
+      p.box.union(p.world)
+    }
+
+    p.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    p.frustum.setFromProjectionMatrix(p.viewProj)
+    // Empty bounds read as off-frustum; the predicate already skips those,
+    // and the explicit check narrows for the mirror below.
+    const inFrustum = pools > 0 && pondTouchesFrustum(p.frustum, p.box)
+    if (
+      pools === 0 ||
+      shouldSkipReflection({
+        enabled: renderConfig.reflection,
+        night,
+        hasWater: pools > 0,
+        pondInFrustum: inFrustum,
+      })
+    ) {
+      water.uniforms.uReflectionStrength.value = 0
+      return
+    }
+    const bounds = p.box
 
     // Quarter the pixels of the drawing buffer: half each side.
     gl.getDrawingBufferSize(p.size)
@@ -92,15 +162,16 @@ export function WaterReflection() {
       p.streaks.setSize(width, height)
     }
 
-    // The pool is flat; its plane is the top of its bounds.
-    if (!pool.boundingBox) pool.computeBoundingBox()
-    p.box.copy(pool.boundingBox as Box3).applyMatrix4(pool.matrixWorld)
-    p.point.set(0, p.box.max.y, 0)
+    // The pool is flat; its plane is the top of the ponds' bounds.
+    p.point.set(0, bounds.max.y, 0)
     p.plane.setFromNormalAndCoplanarPoint(p.normal, p.point)
 
     // Mirror the camera's position, forward point and up in the plane.
     camera.getWorldPosition(p.eye)
-    if (p.plane.distanceToPoint(p.eye) <= 0) return
+    if (p.plane.distanceToPoint(p.eye) <= 0) {
+      water.uniforms.uReflectionStrength.value = 0
+      return
+    }
     p.rotation.extractRotation(camera.matrixWorld)
     p.look.set(0, 0, -1).applyMatrix4(p.rotation).add(p.eye)
     const mirrorInPlace = (v: Vector3) => v.sub(p.point).reflect(p.normal).add(p.point)
@@ -134,15 +205,26 @@ export function WaterReflection() {
     e[14] = p.clip.w
 
     // Draw: neon lit, the rest black, no sky, no shadow-map refresh.
+    // Emissive batches are deliberately untouched here: they draw with
+    // their own material so the neon stays lit in the mirror.
     const background = scene.background
     const autoShadows = gl.shadowMap.autoUpdate
     const clearAlpha = gl.getClearAlpha()
     gl.getClearColor(p.clearColor)
-    for (const batch of meshes.values()) {
-      if (EMISSIVE.has(batch.name)) continue
+    const hide = (batch: BatchedMesh) => {
       p.swapped.set(batch, { material: batch.material, visible: batch.visible })
-      if (SKIPPED.has(batch.name)) batch.visible = false
-      else batch.material = p.occluder
+      batch.visible = false
+    }
+    // Pass two, draw path only: swap materials by role, re-classifying in
+    // place rather than reusing arrays. Emissive batches stay untouched.
+    for (const batch of meshes.values()) {
+      const role = classifyWaterBatch(batch.material, roles)
+      if (role === 'emissive') continue
+      if (role === 'pool' || role === 'hidden') hide(batch)
+      else {
+        p.swapped.set(batch, { material: batch.material, visible: batch.visible })
+        batch.material = p.occluder
+      }
     }
     scene.background = null
     gl.shadowMap.autoUpdate = false
@@ -160,6 +242,7 @@ export function WaterReflection() {
       batch.visible = was.visible
     }
     p.swapped.clear()
+    water.uniforms.uReflectionStrength.value = 1
   })
 
   return null

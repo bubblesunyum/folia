@@ -5,6 +5,7 @@
 
 import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
@@ -21,6 +22,57 @@ export interface AssetEvent {
   hash: string
   /** `Date.now()` when the save was seen, for the save-to-pixels measurement. */
   savedAt: number
+}
+
+/** Reads the full request body as text. */
+function readLookBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = ''
+    req.on('data', (chunk: unknown) => {
+      body += chunk
+    })
+    req.on('end', () => resolve(body))
+    req.on('error', reject)
+  })
+}
+
+function writeLookJson(res: ServerResponse, status: number, payload: unknown): void {
+  res.statusCode = status
+  res.setHeader('content-type', 'application/json')
+  res.end(JSON.stringify(payload))
+}
+
+/**
+ * The look-dev write-back handler (fol-qbb, D-034): the panel POSTs its
+ * working copy here; the files are fixed names, never client-controlled
+ * paths. Fail closed: only same-origin POSTs (Origin host === Host header)
+ * reach `writeLookFile` — a missing or foreign Origin gets 403 and writes
+ * nothing. Non-POSTs pass through to the rest of the middleware chain.
+ */
+export function createLookMiddleware(): (
+  req: IncomingMessage,
+  res: ServerResponse,
+  next: () => void,
+) => void {
+  return (req, res, next) => {
+    if (req.method !== 'POST') return next()
+    void (async () => {
+      try {
+        const { isAllowedLookOrigin, parseLookRequest, writeLookFile } = await import(
+          './lookback.ts'
+        )
+        if (!isAllowedLookOrigin(req.headers.origin, req.headers.host)) {
+          writeLookJson(res, 403, { error: 'cross-origin look writes are forbidden' })
+          return
+        }
+        const { file, data } = parseLookRequest(JSON.parse(await readLookBody(req)))
+        await writeLookFile(file, data)
+        writeLookJson(res, 200, { ok: true })
+      } catch (error) {
+        writeLookJson(res, 400, { error: (error as Error).message })
+      }
+    })()
+  }
 }
 
 export function foliaAssets(): Plugin {
@@ -56,28 +108,7 @@ export function foliaAssets(): Plugin {
       // The look-dev write-back (fol-qbb, D-034): the panel POSTs its working
       // copy here; the files are fixed names, never client-controlled paths.
       // Imported at runtime like the builder below, for the same reason.
-      server.middlewares.use('/__folia/look', (req, res, next) => {
-        if (req.method !== 'POST') return next()
-        let body = ''
-        req.on('data', (chunk: unknown) => {
-          body += chunk
-        })
-        req.on('end', () => {
-          void (async () => {
-            try {
-              const { parseLookRequest, writeLookFile } = await import('./lookback.ts')
-              const { file, data } = parseLookRequest(JSON.parse(body))
-              await writeLookFile(file, data)
-              res.setHeader('content-type', 'application/json')
-              res.end('{"ok":true}')
-            } catch (error) {
-              res.statusCode = 400
-              res.setHeader('content-type', 'application/json')
-              res.end(JSON.stringify({ error: (error as Error).message }))
-            }
-          })()
-        })
-      })
+      server.middlewares.use('/__folia/look', createLookMiddleware())
       // Imported at runtime, not bundled into the config: otherwise every edit
       // to the pipeline or the batch schema would restart the dev server. Only
       // the source listing comes from here; builds run in a fresh process, so

@@ -186,10 +186,13 @@ export const groupLift = {
 
 /**
  * Sway (spike 5, D-041): a procedural breeze over foliage, driven by `Sway`'s
- * clock. No baked weights: the phase varies with world position so clumps
- * flutter rather than sliding rigidly. It moves the shadow too, so it's also
- * in the depth material — freezing shadows while sway runs detaches them
- * (D-041's static fallback).
+ * clock. The phase rides on the batch/instance-space anchor — the vertex
+ * carried through the batch then instance matrices — so instances sharing one
+ * geometry never sway in lockstep; under today's identity batching the anchor
+ * is `position`, exactly the old phase. Amplitude is height-weighted on the
+ * geometry-local Y (see `swayModel.ts`): trunks hold still, tops take the full
+ * breeze. It moves the shadow too, so it's also in the depth material —
+ * freezing shadows while sway runs detaches them (D-041's static fallback).
  */
 const swayVertex = {
   header: /* glsl */ `
@@ -198,9 +201,17 @@ const swayVertex = {
   chunks: {
     begin_vertex: {
       after: /* glsl */ `
-        float swayPhase = uSwayTime * 1.6 + position.x * 0.35 + position.z * 0.45;
-        transformed.x += sin(swayPhase) * uSwayStrength;
-        transformed.z += cos(swayPhase * 0.83) * uSwayStrength * 0.6;`,
+        vec3 swayAnchor = position;
+        #ifdef USE_BATCHING
+          swayAnchor = (batchingMatrix * vec4(swayAnchor, 1.0)).xyz;
+        #endif
+        #ifdef USE_INSTANCING
+          swayAnchor = (instanceMatrix * vec4(swayAnchor, 1.0)).xyz;
+        #endif
+        float swayWeight = smoothstep(0.5, 2.5, position.y);
+        float swayPhase = uSwayTime * 1.6 + swayAnchor.x * 0.35 + swayAnchor.z * 0.45;
+        transformed.x += sin(swayPhase) * uSwayStrength * swayWeight;
+        transformed.z += cos(swayPhase * 0.83) * uSwayStrength * 0.6 * swayWeight;`,
     },
   },
 }

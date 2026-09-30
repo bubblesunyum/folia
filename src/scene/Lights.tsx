@@ -1,12 +1,17 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
-import type { DirectionalLight } from 'three'
+import { type DirectionalLight, Vector3 } from 'three'
 import { renderConfig } from '../debug'
 import { SHADOW_FITS } from '../perf/renderConfig'
 import { useLook } from '../time/lookContext'
 import { quantizeExtent, SHADOW_MAP_SIZE, snapShadowToTexels } from './shadowFit'
 
 const DISTANCE = 40
+
+// Unsnapped base the snap derives from each frame: the sun direction at full
+// distance, aim at the origin. Rebuilt per frame so R3F prop writes and the
+// snap can never observe each other's deltas (fol-jc9).
+const _snapBase = { position: new Vector3(), target: new Vector3() }
 
 /**
  * The sun and the moon, both always in the scene so the light count (and every
@@ -38,7 +43,6 @@ export function Lights() {
   }, [scene])
 
   // R3F sets the ortho bounds from props but doesn't re-derive the projection.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the fit is fixed per page load
   useEffect(() => {
     const light = sunRef.current
     if (!light) return
@@ -57,11 +61,18 @@ export function Lights() {
   }, [gl, invalidate, look])
 
   // Texel-snapped every rendered frame, so a moving sun or a tracking frustum
-  // never shimmers; static otherwise, by construction.
+  // never shimmers; static otherwise, by construction. Snaps from the
+  // unsnapped base each frame, so the target can't walk across sun changes.
   useFrame(() => {
     const light = sunRef.current
     if (!light) return
-    snapShadowToTexels(light, extent)
+    _snapBase.position.set(
+      sun.direction[0] * DISTANCE,
+      sun.direction[1] * DISTANCE,
+      sun.direction[2] * DISTANCE,
+    )
+    _snapBase.target.set(0, 0, 0)
+    snapShadowToTexels(light, extent, _snapBase)
   })
 
   return (

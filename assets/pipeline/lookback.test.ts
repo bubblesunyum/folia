@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { parseLookRequest, renderKeyframesJson, renderPaletteTs, writeLookFile } from './lookback'
+import {
+  isAllowedLookOrigin,
+  parseLookRequest,
+  renderKeyframesJson,
+  renderPaletteTs,
+  writeLookFile,
+} from './lookback'
 
 const PALETTE_SOURCE = `// The single source of color.
 export const palette = {
@@ -96,6 +102,34 @@ describe('parseLookRequest', () => {
     expect(() => parseLookRequest({ file: '../secret', data: {} })).toThrowError(/file/)
     expect(() => parseLookRequest({ file: 'palette' })).toThrowError(/data/)
     expect(() => parseLookRequest(null)).toThrowError(/file/)
+  })
+})
+
+describe('isAllowedLookOrigin', () => {
+  it('accepts the dev server origin (localhost or 127.0.0.1, any scheme case)', () => {
+    expect(isAllowedLookOrigin('http://localhost:5173', 'localhost:5173')).toBe(true)
+    expect(isAllowedLookOrigin('https://localhost:5173', 'localhost:5173')).toBe(true)
+    expect(isAllowedLookOrigin('http://127.0.0.1:5173', '127.0.0.1:5173')).toBe(true)
+    expect(isAllowedLookOrigin('http://LOCALHOST:5173', 'localhost:5173')).toBe(true)
+  })
+
+  it('rejects foreign origins, even same-host typos and scheme tricks', () => {
+    expect(isAllowedLookOrigin('https://evil.com', 'localhost:5173')).toBe(false)
+    expect(isAllowedLookOrigin('http://localhost:9999', 'localhost:5173')).toBe(false)
+    expect(isAllowedLookOrigin('http://localhost.evil.com', 'localhost:5173')).toBe(false)
+    expect(isAllowedLookOrigin('http://127.0.0.1:5173', 'localhost:5173')).toBe(false)
+  })
+
+  it('fails closed on missing, empty or non-http(s) origins', () => {
+    expect(isAllowedLookOrigin(undefined, 'localhost:5173')).toBe(false)
+    expect(isAllowedLookOrigin('', 'localhost:5173')).toBe(false)
+    expect(isAllowedLookOrigin('null', 'localhost:5173')).toBe(false)
+    expect(isAllowedLookOrigin('file:///etc/passwd', 'localhost:5173')).toBe(false)
+    expect(isAllowedLookOrigin('http://localhost:5173', undefined)).toBe(false)
+    expect(isAllowedLookOrigin('http://localhost:5173', '')).toBe(false)
+    expect(isAllowedLookOrigin(['http://localhost:5173'], 'localhost:5173')).toBe(false)
+    expect(isAllowedLookOrigin('http://localhost:5173', ['localhost:5173'])).toBe(false)
+    expect(isAllowedLookOrigin('not a url', 'localhost:5173')).toBe(false)
   })
 })
 
