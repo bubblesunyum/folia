@@ -1,4 +1,4 @@
-import { useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import {
@@ -11,7 +11,15 @@ import {
   ZOOM_IN_EVENT,
   ZOOM_OUT_EVENT,
 } from './sources'
-import { applyZoomDelta, type ZoomLimits, type ZoomState } from './zoomModel'
+import {
+  applyZoomDelta,
+  easeOutCubic,
+  resolveZoomBase,
+  ZOOM_SETTLE_EPS,
+  ZOOM_STEP_DURATION_MS,
+  type ZoomLimits,
+  zoomRenderDistance,
+} from './zoomModel'
 
 /**
  * Spike-local preset standing in for the per-Place limits Phase 2 keeps in
@@ -36,6 +44,12 @@ function isGestureEvent(event: Event): event is SafariGestureEvent {
 
 /** Arbitrary non-degenerate axis, so the dolly direction can never NaN. */
 const FALLBACK_DIRECTION = new THREE.Vector3(1, 0.6, 1).normalize()
+
+/** Default orbit target, shared so the per-frame loop never allocates. */
+const FALLBACK_TARGET = new THREE.Vector3(0, 2, 0)
+
+/** Scratch dolly direction, reused every frame while a tween is active. */
+const scratchDirection = new THREE.Vector3()
 
 /** Two-pointer pinch tracking: finger distance in CSS pixels feeds one delta. */
 function createPinchTracker(onPinch: (delta: number) => void) {
@@ -85,6 +99,12 @@ function isEditableTarget(target: EventTarget | null): boolean {
   )
 }
 
+interface ZoomTween {
+  from: number
+  to: number
+  start: number
+}
+
 /**
  * The spike 7 input rig (D-048): ctrl+wheel, Safari GestureEvent and
  * two-pointer pinch all feed the one zoom model, with the resistance detent
@@ -92,39 +112,90 @@ function isEditableTarget(target: EventTarget | null): boolean {
  * the pointers, so the gesture channel stays silent while two fingers are
  * down (fol-crx). OrbitControls keeps pan and rotate; its own zoom stays
  * off so there is exactly one zoom path.
+ *
+ * fol-etn: the rig keeps no cached distance. Every event re-reads the camera,
+ * so a Phase 2 flight can move it without the next zoom snapping back; the
+ * banked overscroll is the only thing carried across events, and an idle
+ * camera found far from the last render resets it (a new Place). Interrupting
+ * a tween resumes from its target, so rapid steps accumulate. The model
+ * emits a render target (clamped distance plus visible detent give) and
+ * discrete steps ease toward it with the one zoom easing; continuous sources
+ * stay 1:1.
  */
 export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
   const invalidate = useThree((state) => state.invalidate)
   const controls = useThree((state) => state.controls as unknown as ControlsLike | null)
-  const stateRef = useRef<ZoomState | null>(null)
   const limitsRef = useRef(limits)
   limitsRef.current = limits
   const controlsRef = useRef(controls)
   controlsRef.current = controls
+  const overscrollRef = useRef(0)
+  const lastRenderRef = useRef<number | null>(null)
+  const tweenRef = useRef<ZoomTween | null>(null)
+  const invalidateRef = useRef(invalidate)
+  invalidateRef.current = invalidate
+
+  // Discrete steps ease toward their render target. Continuous input cancels
+  // the tween by writing a new one (or jumping straight there); Phase 2
+  // flights own the camera and must clear tweenRef when they take over.
+  useFrame(() => {
+    const tween = tweenRef.current
+    if (!tween) return
+    const target = controlsRef.current?.target ?? FALLBACK_TARGET
+    const now = performance.now()
+    const t = Math.min(Math.max((now - tween.start) / ZOOM_STEP_DURATION_MS, 0), 1)
+    const renderDistance = tween.from + (tween.to - tween.from) * easeOutCubic(t)
+    const direction = scratchDirection.copy(camera.position).sub(target)
+    if (direction.lengthSq() === 0) direction.copy(FALLBACK_DIRECTION)
+    direction.normalize()
+    camera.position.copy(target).addScaledVector(direction, renderDistance)
+    controlsRef.current?.update()
+    const canvas = gl.domElement
+    canvas.dataset.zoom = renderDistance.toFixed(2)
+    if (t >= 1 || Math.abs(tween.to - renderDistance) < ZOOM_SETTLE_EPS) {
+      tweenRef.current = null
+      camera.position.copy(target).addScaledVector(direction, tween.to)
+      controlsRef.current?.update()
+      canvas.dataset.zoom = camera.position.distanceTo(target).toFixed(2)
+    }
+    invalidateRef.current()
+  })
 
   useEffect(() => {
     const canvas = gl.domElement
-    const targetOf = () => controlsRef.current?.target ?? new THREE.Vector3(0, 2, 0)
+    const targetOf = () => controlsRef.current?.target ?? FALLBACK_TARGET
     const riseCount = () => Number(canvas.dataset.rises ?? 0)
 
     /** The readout always measures the camera, so tests observe real motion. */
-    const publishZoom = (state: ZoomState) => {
+    const publishCamera = () => {
       canvas.dataset.zoom = camera.position.distanceTo(targetOf()).toFixed(2)
-      canvas.dataset.rises = String(riseCount())
-      stateRef.current = state
     }
 
-    const ensureState = (): ZoomState => {
-      const current = stateRef.current
-      if (current) return current
-      const fresh = {
-        distance: camera.position.distanceTo(targetOf()),
-        overscroll: 0,
+    const dollyTo = (renderDistance: number) => {
+      const target = targetOf()
+      const direction = scratchDirection.copy(camera.position).sub(target)
+      if (direction.lengthSq() === 0) direction.copy(FALLBACK_DIRECTION)
+      direction.normalize()
+      camera.position.copy(target).addScaledVector(direction, renderDistance)
+      controlsRef.current?.update()
+      publishCamera()
+      invalidate()
+    }
+
+    const easeTo = (renderDistance: number) => {
+      const from = camera.position.distanceTo(targetOf())
+      if (
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+        Math.abs(renderDistance - from) < ZOOM_SETTLE_EPS
+      ) {
+        tweenRef.current = null
+        dollyTo(renderDistance)
+        return
       }
-      publishZoom(fresh)
-      return fresh
+      tweenRef.current = { from, to: renderDistance, start: performance.now() }
+      invalidate()
     }
 
     /** The rise is only a signal: routing flies the camera in Phase 2. */
@@ -136,36 +207,65 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
       invalidate()
     }
 
-    const zoomBy = (delta: number) => {
-      if (delta === 0 || !Number.isFinite(delta)) return
-      const target = targetOf()
-      const { state, risen } = applyZoomDelta(ensureState(), delta, limitsRef.current)
-      if (risen) {
-        stateRef.current = state
+    // The pure computation lives in resolveZoomBase (unit-tested); this only
+    // moves the ref bookkeeping in and out of it.
+    const takeZoomBase = (): { distance: number; overscroll: number } => {
+      const base = resolveZoomBase(
+        {
+          cameraDistance: camera.position.distanceTo(targetOf()),
+          lastRender: lastRenderRef.current,
+          overscroll: overscrollRef.current,
+          tweenTo: tweenRef.current?.to ?? null,
+        },
+        limitsRef.current,
+      )
+      if (base.interrupted) tweenRef.current = null
+      if (base.external) overscrollRef.current = 0
+      return { distance: base.distance, overscroll: base.overscroll }
+    }
+
+    // One model step shared by both input policies: updates the bank and the
+    // last render target, returns the render distance to show. Null on junk.
+    const stepModel = (delta: number): { renderDistance: number; risen: boolean } | null => {
+      if (delta === 0 || !Number.isFinite(delta)) return null
+      const { state, risen } = applyZoomDelta(takeZoomBase(), delta, limitsRef.current)
+      overscrollRef.current = state.overscroll
+      const renderDistance = zoomRenderDistance(state)
+      lastRenderRef.current = renderDistance
+      return { renderDistance, risen }
+    }
+
+    const zoomContinuous = (delta: number) => {
+      const step = stepModel(delta)
+      if (!step) return
+      if (step.risen) {
         signalRise()
+        easeTo(step.renderDistance)
         return
       }
-      const direction = camera.position.clone().sub(target)
-      if (direction.lengthSq() === 0) direction.copy(FALLBACK_DIRECTION)
-      direction.normalize()
-      camera.position.copy(target).addScaledVector(direction, state.distance)
-      controlsRef.current?.update()
-      publishZoom(state)
-      invalidate()
+      tweenRef.current = null
+      dollyTo(step.renderDistance)
+    }
+
+    const zoomStepped = (delta: number) => {
+      const step = stepModel(delta)
+      if (!step) return
+      if (step.risen) signalRise()
+      easeTo(step.renderDistance)
     }
 
     const onWheel = (event: WheelEvent) => {
       const delta = wheelToZoomDelta(event)
       if (delta === null) return
       event.preventDefault()
-      zoomBy(delta)
+      zoomContinuous(delta)
     }
 
     // OrbitControls would pan from the same two fingers (DOLLY_PAN), walking
     // the orbit target while the user only asked to zoom — suppress it.
     // Defined before the gesture handlers: iOS fires both for one pinch, and
     // the gesture channel yields while the tracker holds two fingers (fol-crx).
-    const pinch = createPinchTracker(zoomBy)
+    const pinch = createPinchTracker(zoomContinuous)
 
     let gestureScale = 1
     const onGestureStart = (event: Event) => {
@@ -180,7 +280,7 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
       // pointer events the tracker already counts (fol-crx): while two
       // fingers are down the pointers own the zoom, so the gesture channel
       // only keeps its baseline in sync instead of zooming a second time.
-      if (!pinch.twoFinger) zoomBy(gestureToZoomDelta(scale, gestureScale))
+      if (!pinch.twoFinger) zoomContinuous(gestureToZoomDelta(scale, gestureScale))
       gestureScale = scale
     }
 
@@ -204,10 +304,10 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
         return
       }
       const delta = keyToZoomDelta(event.key)
-      if (delta !== null) zoomBy(delta)
+      if (delta !== null) zoomStepped(delta)
     }
-    const onZoomIn = () => zoomBy(-KEY_STEP)
-    const onZoomOut = () => zoomBy(KEY_STEP)
+    const onZoomIn = () => zoomStepped(-KEY_STEP)
+    const onZoomOut = () => zoomStepped(KEY_STEP)
 
     // Safari page-zoom must not eat the gesture; the canvas owns touch.
     canvas.addEventListener('wheel', onWheel, { passive: false })
@@ -222,8 +322,10 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
     window.addEventListener(ZOOM_OUT_EVENT, onZoomOut)
     const previousTouchAction = canvas.style.touchAction
     canvas.style.touchAction = 'none'
-    ensureState()
+    lastRenderRef.current = camera.position.distanceTo(targetOf())
+    publishCamera()
     return () => {
+      tweenRef.current = null
       canvas.removeEventListener('wheel', onWheel)
       canvas.removeEventListener('gesturestart', onGestureStart)
       canvas.removeEventListener('gesturechange', onGestureChange)

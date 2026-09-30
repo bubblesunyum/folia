@@ -1,4 +1,9 @@
 import { expect, type Page, test } from '@playwright/test'
+import { DETENT_GIVE_MAX } from '../src/input/zoomModel'
+
+// ZOOM_LIMITS in src/input/ZoomRig.tsx: the look-dev camera sits at ~65 m.
+const FAR_LIMIT = 90
+const KEY_STEP = 4
 
 async function zoomOf(page: Page): Promise<number> {
   return page.evaluate(() => {
@@ -54,8 +59,27 @@ test('pushing past the far limit trips the rise detent', async ({ page }) => {
     () => (window as unknown as { foliaRiseCount?: number }).foliaRiseCount ?? 0,
   )
   expect(rises).toBeGreaterThan(0)
-  // The camera sits at the far limit: the readout measures it, not the model.
-  expect(await zoomOf(page)).toBeCloseTo(90, 0)
+  // The camera sits at the far limit, plus visible detent give while banked
+  // (fol-etn): the readout measures it, not the model.
+  const zoom = await zoomOf(page)
+  expect(zoom).toBeGreaterThanOrEqual(FAR_LIMIT - 0.5)
+  expect(zoom).toBeLessThanOrEqual(FAR_LIMIT + DETENT_GIVE_MAX + 0.1)
+})
+
+test('the detent gives visibly before it trips', async ({ page }) => {
+  await ctrlWheel(page, 100, 5)
+  await expect.poll(() => zoomOf(page), { timeout: 5_000 }).toBeCloseTo(FAR_LIMIT, 0)
+  const risesBefore = await page.evaluate(
+    () => (window as unknown as { foliaRiseCount?: number }).foliaRiseCount ?? 0,
+  )
+  await ctrlWheel(page, 20, 1)
+  const pushed = await zoomOf(page)
+  expect(pushed).toBeGreaterThan(FAR_LIMIT)
+  expect(pushed).toBeLessThanOrEqual(FAR_LIMIT + DETENT_GIVE_MAX + 0.1)
+  const risesAfter = await page.evaluate(
+    () => (window as unknown as { foliaRiseCount?: number }).foliaRiseCount ?? 0,
+  )
+  expect(risesAfter).toBe(risesBefore)
 })
 
 test('escape signals rise without moving the camera', async ({ page }) => {
@@ -136,7 +160,19 @@ test('ctrl+wheel paints a frame through the demand loop', async ({ page }) => {
 test('the zoom buttons move the camera', async ({ page }) => {
   const start = await zoomOf(page)
   await page.getByRole('button', { name: 'Zoom in' }).click()
-  expect(await zoomOf(page)).toBeLessThan(start)
+  // Discrete steps ease to their target (fol-etn): poll for the settled
+  // step rather than reading mid-flight.
+  await expect.poll(() => zoomOf(page), { timeout: 5_000 }).toBeCloseTo(start - KEY_STEP, 1)
   await page.getByRole('button', { name: 'Zoom out' }).click()
-  expect(await zoomOf(page)).toBeCloseTo(start, 1)
+  await expect.poll(() => zoomOf(page), { timeout: 5_000 }).toBeCloseTo(start, 1)
+})
+
+test('rapid discrete steps accumulate instead of collapsing', async ({ page }) => {
+  const start = await zoomOf(page)
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('folia:zoom-out'))
+    window.dispatchEvent(new CustomEvent('folia:zoom-out'))
+  })
+  // Two synchronous steps inside one tween window must travel two steps.
+  await expect.poll(() => zoomOf(page), { timeout: 5_000 }).toBeCloseTo(start + 2 * KEY_STEP, 1)
 })
