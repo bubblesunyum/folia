@@ -69,6 +69,47 @@ test('escape signals rise without moving the camera', async ({ page }) => {
   expect(await zoomOf(page)).toBe(start)
 })
 
+test('a touch pinch counts once: gesture events stay silent while two fingers are down', async ({
+  page,
+}) => {
+  const start = await zoomOf(page)
+  await page.evaluate(() => {
+    const canvas = document.querySelector('canvas')
+    if (!canvas) throw new Error('canvas has no bounds')
+    const pointer = (type: string, id: number, x: number) =>
+      canvas.dispatchEvent(
+        new PointerEvent(type, { pointerId: id, clientX: x, clientY: 400, bubbles: true }),
+      )
+    pointer('pointerdown', 1, 600)
+    pointer('pointerdown', 2, 700)
+    // iOS Safari's shadow copy of the same pinch: silent while held.
+    for (const scale of [1.1, 1.2]) {
+      const event = new Event('gesturechange', { bubbles: true, cancelable: true })
+      ;(event as unknown as { scale: number }).scale = scale
+      canvas.dispatchEvent(event)
+    }
+    pointer('pointerup', 1, 600)
+    pointer('pointerup', 2, 700)
+  })
+  // No finger motion, so the pinch tracker zoomed nothing — and the gesture
+  // shadow must not have zoomed on top of it.
+  expect(await zoomOf(page)).toBe(start)
+})
+
+test('a trackpad gesture still zooms once the fingers are gone', async ({ page }) => {
+  const start = await zoomOf(page)
+  await page.evaluate(() => {
+    const canvas = document.querySelector('canvas')
+    if (!canvas) throw new Error('canvas has no bounds')
+    canvas.dispatchEvent(new Event('gesturestart', { bubbles: true, cancelable: true }))
+    const event = new Event('gesturechange', { bubbles: true, cancelable: true })
+    ;(event as unknown as { scale: number }).scale = 1.1
+    canvas.dispatchEvent(event)
+  })
+  // Pinch-out grows the scale and zooms in.
+  expect(await zoomOf(page)).toBeLessThan(start)
+})
+
 test('ctrl+wheel paints a frame through the demand loop', async ({ page }) => {
   await page.addInitScript(`
     window.foliaDrawCalls = 0

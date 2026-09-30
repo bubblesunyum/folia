@@ -88,7 +88,9 @@ function isEditableTarget(target: EventTarget | null): boolean {
 /**
  * The spike 7 input rig (D-048): ctrl+wheel, Safari GestureEvent and
  * two-pointer pinch all feed the one zoom model, with the resistance detent
- * past the far limit. OrbitControls keeps pan and rotate; its own zoom stays
+ * past the far limit. iOS fires gesture events for touch pinches alongside
+ * the pointers, so the gesture channel stays silent while two fingers are
+ * down (fol-crx). OrbitControls keeps pan and rotate; its own zoom stays
  * off so there is exactly one zoom path.
  */
 export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
@@ -159,6 +161,12 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
       zoomBy(delta)
     }
 
+    // OrbitControls would pan from the same two fingers (DOLLY_PAN), walking
+    // the orbit target while the user only asked to zoom — suppress it.
+    // Defined before the gesture handlers: iOS fires both for one pinch, and
+    // the gesture channel yields while the tracker holds two fingers (fol-crx).
+    const pinch = createPinchTracker(zoomBy)
+
     let gestureScale = 1
     const onGestureStart = (event: Event) => {
       event.preventDefault()
@@ -167,13 +175,15 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
     const onGestureChange = (event: Event) => {
       event.preventDefault()
       if (!isGestureEvent(event)) return
-      zoomBy(gestureToZoomDelta(event.scale, gestureScale))
-      gestureScale = event.scale
+      const scale = event.scale
+      // iOS Safari fires gesture events for touch pinches alongside the
+      // pointer events the tracker already counts (fol-crx): while two
+      // fingers are down the pointers own the zoom, so the gesture channel
+      // only keeps its baseline in sync instead of zooming a second time.
+      if (!pinch.twoFinger) zoomBy(gestureToZoomDelta(scale, gestureScale))
+      gestureScale = scale
     }
 
-    // OrbitControls would pan from the same two fingers (DOLLY_PAN), walking
-    // the orbit target while the user only asked to zoom — suppress it.
-    const pinch = createPinchTracker(zoomBy)
     const onPointerDown = (event: PointerEvent) => {
       pinch.down(event)
       if (controlsRef.current) controlsRef.current.enablePan = !pinch.twoFinger
