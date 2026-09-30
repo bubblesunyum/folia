@@ -3,10 +3,8 @@
 // assets/batches.ts, and exposes its knobs as shared uniforms.
 
 import { Color, Vector4 } from 'three'
+import { MAX_GROUPS } from '../groupSlots'
 import type { Feature } from './composer'
-
-/** Global `uGroupState` slots, allocated town-wide at build time (D-061); `_ID` is a byte, the array is smaller. */
-export const MAX_GROUPS = 16
 
 /**
  * Baked AO and night spill (D-031). `_AO` stands in for three's aoMap: it

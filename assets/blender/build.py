@@ -82,8 +82,9 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--preview")
     ap.add_argument("--no-bake", action="store_true")
-    # src/palette.ts as JSON, passed in by assets/pipeline/build.ts, so the one
-    # palette (D-024) is read by TypeScript rather than parsed from it.
+    # The bake-relevant palette entries as JSON, passed in by
+    # assets/pipeline/build.ts (currently just mint), so the one palette
+    # (D-024) is read by TypeScript rather than parsed from it.
     ap.add_argument("--palette", required=True, type=json.loads)
     args = ap.parse_args(argv)
 

@@ -58,7 +58,16 @@ export function listAssets(): string[] {
     .sort()
 }
 
-/** The files an asset's output depends on, absolute and sorted. */
+/** The files an asset's output depends on, absolute and sorted.
+ *
+ * `src/palette.ts` stays listed so the dev watcher wakes on palette saves,
+ * but `hashAsset` hashes only the bake-relevant entries (`bakePalette`),
+ * not the file bytes — a sky-color tweak must not re-run Blender.
+ * `src/materials/features.ts` is deliberately absent: shader code never
+ * reaches the bake. The slot limit lives in `src/groupSlots.ts`, which is
+ * listed: shrinking it can invalidate packed `_ID`s, so a change must
+ * re-validate (and fail closed in `allocateSlots`) rather than pass `--check`.
+ */
 export function assetSources(asset: string): string[] {
   const shared = readdirSync(join(BLENDER_DIR, 'folia'))
     .filter((f) => f.endsWith('.py'))
@@ -70,12 +79,24 @@ export function assetSources(asset: string): string[] {
     join(BLENDER_DIR, `${asset}.py`),
     join(BLENDER_DIR, `${asset}.json`),
     join(ROOT, 'src/palette.ts'),
+    join(ROOT, 'src/groupSlots.ts'),
     join(ROOT, 'src/assets/batchSchema.ts'),
-    join(ROOT, 'src/materials/features.ts'),
     join(ROOT, 'assets/pipeline/pack.ts'),
     join(ROOT, 'assets/pipeline/groups.ts'),
   ].sort()
 }
+
+/**
+ * The palette entries the Blender bake reads (`assets/blender/build.py` uses
+ * only `mint`, for the neon material). Everything hashed and passed to
+ * Blender about color goes through here, so adding a second entry is one
+ * line in both places.
+ */
+export function bakePalette(): { mint: string } {
+  return { mint: palette.mint }
+}
+
+const PALETTE_FILE = join(ROOT, 'src/palette.ts')
 
 // The pack step's output depends on these as much as on its source.
 const TOOLCHAIN = [
@@ -95,7 +116,11 @@ function toolchainVersions(): string {
 export function hashAsset(asset: string): string {
   const hash = createHash('sha256').update(toolchainVersions()).update('\0')
   for (const file of assetSources(asset)) {
-    hash.update(relative(ROOT, file)).update('\0').update(readFileSync(file)).update('\0')
+    if (file === PALETTE_FILE) {
+      hash.update('palette:').update(JSON.stringify(bakePalette())).update('\0')
+    } else {
+      hash.update(relative(ROOT, file)).update('\0').update(readFileSync(file)).update('\0')
+    }
   }
   return hash.digest('hex').slice(0, 16)
 }
@@ -156,7 +181,7 @@ export async function buildAsset(asset: string, force = false): Promise<BuildRes
   try {
     ;({ stdout } = await promisify(execFile)(
       BLENDER,
-      [...args, '--', asset, '--out', raw, '--palette', JSON.stringify(palette)],
+      [...args, '--', asset, '--out', raw, '--palette', JSON.stringify(bakePalette())],
       {
         maxBuffer: 64 * 1024 * 1024,
       },

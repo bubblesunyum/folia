@@ -10,7 +10,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { MAX_GROUPS } from '../../src/materials/features.ts'
+import { MAX_GROUPS } from '../../src/groupSlots.ts'
 
 const ROOT = resolve(import.meta.dirname, '../..')
 

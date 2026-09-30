@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_GROUPS } from '../../src/materials/features'
+import { MAX_GROUPS } from '../../src/groupSlots'
 import { allocateSlots, assetLocalIds, type GroupRegistry } from './groups'
 
 describe('allocateSlots', () => {
