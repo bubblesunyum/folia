@@ -10,7 +10,7 @@ success test, and speed is a requirement alongside it, never traded against it.
 - **[docs/decisions.md](docs/decisions.md)**: the decision log. Don't contradict an entry without raising it with @bubbles first. A new decision gets the next `D-0xx` entry, and a replaced one is marked `Superseded by D-0xx`, never deleted. Each spike ends by logging its result there.
 - [docs/art-direction/README.md](docs/art-direction/README.md): the look, the reference boards and the art pillars.
 - [docs/research/](docs/research/): research notes with sources. Where they conflict with `decisions.md`, the decisions win.
-- [docs/reviews/](docs/reviews/): expert reviews of the plan and of the code. Adopted plan findings are recorded as decisions (D-030 onward), and code findings as beads named in the review.
+- [docs/reviews/](docs/reviews/): expert reviews of the plan and of the code. Adopted plan findings are recorded as decisions (D-030 onward), and code findings as beads named in the review. The `principal-review` skill writes a new one.
 
 ## Stack
 Vite + React Router v8 (framework mode, `prerender`, fully static), R3F 9 + drei + pmndrs postprocessing on WebGL2 (three r186), TypeScript strict, pnpm, Vitest, Playwright, Biome, Vercel. Geometry comes from headless Blender scripts in `assets/blender/**`, pinned by `assets/blender/VERSION` (Blender 5.2 LTS lives at `/Applications/Blender.app/Contents/MacOS/Blender`; it isn't on PATH).
