@@ -17,8 +17,8 @@ const WARMUP = 60
  * frames Apple GPUs clock down, so neither the HUD's per-frame GPU ms nor a
  * saturated query is repeatable. Drawing `count` frames back to back and
  * waiting on a pixel read gives a repeatable full-frame throughput proxy. It
- * includes CPU submission and readback overhead, so it is not direct GPU time
- * and does not by itself verify D-035's GPU budget (D-055).
+ * includes CPU submission and readback overhead, so it is not direct GPU time;
+ * the slice-exit budget on it is wall ms against SATURATED_BUDGET_MS (D-063).
  */
 export function runBurst(gl: WebGL2RenderingContext, count: number, warmup = WARMUP): BenchResult {
   const pixel = new Uint8Array(4)

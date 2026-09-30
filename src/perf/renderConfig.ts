@@ -36,7 +36,14 @@ export interface RenderConfig {
 
 /** Base Air CSS size; the pixel buffer depends on the chosen AA mode (D-055). */
 export const BASE_AIR = { width: 1280, height: 800 }
-export const GPU_BUDGET_MS = 3
+/**
+ * Slice-exit budget (D-063): saturated-frame wall ms per frame on the M1 Max
+ * under the default `?perf=base` (MSAA at DPR 1.5, 1920×1200), at golden hour
+ * and at night. This replaces the provisional ≤3 ms direct-GPU number (D-035),
+ * which Metal timer queries can't verify (D-055). Calls <100 and sub-draws
+ * ≤3000 stand alongside it.
+ */
+export const SATURATED_BUDGET_MS = 2.5
 
 // MSAA spends its samples at DPR 1.5; SMAA gets the full DPR 2 (D-042).
 const DPR_FOR: Record<AaMode, number> = { none: 2, msaa: 1.5, smaa: 2 }

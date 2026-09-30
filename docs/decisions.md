@@ -309,7 +309,7 @@ Source: [reviews/2026-09-27-spec-review.md](reviews/2026-09-27-spec-review.md). 
 
 *Why:* The Max has about 4× the ALU and 6× the bandwidth of a base Air. This plan is bandwidth-heavy (bloom, HalfFloat targets, shadow fill), and rAF on a vsync-locked display can't show headroom.
 *Replaces:* D-020's proxy definition and its "≤ ~4 ms" target.
-*Refined by:* D-051 (real-device calibration deferred), D-055 (Metal timer queries are indicative and the spike uses saturated throughput).
+*Refined by:* D-051 (real-device calibration deferred), D-055 (Metal timer queries are indicative and the spike uses saturated throughput), D-063 (proxy promoted to the ≤2.5 wall-ms gate; direct-GPU number retired as a gate).
 
 ### D-036 Quality tier ladder (S-12, C-6, C-7, C-10, C-14, N-7)
 **Decision:**
@@ -477,6 +477,7 @@ The checklist is in [spec.md](spec.md#milestone-1-one-exciting-neighborhood-cort
 *Why:* Keep momentum on the look. The budget already assumes the worst case.
 *Later:* calibrate on real hardware before launch (Launch essentials), including a mid-range Android and in-app browsers.
 *Refines:* D-035 (its calibration step is deferred).
+*Refined by:* D-063 (the ≤3 ms direct-GPU number is retired as a gate and survives as an aspiration; the gated number is ≤2.5 wall ms).
 
 ---
 
@@ -589,6 +590,7 @@ The checklist is in [spec.md](spec.md#milestone-1-one-exciting-neighborhood-cort
 
 *Why:* D-035 and D-051 needed a number that repeats, and D-042 needed a winner in motion. The first readings, from stats-gl and from timer queries under a 60 Hz cap, swung 2× between runs.
 *Refines:* D-035 (how GPU cost is measured), D-042 (settled), D-052 (the HUD's GPU readout is indicative only).
+*Refined by:* D-063 (the proxy is now the gate at ≤2.5 wall ms).
 
 ### D-056 Idle rendering in the static look-dev scene
 **Decision:** the normal canvas uses R3F's demand loop. OrbitControls requests frames while the camera moves and its damping settles; time-of-day changes also invalidate the sky, shared materials and post effects. With the scene untouched, the browser test records zero new WebGL draw calls over a 300 ms interval, then confirms a camera drag wakes drawing. The `?perf=base` benchmark retains its manual 60 Hz loop so the proxy is comparable run to run.
@@ -762,6 +764,18 @@ instead of per asset.
 
 *Why:* Each rebuild committed a new 1.6 MB blob to plain git (review 2026-09-29).
 *Refines:* D-053.
+
+### D-063 Slice-exit perf budget: saturated throughput on the Max, scaled to the Air (fol-m10)
+**Decision:**
+- **Method: a scaling factor from the Max's saturated-frame proxy, not a reference device.** There is still no base Air and no cloud device service, so reference-device calibration stays deferred with D-051. Real Max→Air→Android→iPhone factors are measured before launch (Launch essentials) and replace the factor below.
+- **Metric (unchanged from D-055):** `scripts/bench.mjs` median of four 240-frame saturated bursts via `window.foliaBench`, on the M1 Max real GPU (headless Playwright, ANGLE Metal), default `?perf=base` (MSAA at DPR 1.5, 1920×1200 buffer), at golden hour and at night, from a `dist/` build after `verify`, with no other scene tabs open.
+- **Budget: ≤ 2.5 wall ms/frame** (`SATURATED_BUDGET_MS` in `src/perf/renderConfig.ts`, read by `bench.mjs`, which prints PASS/FAIL and fails gated runs over it) at both keyframes. The look-dev fragment measures 1.90–1.92 (js ~1.07) on 2026-09-30, so the slice-exit scene (forum at hero LOD plus the time-of-day gradient, env, grade and fog) gets ~0.6 ms of headroom.
+- **Scaling rationale:** wall = CPU submission (~1.1 ms here, carries ~1:1 to the Air — same-class CPU cores per D-055) + GPU remainder (×4–6 on a base Air — bandwidth-heavy per D-035). At the budget line that is ~1.1 + ~1.4×5 ≈ 8.1 ms estimated Air frame (6.7 at 4×, 9.5 at 6×), comfortably under 16.6 ms and leaving room for breadth town growth to fill the frame.
+- **Scope:** the budget binds the shipped default only. DPR 2 modes (the fragment alone already costs ~2.8 ms MSAA at 2560×1600 per D-055), `stress=`, and `bloom/reflection=off` variants are comparison levers, not gated. `render.calls` < 100 and sub-draws ≤ 3000 stand alongside it.
+- **Retired:** the provisional ≤ 3 ms direct-GPU number at 2560×1600 (D-035, D-051) as an enforceable gate — Metal timer queries can't verify it (D-055: 2–3× clock-down swing capped, ~7 ms queueing span saturated). It survives only as the aspiration the pre-launch device calibration prices.
+
+*Why:* fol-l1r.6 needs a number a session can actually run, and the only repeatable number on this Mac is saturated throughput.
+*Refines:* D-035 (budget restated as wall throughput), D-051 (reference-device step still deferred), D-055 (proxy promoted to gate).
 
 ---
 

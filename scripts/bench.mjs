@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Saturated frame throughput at the base-Air proxy on this Mac (D-055).
+// Saturated frame throughput at the base-Air proxy on this Mac (D-055, D-063).
 //
 //   node scripts/bench.mjs                          # golden hour, the shipped AA
 //   node scripts/bench.mjs aa=smaa 'time=22:00'     # one run per argument
@@ -8,12 +8,23 @@
 // Each argument is extra query params on top of `?perf=base`. It serves the last
 // `vite build` from dist/ itself, so run scripts/verify.sh first. Every run draws
 // four bursts of 240 frames back to back (see src/perf/bench.ts) and prints ms per
-// frame. This is a throughput proxy, not a direct GPU-time budget verdict.
-// Close other active scene tabs first so they do not compete for GPU time.
+// frame alongside the slice-exit verdict. Close other active scene tabs first
+// so they do not compete for GPU time.
 
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { chromium } from '@playwright/test'
+
+// Slice-exit budget: read from the single source in src/perf/renderConfig.ts
+// (D-063) so the two can never drift. Fail closed when it cannot be parsed.
+const SATURATED_BUDGET_MS = (() => {
+  const match = readFileSync('src/perf/renderConfig.ts', 'utf8').match(
+    /SATURATED_BUDGET_MS\s*=\s*([\d.]+)/,
+  )
+  const value = match ? Number(match[1]) : NaN
+  if (!Number.isFinite(value)) throw new Error('bench: SATURATED_BUDGET_MS not found in src/perf/renderConfig.ts')
+  return value
+})()
 
 const PORT = 4299
 const BURSTS = 4
@@ -53,7 +64,19 @@ try {
     const ms = median(bursts.map((b) => b.ms))
     const cpu = median(bursts.map((b) => b.cpuMs))
     const counts = (await page.locator('.perf-readout').textContent())?.split('\n').pop()
-    console.log(`${run || '(default)'}: ${ms.toFixed(2)} wall ms/frame · js ${cpu.toFixed(2)} · ${counts}`)
+    // The budget binds the shipped default only (D-063); other knobs are
+    // comparison levers, so their verdict is advisory. `time=` stays gated —
+    // the budget holds at both keyframes — and `stress=0` adds no load.
+    const advisory =
+      /(^|&)(aa|bloom|reflection|fit|shadows|sway)=/.test(run) || /(^|&)stress=[1-9]/.test(run)
+    const over = ms > SATURATED_BUDGET_MS
+    console.log(
+      `${run || '(default)'}: ${ms.toFixed(2)} wall ms/frame · js ${cpu.toFixed(2)} · ${counts} · budget ≤${SATURATED_BUDGET_MS.toFixed(2)}: ${over ? 'FAIL' : 'PASS'}${advisory ? ' (advisory)' : ''}`,
+    )
+    if (!advisory && over) {
+      failed = true
+      console.error(`  over budget: ${ms.toFixed(2)} > ${SATURATED_BUDGET_MS.toFixed(2)} wall ms/frame`)
+    }
     if (errors.length > 0) {
       failed = true
       console.error(`  page errors: ${errors.join(' | ')}`)
@@ -99,5 +122,6 @@ function waitForOwnServer(server) {
 
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.floor(sorted.length / 2)]
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }
