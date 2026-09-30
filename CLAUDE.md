@@ -10,7 +10,7 @@ success test, and speed is a requirement alongside it, never traded against it.
 - **[docs/decisions.md](docs/decisions.md)**: the decision log. Don't contradict an entry without raising it with @bubbles first. A new decision gets the next `D-0xx` entry, and a replaced one is marked `Superseded by D-0xx`, never deleted. Each spike ends by logging its result there.
 - [docs/art-direction/README.md](docs/art-direction/README.md): the look, the reference boards and the art pillars.
 - [docs/research/](docs/research/): research notes with sources. Where they conflict with `decisions.md`, the decisions win.
-- [docs/reviews/](docs/reviews/): expert reviews of the plan. Adopted findings are recorded as decisions (D-030 onward).
+- [docs/reviews/](docs/reviews/): expert reviews of the plan and of the code. Adopted plan findings are recorded as decisions (D-030 onward), and code findings as beads named in the review.
 
 ## Stack
 Vite + React Router v8 (framework mode, `prerender`, fully static), R3F 9 + drei + pmndrs postprocessing on WebGL2 (three r186), TypeScript strict, pnpm, Vitest, Playwright, Biome, Vercel. Geometry comes from headless Blender scripts in `assets/blender/**`, pinned by `assets/blender/VERSION` (Blender 5.2 LTS lives at `/Applications/Blender.app/Contents/MacOS/Blender`; it isn't on PATH).
@@ -22,6 +22,15 @@ Vite + React Router v8 (framework mode, `prerender`, fully static), R3F 9 + drei
 - **Mesh names are `<hood>.<object>.<material>.<lod>`** (D-034).
 - **Tests:** Vitest for pure logic (the time-of-day gradient, tier ladder, content schema, attribute validator). Playwright for routes and screenshots. Visual changes need a capture at golden hour and at night, written to `/tmp/fol-<name>.png` so `scripts/review.sh` hands it to the design reviewer.
 - **UI copy:** one-word labels, spacing instead of rules, no eyebrow kickers, in-world before flat chrome (spec: design rules).
+
+## Patterns worth repeating
+These have paid off (review 2026-09-29), so new systems should follow them.
+- **Pure core, thin rig.** Logic lives in plain modules with Vitest (`zoomModel`, `sources`, `shadowFit`, `look.ts`); the R3F component only wires events and uniforms.
+- **Spikes end with numbers.** A cost table goes in the decision entry, measured on the `?perf=base` proxy.
+- **Fail closed.** Gates and pipeline steps throw on a contract break rather than degrade quietly: the SSR-boundary step, pack's `_ID` remap, the manifest lock, inert shader defaults.
+- **Render on demand (D-056).** Anything that animates goes through one scheduler and keeps the e2e idle-rest test green.
+- **URL switches are the tier ladder in waiting.** `?bloom=off`, `?reflection=off` and `?shadows=static` become D-036 tier inputs, not a second system.
+- **Tests wait on state, not time.** E2E reads `data-*` flags the app sets; it never waits on a timeout.
 
 ## Traps that are already known
 Each of these is a decision because it has bitten someone before.
