@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
+import { canvasHookAttribute, canvasHookSelector } from '../src/testHooks'
 
 // The look-dev bench (D-034): leva edits drive the scene live. Saves POST to
 // the dev-only `/__folia/look` endpoint, so under preview (no middleware) the
@@ -22,22 +23,22 @@ test('?panel shows the bench and a tweak reaches the scene', async ({ page }) =>
   })
 
   await page.goto('/?time=18:30&panel')
-  await expect(page.locator('canvas[data-assets="drawn"]')).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator(canvasHookSelector('assets', 'drawn'))).toBeVisible({ timeout: 60_000 })
   await openBench(page)
 
-  const canvas = page.locator('canvas[data-sun]')
-  await expect(canvas).toHaveAttribute('data-sun', '4.50')
+  const canvas = page.locator(canvasHookSelector('sun'))
+  await expect(canvas).toHaveAttribute(canvasHookAttribute('sun'), '4.50')
 
   const sun = page.locator('input[id="keyframes/golden.sun.intensity"]')
   await sun.fill('0')
   await sun.press('Enter')
-  await expect(canvas).toHaveAttribute('data-sun', '0.00')
+  await expect(canvas).toHaveAttribute(canvasHookAttribute('sun'), '0.00')
   expect(errors).toEqual([])
 })
 
 test('save reports the missing dev server instead of failing silent', async ({ page }) => {
   await page.goto('/?time=18:30&panel')
-  await expect(page.locator('canvas[data-assets="drawn"]')).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator(canvasHookSelector('assets', 'drawn'))).toBeVisible({ timeout: 60_000 })
   await openBench(page)
   await page.getByRole('button', { name: 'writeBack' }).click()
   await expect(page.getByText(/write back failed/)).toBeVisible({ timeout: 10_000 })

@@ -1,6 +1,7 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { type RiseCountHost, recordRise, setCanvasHook } from '../testHooks'
 import {
   gestureToZoomDelta,
   KEY_STEP,
@@ -153,12 +154,12 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
     camera.position.copy(target).addScaledVector(direction, renderDistance)
     controlsRef.current?.update()
     const canvas = gl.domElement
-    canvas.dataset.zoom = renderDistance.toFixed(2)
+    setCanvasHook(canvas, 'zoom', renderDistance.toFixed(2))
     if (t >= 1 || Math.abs(tween.to - renderDistance) < ZOOM_SETTLE_EPS) {
       tweenRef.current = null
       camera.position.copy(target).addScaledVector(direction, tween.to)
       controlsRef.current?.update()
-      canvas.dataset.zoom = camera.position.distanceTo(target).toFixed(2)
+      setCanvasHook(canvas, 'zoom', camera.position.distanceTo(target).toFixed(2))
     }
     invalidateRef.current()
   })
@@ -166,11 +167,10 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
   useEffect(() => {
     const canvas = gl.domElement
     const targetOf = () => controlsRef.current?.target ?? FALLBACK_TARGET
-    const riseCount = () => Number(canvas.dataset.rises ?? 0)
 
     /** The readout always measures the camera, so tests observe real motion. */
     const publishCamera = () => {
-      canvas.dataset.zoom = camera.position.distanceTo(targetOf()).toFixed(2)
+      setCanvasHook(canvas, 'zoom', camera.position.distanceTo(targetOf()).toFixed(2))
     }
 
     const dollyTo = (renderDistance: number) => {
@@ -200,9 +200,7 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
 
     /** The rise is only a signal: routing flies the camera in Phase 2. */
     const signalRise = () => {
-      const counted = (window as unknown as { foliaRiseCount?: number }).foliaRiseCount ?? 0
-      ;(window as unknown as { foliaRiseCount?: number }).foliaRiseCount = counted + 1
-      canvas.dataset.rises = String(riseCount() + 1)
+      recordRise(canvas, window as unknown as RiseCountHost)
       window.dispatchEvent(new CustomEvent(RISE_EVENT))
       invalidate()
     }

@@ -2,6 +2,8 @@ import { advance, Canvas, useFrame } from '@react-three/fiber'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { renderConfig } from '../debug'
 import { ZoomButtons } from '../shell/ZoomButtons'
+import { setCanvasHook } from '../testHooks'
+import { bindAmbientReadingSignal } from '../time/ambient'
 import { ContextLossProvider } from './contextRestores'
 
 /**
@@ -19,6 +21,9 @@ export function Viewport({
 }) {
   const [contextLost, setContextLost] = useState(false)
   const { dpr, maxFps, size } = renderConfig
+  // The look-dev bench pauses ambient motion while it is being read (fol-k0t):
+  // the pointer over leva, or focus inside it, sets the ambient flag.
+  useEffect(() => bindAmbientReadingSignal(), [])
   return (
     <>
       <div className="viewport" style={size ?? undefined}>
@@ -76,7 +81,7 @@ function RenderedFlag({ onFirstFrame }: { onFirstFrame?: () => void }) {
   useFrame(({ gl }) => {
     frames.current += 1
     if (frames.current === FRAMES_BEFORE_RENDERED) {
-      gl.domElement.dataset.rendered = 'true'
+      setCanvasHook(gl.domElement, 'rendered', 'true')
       if (!reported.current) {
         reported.current = true
         onFirstFrame?.()

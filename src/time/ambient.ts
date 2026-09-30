@@ -117,3 +117,73 @@ export function setAmbientReading(value: boolean): void {
 export function isAmbientReading(): boolean {
   return reading
 }
+
+/**
+ * The look-dev bench's own DOM hook (fol-k0t, D-034): the app marks its bench
+ * wrapper with this attribute, so recognizing "the panel being read" doesn't
+ * depend on any panel library's internals. Kept as a pure target check so
+ * unit tests can drive it without mounting the panel.
+ *
+ * Leva coupling + tweakpane migration obligation: leva portals its panel
+ * into a body-level `#leva__root` that our JSX cannot wrap (the installed
+ * leva bundle appends `#leva__root` to `document.body`), so the `#leva__root`
+ * half of the selector below exists only for the portaled leva panel. When
+ * the bench moves to tweakpane (D-034 allows leva or tweakpane), render its
+ * container inside the `data-lookdev-bench` wrapper and delete the
+ * `#leva__root` half.
+ */
+export const BENCH_ROOT_ATTRIBUTE = 'data-lookdev-bench'
+export const PANEL_ROOT_SELECTOR = `[${BENCH_ROOT_ATTRIBUTE}], #leva__root`
+
+export function isReadingTarget(target: EventTarget | null): boolean {
+  // Duck-typed on `closest` rather than `instanceof Element`, so non-element
+  // targets (and non-DOM test fakes) read as "not the panel" instead of
+  // throwing on a missing global.
+  if (!target || typeof (target as Element).closest !== 'function') return false
+  return (target as Element).closest(PANEL_ROOT_SELECTOR) !== null
+}
+
+/**
+ * Wires the look-dev panel's read state into the ambient flag (fol-k0t): the
+ * pointer resting over the bench, or focus moving into it, pauses ambient
+ * motion; leaving clears it. Listens on the document so the lazily-mounted
+ * leva root needs no direct handle. Returns a cleanup that detaches and
+ * clears both latches; the scheduler keeps honoring `isAmbientReading` per
+ * tick.
+ */
+export function bindAmbientReadingSignal(doc: Document = document): () => void {
+  // One latch per signal, ORed together: pointer and focus move
+  // independently, so a single last-writer-wins flag drops reading when one
+  // signal leaves while the other is still inside the panel (focus in-panel
+  // + pointerover canvas, or pointer over the panel + focusout).
+  let pointerInside = false
+  let focusInside = false
+  const sync = (): void => setAmbientReading(pointerInside || focusInside)
+  const onPointerOver = (event: Event): void => {
+    pointerInside = isReadingTarget(event.target)
+    sync()
+  }
+  const onFocusIn = (event: Event): void => {
+    if (isReadingTarget(event.target)) {
+      focusInside = true
+      sync()
+    }
+  }
+  const onFocusOut = (event: Event): void => {
+    if (isReadingTarget(event.target)) {
+      focusInside = false
+      sync()
+    }
+  }
+  doc.addEventListener('pointerover', onPointerOver)
+  doc.addEventListener('focusin', onFocusIn)
+  doc.addEventListener('focusout', onFocusOut)
+  return () => {
+    doc.removeEventListener('pointerover', onPointerOver)
+    doc.removeEventListener('focusin', onFocusIn)
+    doc.removeEventListener('focusout', onFocusOut)
+    pointerInside = false
+    focusInside = false
+    setAmbientReading(false)
+  }
+}

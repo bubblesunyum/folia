@@ -5,10 +5,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { geometriesByBatch, withDerived } from '../assets/batches'
 import { reportSwap, useAssetUrl } from '../assets/useAssetUrl'
 import { derivedBatches } from '../materials/shared'
+import { markAssetDrawn, setCanvasHook, unmarkAssetDrawn } from '../testHooks'
 import { useTownBatches } from './TownBatches'
-
-/** Assets registered and drawn in this canvas, for tests that need both. */
-const drawnAssets = new Set<string>()
 
 /** A packed Blender asset, contributing its geometry to the town-wide batches. */
 export function BlenderAsset({ asset }: { asset: string }) {
@@ -28,18 +26,17 @@ export function BlenderAsset({ asset }: { asset: string }) {
       inner = requestAnimationFrame(() => {
         reportSwap(asset)
         // Tests wait on this rather than on a timeout.
-        canvas.dataset.assets = 'drawn'
+        setCanvasHook(canvas, 'assets', 'drawn')
         // ...and on every registered asset, not just the first: with two
         // assets sharing the batches the flag above fires for whichever
         // parses first, while this lists what is actually in the batches.
-        drawnAssets.add(asset)
-        canvas.dataset.drawnAssets = [...drawnAssets].sort().join(',')
+        setCanvasHook(canvas, 'drawnAssets', markAssetDrawn(asset))
       })
     })
     return () => {
       cancelAnimationFrame(outer)
       cancelAnimationFrame(inner)
-      drawnAssets.delete(asset)
+      unmarkAssetDrawn(asset)
       unregisterAsset(asset)
     }
   }, [asset, geometries, registerAsset, unregisterAsset, canvas])

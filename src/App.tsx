@@ -25,8 +25,14 @@ export function App() {
           bench takes pointer events instead of the viewport. */}
       {debug.panel && (
         <Suspense fallback={null}>
-          <LevaPanel hidden={false} />
-          <BenchStatusReadout />
+          {/* The bench's own DOM hook (BENCH_ROOT_ATTRIBUTE in time/ambient):
+              inline bench DOM lives under it. `display: contents` keeps it
+              out of layout; leva's panel portals to a body-level #leva__root
+              outside it, matched by selector fallback until tweakpane. */}
+          <div data-lookdev-bench style={{ display: 'contents' }}>
+            <LevaPanel hidden={false} />
+            <BenchStatusReadout />
+          </div>
         </Suspense>
       )}
     </>

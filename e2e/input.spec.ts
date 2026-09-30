@@ -1,15 +1,16 @@
 import { expect, type Page, test } from '@playwright/test'
 import { DETENT_GIVE_MAX } from '../src/input/zoomModel'
+import { type CanvasHookName, canvasHookSelector, RISE_COUNT_KEY } from '../src/testHooks'
 
 // ZOOM_LIMITS in src/input/ZoomRig.tsx: the look-dev camera sits at 80 m.
 const FAR_LIMIT = 90
 const KEY_STEP = 4
 
 async function zoomOf(page: Page): Promise<number> {
-  return page.evaluate(() => {
+  return page.evaluate((hook) => {
     const canvas = document.querySelector('canvas')
-    return canvas ? Number(canvas.dataset.zoom) : Number.NaN
-  })
+    return canvas ? Number(canvas.dataset[hook]) : Number.NaN
+  }, 'zoom' as CanvasHookName)
 }
 
 async function ctrlWheel(page: Page, deltaY: number, times: number): Promise<void> {
@@ -29,7 +30,7 @@ async function ctrlWheel(page: Page, deltaY: number, times: number): Promise<voi
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/?time=18:30')
-  await expect(page.locator('canvas[data-assets="drawn"]')).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator(canvasHookSelector('assets', 'drawn'))).toBeVisible({ timeout: 60_000 })
 })
 
 test('ctrl+wheel dollies the camera in and out', async ({ page }) => {
@@ -56,7 +57,8 @@ test('a plain wheel is not a zoom: it leaves the camera alone', async ({ page })
 test('pushing past the far limit trips the rise detent', async ({ page }) => {
   await ctrlWheel(page, 100, 20)
   const rises = await page.evaluate(
-    () => (window as unknown as { foliaRiseCount?: number }).foliaRiseCount ?? 0,
+    (key: string) => (window as unknown as Record<string, number | undefined>)[key] ?? 0,
+    RISE_COUNT_KEY,
   )
   expect(rises).toBeGreaterThan(0)
   // The camera sits at the far limit, plus visible detent give while banked
@@ -70,14 +72,16 @@ test('the detent gives visibly before it trips', async ({ page }) => {
   await ctrlWheel(page, 100, 2)
   await expect.poll(() => zoomOf(page), { timeout: 5_000 }).toBeCloseTo(FAR_LIMIT, 0)
   const risesBefore = await page.evaluate(
-    () => (window as unknown as { foliaRiseCount?: number }).foliaRiseCount ?? 0,
+    (key: string) => (window as unknown as Record<string, number | undefined>)[key] ?? 0,
+    RISE_COUNT_KEY,
   )
   await ctrlWheel(page, 20, 1)
   const pushed = await zoomOf(page)
   expect(pushed).toBeGreaterThan(FAR_LIMIT)
   expect(pushed).toBeLessThanOrEqual(FAR_LIMIT + DETENT_GIVE_MAX + 0.1)
   const risesAfter = await page.evaluate(
-    () => (window as unknown as { foliaRiseCount?: number }).foliaRiseCount ?? 0,
+    (key: string) => (window as unknown as Record<string, number | undefined>)[key] ?? 0,
+    RISE_COUNT_KEY,
   )
   expect(risesAfter).toBe(risesBefore)
 })
@@ -85,10 +89,10 @@ test('the detent gives visibly before it trips', async ({ page }) => {
 test('escape signals rise without moving the camera', async ({ page }) => {
   const start = await zoomOf(page)
   await page.keyboard.press('Escape')
-  const rises = await page.evaluate(() => {
+  const rises = await page.evaluate((hook) => {
     const canvas = document.querySelector('canvas')
-    return canvas ? Number(canvas.dataset.rises ?? 0) : 0
-  })
+    return canvas ? Number(canvas.dataset[hook] ?? 0) : 0
+  }, 'rises' as CanvasHookName)
   expect(rises).toBe(1)
   expect(await zoomOf(page)).toBe(start)
 })
@@ -146,7 +150,7 @@ test('ctrl+wheel paints a frame through the demand loop', async ({ page }) => {
     }
   `)
   await page.reload()
-  await expect(page.locator('canvas[data-assets="drawn"]')).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator(canvasHookSelector('assets', 'drawn'))).toBeVisible({ timeout: 60_000 })
   const calls = () =>
     page.evaluate(() => (window as unknown as { foliaDrawCalls: number }).foliaDrawCalls)
   await page.waitForTimeout(300)

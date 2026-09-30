@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test'
+import { canvasHookAttribute, canvasHookSelector, PROJECTOR_KEY } from '../src/testHooks'
 
 // fol-xo6: hover picking on the town-wide batches. The pointer raycasts the
 // shared BatchedMeshes and the hit vertex's groupId — already the global
@@ -12,34 +13,40 @@ function screenPoint(
   page: Page,
   world: [number, number, number],
 ): Promise<{ x: number; y: number }> {
-  return page.evaluate((w: [number, number, number]) => {
-    const project = window.foliaProject
-    if (!project) throw new Error('foliaProject is not mounted yet')
-    return project(w)
-  }, world)
+  type Projector = (w: [number, number, number]) => { x: number; y: number }
+  return page.evaluate(
+    ([w, key]: [[number, number, number], string]) => {
+      const project = (window as unknown as Record<string, Projector | undefined>)[key]
+      if (!project) throw new Error(`${key} is not mounted yet`)
+      return project(w)
+    },
+    [world, PROJECTOR_KEY] as [[number, number, number], string],
+  )
 }
 
 async function hoverSettled(page: Page): Promise<void> {
   // State-based, not time-based — but under a full parallel SwiftShader run
   // each demand frame is slow, so the bound is generous.
-  await expect(page.locator('canvas[data-hover-settled="true"]')).toBeVisible({ timeout: 30_000 })
+  await expect(page.locator(canvasHookSelector('hoverSettled', 'true'))).toBeVisible({
+    timeout: 30_000,
+  })
 }
 
 async function hoverAt(page: Page, world: [number, number, number]): Promise<string> {
   const point = await screenPoint(page, world)
   await page.mouse.move(point.x, point.y)
-  const canvas = page.locator('canvas[data-hover]')
-  await expect(canvas).not.toHaveAttribute('data-hover', '', { timeout: 15_000 })
+  const canvas = page.locator(canvasHookSelector('hover'))
+  await expect(canvas).not.toHaveAttribute(canvasHookAttribute('hover'), '', { timeout: 15_000 })
   await hoverSettled(page)
-  const slot = await canvas.getAttribute('data-hover')
+  const slot = await canvas.getAttribute(canvasHookAttribute('hover'))
   if (!slot) throw new Error('hover resolved empty after settling')
   return slot
 }
 
 async function bothAssetsDrawn(page: Page): Promise<void> {
-  await expect(page.locator('canvas[data-assets="drawn"]')).toBeVisible({ timeout: 60_000 })
+  await expect(page.locator(canvasHookSelector('assets', 'drawn'))).toBeVisible({ timeout: 60_000 })
   await expect(
-    page.locator('canvas[data-drawn-assets="cortico/fragment,cortico/meadow"]'),
+    page.locator(canvasHookSelector('drawnAssets', 'cortico/fragment,cortico/meadow')),
   ).toBeVisible({
     timeout: 60_000,
   })

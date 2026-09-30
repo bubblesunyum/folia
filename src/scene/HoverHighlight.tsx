@@ -10,15 +10,9 @@ import { useEffect, useRef } from 'react'
 import { type BatchedMesh, Raycaster, Vector2, Vector3, type Vector4 } from 'three'
 import { group } from '../materials/features'
 import { glowForNight, HOVER_LIFT, slotFromGroupId, springTowards } from '../picking/hover'
+import { clearProjector, setCanvasHook, setProjector } from '../testHooks'
 import { useLook } from '../time/lookContext'
 import { useTownBatches } from './TownBatches'
-
-declare global {
-  interface Window {
-    /** Test-only projector: world position → canvas CSS pixels. */
-    foliaProject?: (world: readonly [number, number, number]) => { x: number; y: number }
-  }
-}
 
 export function HoverHighlight() {
   const { meshes } = useTownBatches()
@@ -69,18 +63,18 @@ export function HoverHighlight() {
       // pointer over the leave's clear.
       rig.current.dirty = false
       rig.current.hovered = null
-      canvas.dataset.hover = ''
-      canvas.dataset.hoverSettled = ''
+      setCanvasHook(canvas, 'hover', '')
+      setCanvasHook(canvas, 'hoverSettled', '')
       invalidate()
     }
-    window.foliaProject = (world) => {
+    setProjector(window, (world) => {
       const rect = canvas.getBoundingClientRect()
       const ndc = new Vector3(world[0], world[1], world[2]).project(camera)
       return {
         x: rect.left + ((ndc.x + 1) / 2) * rect.width,
         y: rect.top + ((1 - ndc.y) / 2) * rect.height,
       }
-    }
+    })
     canvas.addEventListener('pointermove', onPointerMove)
     canvas.addEventListener('pointerdown', onPointerDown)
     canvas.addEventListener('pointerup', onPointerUp)
@@ -90,7 +84,7 @@ export function HoverHighlight() {
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointerup', onPointerUp)
       canvas.removeEventListener('pointerleave', onPointerLeave)
-      delete window.foliaProject
+      clearProjector(window)
       // Leave no lifted groups behind on unmount.
       const states = group.uniforms.uGroupState.value as Vector4[]
       for (const slot of rig.current.springs.keys()) states[slot]?.set(0, 0, 0, 0)
@@ -119,8 +113,8 @@ export function HoverHighlight() {
       }
       if (slot !== r.hovered) {
         r.hovered = slot
-        gl.domElement.dataset.hover = slot === null ? '' : String(slot)
-        gl.domElement.dataset.hoverSettled = ''
+        setCanvasHook(gl.domElement, 'hover', slot === null ? '' : String(slot))
+        setCanvasHook(gl.domElement, 'hoverSettled', '')
       }
     }
     const glowTarget = glowForNight(night)
@@ -147,7 +141,7 @@ export function HoverHighlight() {
       (r.hovered === null
         ? r.springs.size === 0
         : hovered !== null && hovered.lift === HOVER_LIFT && hovered.glow === glowTarget)
-    gl.domElement.dataset.hoverSettled = settled ? 'true' : ''
+    setCanvasHook(gl.domElement, 'hoverSettled', settled ? 'true' : '')
     // Settle-driven: any frame that leaves the hover easing (or a fresh
     // pointer unpicked) asks for the next one, so the loop can neither stall
     // early nor spin once everything rests.

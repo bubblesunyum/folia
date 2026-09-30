@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   AMBIENT_INTERVAL_MS,
   AmbientScheduler,
+  bindAmbientReadingSignal,
   isAmbientReading,
+  isReadingTarget,
   setAmbientReading,
 } from './ambient'
 
@@ -141,5 +143,126 @@ describe('ambient reading flag', () => {
     expect(scheduler.tick(1000, read())).toBe(false)
     setAmbientReading(false)
     expect(scheduler.tick(1000, read())).toBe(true)
+  })
+})
+
+describe('ambient reading signal', () => {
+  beforeEach(() => setAmbientReading(false))
+
+  it('reads panel targets, and nothing else, as reading', () => {
+    // Generic fakes on purpose: the test pins the behavior (inside the
+    // bench reads as reading), not which selector recognizes the bench.
+    const inPanel = { closest: () => ({}) }
+    const outside = { closest: () => null }
+    expect(isReadingTarget(inPanel as unknown as EventTarget)).toBe(true)
+    expect(isReadingTarget(outside as unknown as EventTarget)).toBe(false)
+    expect(isReadingTarget(null)).toBe(false)
+    // Non-element targets (window, text nodes) never count as the panel.
+    expect(isReadingTarget({} as unknown as EventTarget)).toBe(false)
+  })
+
+  /** Minimal document double: add/remove listeners plus a manual emit. */
+  function fakeDocument() {
+    const handlers = new Map<string, Array<(event: { target: unknown }) => void>>()
+    return {
+      added: handlers,
+      emit(type: string, target: unknown) {
+        for (const handler of handlers.get(type) ?? []) handler({ target })
+      },
+      asDocument(): Document {
+        return {
+          addEventListener: (type: string, handler: (event: never) => void) => {
+            const list = handlers.get(type) ?? []
+            list.push(handler as (event: { target: unknown }) => void)
+            handlers.set(type, list)
+          },
+          removeEventListener: (type: string, handler: (event: never) => void) => {
+            handlers.set(
+              type,
+              (handlers.get(type) ?? []).filter((h) => h !== (handler as unknown)),
+            )
+          },
+        } as unknown as Document
+      },
+    }
+  }
+
+  it('pauses the clock while the pointer is over the panel, resumes after', () => {
+    const doc = fakeDocument()
+    const cleanup = bindAmbientReadingSignal(doc.asDocument())
+    const inPanel = { closest: () => ({}) }
+    const canvas = { closest: () => null }
+    const { scheduler, seen } = registered()
+
+    scheduler.tick(0, { visible: true, reading: isAmbientReading() })
+    doc.emit('pointerover', inPanel)
+    expect(isAmbientReading()).toBe(true)
+    expect(scheduler.tick(1000, { visible: true, reading: isAmbientReading() })).toBe(false)
+    expect(seen).toHaveLength(1)
+
+    doc.emit('pointerover', canvas)
+    expect(isAmbientReading()).toBe(false)
+    expect(
+      scheduler.tick(1000 + AMBIENT_INTERVAL_MS + 5, {
+        visible: true,
+        reading: isAmbientReading(),
+      }),
+    ).toBe(true)
+    expect(seen).toHaveLength(2)
+    cleanup()
+  })
+
+  it('tracks focus moving into and out of the panel', () => {
+    const doc = fakeDocument()
+    const cleanup = bindAmbientReadingSignal(doc.asDocument())
+    const inPanel = { closest: () => ({}) }
+    doc.emit('focusin', inPanel)
+    expect(isAmbientReading()).toBe(true)
+    doc.emit('focusout', inPanel)
+    expect(isAmbientReading()).toBe(false)
+    cleanup()
+  })
+
+  it('holds reading when the pointer leaves while focus stays inside', () => {
+    const doc = fakeDocument()
+    const cleanup = bindAmbientReadingSignal(doc.asDocument())
+    const inPanel = { closest: () => ({}) }
+    const canvas = { closest: () => null }
+    doc.emit('focusin', inPanel)
+    expect(isAmbientReading()).toBe(true)
+    // The pointer moving off onto the canvas must not clear the focus latch.
+    doc.emit('pointerover', canvas)
+    expect(isAmbientReading()).toBe(true)
+    // Focus leaving too clears the last latch.
+    doc.emit('focusout', inPanel)
+    expect(isAmbientReading()).toBe(false)
+    cleanup()
+  })
+
+  it('holds reading when focus leaves while the pointer stays over the panel', () => {
+    const doc = fakeDocument()
+    const cleanup = bindAmbientReadingSignal(doc.asDocument())
+    const inPanel = { closest: () => ({}) }
+    const canvas = { closest: () => null }
+    doc.emit('pointerover', inPanel)
+    expect(isAmbientReading()).toBe(true)
+    // Focus moving out must not clear the pointer latch.
+    doc.emit('focusout', inPanel)
+    expect(isAmbientReading()).toBe(true)
+    // The pointer leaving too clears the last latch.
+    doc.emit('pointerover', canvas)
+    expect(isAmbientReading()).toBe(false)
+    cleanup()
+  })
+
+  it('cleanup detaches and clears both latches', () => {
+    const doc = fakeDocument()
+    const cleanup = bindAmbientReadingSignal(doc.asDocument())
+    doc.emit('pointerover', { closest: () => ({}) })
+    doc.emit('focusin', { closest: () => ({}) })
+    expect(isAmbientReading()).toBe(true)
+    cleanup()
+    expect(isAmbientReading()).toBe(false)
+    expect([...doc.added.values()].every((list) => list.length === 0)).toBe(true)
   })
 })
