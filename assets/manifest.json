@@ -1,6 +1,21 @@
 {
+  "cortico/forum": {
+    "hash": "428c0c314cdd2ae8",
+    "bytes": 52324,
+    "triangles": {
+      "cream": 3280,
+      "gold": 1048,
+      "neon": 1572
+    },
+    "groups": {
+      "forum": 7,
+      "medley": 8,
+      "platform": 9,
+      "recorder": 10
+    }
+  },
   "cortico/fragment": {
-    "hash": "0dce4787e6fdee61",
+    "hash": "c570b19fa5c399d4",
     "bytes": 1614580,
     "triangles": {
       "ground": 5664,
@@ -19,7 +34,7 @@
     }
   },
   "cortico/meadow": {
-    "hash": "7ea0421c79fffcee",
+    "hash": "95bd7a6a4cb5fe5d",
     "bytes": 201392,
     "triangles": {
       "cream": 3584,

@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test'
 import { canvasHookAttribute, canvasHookSelector, PROJECTOR_KEY } from '../src/testHooks'
+import { waitForTownDrawn } from './helpers'
 
 // fol-xo6: hover picking on the town-wide batches. The pointer raycasts the
 // shared BatchedMeshes and the hit vertex's groupId — already the global
@@ -44,12 +45,7 @@ async function hoverAt(page: Page, world: [number, number, number]): Promise<str
 }
 
 async function bothAssetsDrawn(page: Page): Promise<void> {
-  await expect(page.locator(canvasHookSelector('assets', 'drawn'))).toBeVisible({ timeout: 60_000 })
-  await expect(
-    page.locator(canvasHookSelector('drawnAssets', 'cortico/fragment,cortico/meadow')),
-  ).toBeVisible({
-    timeout: 60_000,
-  })
+  await waitForTownDrawn(page, 'cortico/forum,cortico/fragment,cortico/meadow')
 }
 
 test('hover addresses the meadow terrace, not the fragment one', async ({ page }) => {

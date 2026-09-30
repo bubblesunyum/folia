@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { MAX_GROUPS } from '../../src/groupSlots'
 import { allocateSlots, assetLocalIds, type GroupRegistry } from './groups'
@@ -102,5 +104,68 @@ describe('assetLocalIds', () => {
       shell: 3,
       planting: 4,
     })
+  })
+
+  it('reads the forum params: one group per pedestal plus the floor', () => {
+    expect(assetLocalIds('cortico/forum')).toEqual({
+      forum: 0,
+      medley: 1,
+      platform: 2,
+      recorder: 3,
+    })
+  })
+})
+
+describe('cortico/forum slots and batches (fol-l1r.4)', () => {
+  type ManifestRecord = {
+    groups?: GroupRegistry[string]
+    triangles?: Record<string, number>
+  }
+
+  function readManifest(): Record<string, ManifestRecord> {
+    return JSON.parse(
+      readFileSync(join(resolve(import.meta.dirname, '../..'), 'assets/manifest.json'), 'utf8'),
+    )
+  }
+
+  const registry: GroupRegistry = {
+    'cortico/fragment': { ground: 1, terrace: 4, canopy: 0, shell: 3, planting: 2 },
+    'cortico/meadow': { planting: 5, terrace: 6 },
+  }
+
+  it('gives the three pedestals disjoint slots after fragment and meadow', () => {
+    // Sorted name order: forum, medley, platform, recorder.
+    const { table, remap } = allocateSlots(
+      'cortico/forum',
+      assetLocalIds('cortico/forum'),
+      registry,
+    )
+    expect(table).toEqual({ forum: 7, medley: 8, platform: 9, recorder: 10 })
+    expect([...remap.values()].sort((a, b) => a - b)).toEqual([7, 8, 9, 10])
+  })
+
+  it('the committed manifest matches a fresh allocation (no slot collisions)', () => {
+    const manifest = readManifest()
+    const rest: GroupRegistry = Object.fromEntries(
+      Object.entries(manifest)
+        .filter(([asset]) => asset !== 'cortico/forum')
+        .map(([asset, record]) => [asset, record.groups ?? {}]),
+    )
+    const { table } = allocateSlots('cortico/forum', assetLocalIds('cortico/forum'), rest)
+    expect(manifest['cortico/forum']?.groups).toEqual(table)
+    // Every town-wide slot is used at most once.
+    const slots = Object.values(manifest).flatMap((record) => Object.values(record.groups ?? {}))
+    expect(new Set(slots).size).toBe(slots.length)
+    expect(Math.max(...slots)).toBeLessThan(MAX_GROUPS)
+  })
+
+  it('the forum stays lean and reuses shared batches only', () => {
+    const triangles = readManifest()['cortico/forum']?.triangles ?? {}
+    // Shared batches only: no new materials, so no new programs (D-012).
+    expect(Object.keys(triangles).sort()).toEqual(['cream', 'gold', 'neon'])
+    // ~6k tris against the fragment's ~132k: the slice-exit headroom (D-063)
+    // must survive the forum.
+    const total = Object.values(triangles).reduce((a, b) => a + b, 0)
+    expect(total).toBeLessThan(10_000)
   })
 })

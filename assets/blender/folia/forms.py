@@ -8,9 +8,63 @@ import math
 import bmesh
 import numpy as np
 
-from .mesh import geometry_nodes, new_object, solidify_subdivide
+from .mesh import apply_modifiers, geometry_nodes, new_object, solidify_subdivide
 
 TAU = math.tau
+
+
+# --- small primitives --------------------------------------------------------
+
+
+def box(name, sx, sy, sz):
+    """A sharp box centred on the origin; `bevel` rounds it (D-011)."""
+    hx, hy, hz = sx / 2, sy / 2, sz / 2
+    verts = [(-hx, -hy, -hz), (hx, -hy, -hz), (hx, hy, -hz), (-hx, hy, -hz),
+             (-hx, -hy, hz), (hx, -hy, hz), (hx, hy, hz), (-hx, hy, hz)]
+    faces = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
+             (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+    return new_object(name, verts, faces)
+
+
+def cylinder(name, r_base, r_top, height, sides=24, rings=2):
+    """A tapered cylinder standing on z=0, capped both ends."""
+    verts, faces = [], []
+    for k in range(rings + 1):
+        t = k / rings
+        r = r_base + (r_top - r_base) * t
+        z = t * height
+        for s in range(sides):
+            theta = TAU * s / sides
+            verts.append((r * math.cos(theta), r * math.sin(theta), z))
+    for k in range(rings):
+        for s in range(sides):
+            a, b = k * sides + s, k * sides + (s + 1) % sides
+            faces.append((a, a + sides, b + sides, b))
+    for k, flip in ((0, True), (rings, False)):
+        centre = len(verts)
+        verts.append((0.0, 0.0, k / rings * height))
+        for s in range(sides):
+            a, b = k * sides + s, k * sides + (s + 1) % sides
+            faces.append((centre, b, a) if flip else (centre, a, b))
+    return new_object(name, verts, faces)
+
+
+def circle_points(radius, n, z=0.0, centre=(0.0, 0.0)):
+    """A flat ring path for `tube`: neon circles and trim bands."""
+    theta = np.linspace(0, TAU, n, endpoint=False)
+    return np.c_[centre[0] + radius * np.cos(theta), centre[1] + radius * np.sin(theta),
+                 np.full(n, z)]
+
+
+def bevel(ob, width=0.02, segments=2):
+    """Round the sharp edges: a 2-segment bevel is the D-011 default."""
+    mod = ob.modifiers.new("bevel", "BEVEL")
+    mod.width = width
+    mod.segments = segments
+    mod.limit_method = "ANGLE"
+    apply_modifiers(ob)
+    ob.data.shade_smooth()
+    return ob
 
 
 # --- curves ------------------------------------------------------------------

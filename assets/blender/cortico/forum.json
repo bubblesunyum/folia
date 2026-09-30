@@ -1,0 +1,76 @@
+{
+  "seed": 31,
+  "lod": "hi",
+  "groups": {
+    "forum": 0,
+    "medley": 1,
+    "platform": 2,
+    "recorder": 3
+  },
+  "centre": [-3.4, -2.6],
+  "floor_top": 2.35,
+  "medallion": {
+    "radius": 2.2,
+    "harmonics": [0.04, 0.02],
+    "samples": 64,
+    "thickness": 0.12,
+    "edge_radius": 0.05,
+    "rings": 8,
+    "edge_segments": 2,
+    "rim_bias": 1.5
+  },
+  "trim": {
+    "radius": 0.045,
+    "offset": 0.05,
+    "drop": 0.06,
+    "sides": 8
+  },
+  "neon": {
+    "ring_radius": 1.5,
+    "radius": 0.025,
+    "lift": 0.035,
+    "samples": 72,
+    "sides": 6
+  },
+  "pedestal": {
+    "radius": 1.05,
+    "height": 1.0,
+    "r_base": 0.32,
+    "r_top": 0.28,
+    "sides": 24,
+    "spots": [
+      { "slug": "platform", "group": "platform", "at": 90 },
+      { "slug": "recorder", "group": "recorder", "at": 210 },
+      { "slug": "medley", "group": "medley", "at": 330 }
+    ]
+  },
+  "platform": {
+    "base": [0.62, 0.44, 0.05],
+    "keys": [0.5, 0.3, 0.012],
+    "screen": [0.62, 0.04, 0.4],
+    "tilt": 0.26,
+    "bevel": 0.015,
+    "neon": { "radius": 0.018, "sides": 6, "lift": 0.035 }
+  },
+  "recorder": {
+    "slab": [0.34, 0.05, 0.66],
+    "screen": [0.26, 0.012, 0.54],
+    "tilt": 0.14,
+    "bevel": 0.02,
+    "neon": { "ring": 0.3, "radius": 0.02, "lift": 0.03, "samples": 48, "sides": 6 }
+  },
+  "medley": {
+    "base": [0.32, 0.28, 0.1],
+    "bars": [0.18, 0.32, 0.5, 0.62, 0.5, 0.32, 0.18],
+    "spacing": 0.08,
+    "bevel": 0.012,
+    "neon": { "lift": 0.06, "foot": 0.28, "tube": 0.022, "sides": 6 }
+  },
+  "bake": {
+    "ao_distance": 2.5,
+    "ao_samples": 64,
+    "night_samples": 64,
+    "neon_strength": 12,
+    "smooth": 3
+  }
+}
