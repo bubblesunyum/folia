@@ -32,6 +32,7 @@ model's own default applies.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -59,11 +60,27 @@ def run(*args, timeout=15):
         return ""
 
 
+def opencode_bin():
+    """The opencode CLI: $OPENCODE_BIN, then PATH, then the official
+    installer's ~/.opencode/bin. The installer puts that directory on PATH
+    only in ~/.zshrc, which the non-interactive shells agents run in (the
+    Claude Code desktop app, Codex) never source, so PATH alone misses a
+    working install. Falls back to the bare name, so a missing CLI still
+    surfaces as FileNotFoundError at the call site."""
+    explicit = os.environ.get("OPENCODE_BIN")
+    if explicit:
+        return explicit
+    found = shutil.which("opencode")
+    if found:
+        return found
+    installed = Path.home() / ".opencode/bin/opencode"
+    return str(installed) if os.access(installed, os.X_OK) else "opencode"
+
 def detect():
     """(candidates, backends): model ids offerable for roster roles,
     and a one-line account of where they came from."""
     seen, backends = [], []
-    opencode = [l.strip() for l in run("opencode", "models").splitlines()
+    opencode = [l.strip() for l in run(opencode_bin(), "models").splitlines()
                 if "/" in l.strip()]
     if opencode:
         seen += [m for m in opencode if m not in seen]

@@ -84,6 +84,12 @@ class AgentTests(unittest.TestCase):
         self.env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}",
                         FAKE_LOG=str(self.log))
         self.env.pop("OPENCODE_CONFIG_CONTENT", None)
+        # An empty home, so the ~/.opencode/bin fallback never reaches this
+        # machine's real install: every test runs the fake or nothing.
+        home = root / "home"
+        home.mkdir()
+        self.env["HOME"] = str(home)
+        self.env.pop("OPENCODE_BIN", None)
 
     def agent(self, *args, **fake):
         env = dict(self.env, **{f"FAKE_{k.upper()}": v for k, v in fake.items()})
@@ -232,6 +238,26 @@ class AgentTests(unittest.TestCase):
         out = self.agent("reviewer-taste", "review")
         self.assertEqual(out.returncode, 1)
         self.assertIn("opencode is not on PATH", out.stderr)
+
+    def test_the_installer_bin_is_found_off_path(self):
+        # The official installer adds ~/.opencode/bin to PATH only in ~/.zshrc,
+        # which agent shells never source.
+        installed = Path(self.env["HOME"]) / ".opencode/bin"
+        installed.mkdir(parents=True)
+        shutil.move(str(self.root / "bin/opencode"), installed / "opencode")
+        self.env["PATH"] = "/usr/bin:/bin"
+        out = self.agent("reviewer-taste", "review", events=text_event("ok"))
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout.strip(), "ok")
+
+    def test_opencode_bin_overrides_path(self):
+        elsewhere = self.root / "elsewhere"
+        elsewhere.mkdir()
+        shutil.move(str(self.root / "bin/opencode"), elsewhere / "opencode")
+        self.env["OPENCODE_BIN"] = str(elsewhere / "opencode")
+        out = self.agent("reviewer-taste", "review", events=text_event("ok"))
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout.strip(), "ok")
 
     def test_opencode_1x_is_refused_with_the_upgrade(self):
         for version in ("1.18.31", "opencode v1.18.33", "v1.18.31"):

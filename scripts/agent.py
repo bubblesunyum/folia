@@ -42,7 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OPENCODE_AGENTS = ROOT / ".opencode/agent"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from models import model_for, variant_for
+from models import model_for, opencode_bin, variant_for
 
 MAX_ROUNDS = 3
 # Long enough for an implementer that runs the gate twice; short enough that a
@@ -86,11 +86,12 @@ def require_opencode_v2():
     `opencode` formula is still 1.x; v2 is the official install script or a
     separate formula, so `brew upgrade opencode` alone stays broken."""
     try:
-        out = subprocess.run(["opencode", "--version"], capture_output=True,
+        out = subprocess.run([opencode_bin(), "--version"], capture_output=True,
                              text=True, stdin=subprocess.DEVNULL, cwd=ROOT,
                              timeout=30)
     except FileNotFoundError:
-        fail("opencode is not on PATH — install it, or spawn the role natively")
+        fail("opencode is not on PATH or in ~/.opencode/bin — install it, set OPENCODE_BIN, "
+             "or spawn the role natively")
     except OSError as exc:
         fail(f"opencode can't be run ({exc}) — check the install")
     except subprocess.TimeoutExpired:
@@ -154,7 +155,7 @@ def require_image_model(model):
     if not separator:
         fail(f"reviewer-design model {model} has no provider ID")
     try:
-        out = subprocess.run(["opencode", "models", provider, "--verbose"],
+        out = subprocess.run([opencode_bin(), "models", provider, "--verbose"],
                              capture_output=True, text=True, stdin=subprocess.DEVNULL,
                              cwd=ROOT, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
@@ -222,11 +223,12 @@ def rounds_so_far(session):
     """User messages already in a session, read back from opencode itself so
     the cap can't be dodged by losing a counter file."""
     try:
-        out = subprocess.run(["opencode", "session", "export", session], capture_output=True,
+        out = subprocess.run([opencode_bin(), "session", "export", session], capture_output=True,
                              text=True, stdin=subprocess.DEVNULL, cwd=ROOT,
                              timeout=EXPORT_TIMEOUT_SECONDS)
     except FileNotFoundError:
-        fail("opencode is not on PATH — install it, or spawn the role natively")
+        fail("opencode is not on PATH or in ~/.opencode/bin — install it, set OPENCODE_BIN, "
+             "or spawn the role natively")
     except subprocess.TimeoutExpired:
         fail(f"`opencode session export {session}` hung for {EXPORT_TIMEOUT_SECONDS}s — "
              f"the round count can't be checked, so nothing was sent")
@@ -280,7 +282,7 @@ def run_agent(agent, model, variant, session, prompt):
     # `--standalone`: opencode 2 otherwise hands the run to a shared background
     # service, which never sees this process's OPENCODE_CONFIG_CONTENT (so no
     # agent promotion and no /tmp grant) and interrupts runs sharing it.
-    command = ["opencode", "run", "--standalone", "--format", "json", "--agent", agent,
+    command = [opencode_bin(), "run", "--standalone", "--format", "json", "--agent", agent,
                "-m", f"{model}#{variant}" if variant else model]
     if session:
         command += ["--session", session]
@@ -293,7 +295,8 @@ def run_agent(agent, model, variant, session, prompt):
                              stdin=subprocess.DEVNULL, cwd=ROOT, env=env,
                              timeout=TIMEOUT_SECONDS)
     except FileNotFoundError:
-        fail("opencode is not on PATH — install it, or spawn the role natively")
+        fail("opencode is not on PATH or in ~/.opencode/bin — install it, set OPENCODE_BIN, "
+             "or spawn the role natively")
     except subprocess.TimeoutExpired:
         fail(f"no reply after {TIMEOUT_SECONDS // 60} minutes — "
              f"`opencode session list` shows where it got to")

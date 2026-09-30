@@ -45,7 +45,9 @@ Run `reviewer-design` only when the change affects the screen; it must inspect
 every listed capture. Each role gets its own prompt and the same packet, outside
 the calling session. A non-zero exit is a reviewer that didn't run, not one that
 found nothing — spawn it natively instead. Run a role with no suitable roster
-model natively too.
+model natively too. `agent.py` looks for opencode on PATH, then in the
+installer's `~/.opencode/bin` (agent shells don't source `~/.zshrc`, where the
+installer puts it on PATH), or wherever `OPENCODE_BIN` points.
 
 Review a change that doesn't build yet and you'll get findings about the
 breakage instead of the design, so keep the order.
