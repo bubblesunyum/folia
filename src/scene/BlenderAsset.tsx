@@ -7,6 +7,9 @@ import { reportSwap, useAssetUrl } from '../assets/useAssetUrl'
 import { derivedBatches } from '../materials/shared'
 import { useTownBatches } from './TownBatches'
 
+/** Assets registered and drawn in this canvas, for tests that need both. */
+const drawnAssets = new Set<string>()
+
 /** A packed Blender asset, contributing its geometry to the town-wide batches. */
 export function BlenderAsset({ asset }: { asset: string }) {
   const url = useAssetUrl(asset)
@@ -26,11 +29,17 @@ export function BlenderAsset({ asset }: { asset: string }) {
         reportSwap(asset)
         // Tests wait on this rather than on a timeout.
         canvas.dataset.assets = 'drawn'
+        // ...and on every registered asset, not just the first: with two
+        // assets sharing the batches the flag above fires for whichever
+        // parses first, while this lists what is actually in the batches.
+        drawnAssets.add(asset)
+        canvas.dataset.drawnAssets = [...drawnAssets].sort().join(',')
       })
     })
     return () => {
       cancelAnimationFrame(outer)
       cancelAnimationFrame(inner)
+      drawnAssets.delete(asset)
       unregisterAsset(asset)
     }
   }, [asset, geometries, registerAsset, unregisterAsset, canvas])

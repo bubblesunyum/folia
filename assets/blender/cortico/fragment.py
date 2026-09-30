@@ -8,22 +8,14 @@ import math
 
 import numpy as np
 
-from folia import foliage, forms
+from folia import forms, terraces
 from folia.mesh import Part
 
 TAU = math.tau
 
 
 def _place(ob, x, y, z=0.0, rot=0.0):
-    ob.location = (x, y, z)
-    ob.rotation_euler = (0.0, 0.0, rot)
-    return ob
-
-
-def _outline_point(outline, normal, at):
-    """The point and outward normal at fraction `at` around an outline."""
-    i = int(at * len(outline)) % len(outline)
-    return outline[i], normal[i]
+    return terraces.place(ob, x, y, z, rot)
 
 
 def assemble(p, rng):
@@ -33,33 +25,11 @@ def assemble(p, rng):
     ground = p["ground"]
     parts.append(Part(forms.disc("ground", ground["radius"], ground["rings"], ground["sides"]), "ground", g["ground"]))
 
-    # Terraces: each level a blob outline with its own seeded wobble.
-    t = p["terraces"]
-    outlines, levels = [], t["levels"]
-    for i, level in enumerate(levels):
-        bottom = level.get("bottom", levels[i - 1]["top"] if i else 0.0)
-        outline = forms.blob_outline(level["radius"], t["harmonics"], rng, t["samples"]) + level["centre"]
-        outlines.append(outline)
-        slab = forms.slab(f"terrace{i}", outline, level["top"], level["top"] - bottom, t["edge_radius"],
-                          t["rings"], t["edge_segments"], t["rim_bias"])
-        parts.append(Part(slab, "cream", g["terrace"]))
-
-        # Gold trim band around the side of each level.
-        trim = p["trim"]
-        z = max(level["top"] - trim["drop"], bottom + t["edge_radius"])
-        ring = outline + forms.outline_normals(outline) * (t["edge_radius"] + trim["radius"] * 0.4)
-        band = forms.tube(f"trim{i}", np.c_[ring, np.full(len(ring), z)], trim["radius"], trim["sides"], closed=True)
-        parts.append(Part(band, "gold", g["terrace"]))
-
-    # Neon in the groove under one terrace's lip, along part of its outline.
-    n = p["neon"]
-    outline = outlines[n["level"]]
-    normal = forms.outline_normals(outline)
-    a, b = (int(f * len(outline)) for f in n["arc"])
-    z = levels[n["level"] - 1]["top"] + n["lift"]
-    line = outline[a:b] + normal[a:b] * n["offset"]
-    neon = forms.tube("neon", np.c_[line, np.full(len(line), z)], n["radius"], n["sides"])
-    parts.append(Part(neon, "neon", g["terrace"]))
+    # Terraces with gold trim, neon in the groove under a lip, foliage
+    # spilling off the edges: the shared terrace-cluster composables.
+    t_parts, outlines, levels = terraces.slabs_and_trim(p, rng, g["terrace"])
+    parts.extend(t_parts)
+    parts.append(terraces.groove_neon(p, outlines, levels, g["terrace"]))
 
     # The canopy: a fluted trunk flaring into a perforated umbrella.
     c = p["canopy"]
@@ -85,15 +55,7 @@ def assemble(p, rng):
             parts.append(Part(_place(ob, sx, sy, base, angle), "cream", g["shell"]))
 
     # Foliage clumps sitting on terrace edges, leaning out over them.
-    pl = p["planting"]
-    for i, spot in enumerate(pl["clumps"]):
-        outline = outlines[spot["level"]]
-        point, out = _outline_point(outline, forms.outline_normals(outline), spot["at"])
-        radii = spot["radii"]
-        x, y = point + out * radii[0] * pl["overhang"]
-        z = levels[spot["level"]]["top"] + radii[2] * 0.35
-        ob = foliage.clump(f"clump{i}", {**pl, "radii": radii}, rng)
-        parts.append(Part(_place(ob, x, y, z, rng.uniform(0, TAU)), "foliage", g["planting"]))
+    parts.extend(terraces.edge_planting(p, outlines, levels, rng, g["planting"]))
 
     # A pond set into the lowest terrace: water inside a cream coping, with a
     # short neon run along its far rim for the water to reflect (D-039). Its

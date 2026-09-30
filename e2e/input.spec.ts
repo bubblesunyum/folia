@@ -1,7 +1,7 @@
 import { expect, type Page, test } from '@playwright/test'
 import { DETENT_GIVE_MAX } from '../src/input/zoomModel'
 
-// ZOOM_LIMITS in src/input/ZoomRig.tsx: the look-dev camera sits at ~65 m.
+// ZOOM_LIMITS in src/input/ZoomRig.tsx: the look-dev camera sits at 80 m.
 const FAR_LIMIT = 90
 const KEY_STEP = 4
 
@@ -67,7 +67,7 @@ test('pushing past the far limit trips the rise detent', async ({ page }) => {
 })
 
 test('the detent gives visibly before it trips', async ({ page }) => {
-  await ctrlWheel(page, 100, 5)
+  await ctrlWheel(page, 100, 2)
   await expect.poll(() => zoomOf(page), { timeout: 5_000 }).toBeCloseTo(FAR_LIMIT, 0)
   const risesBefore = await page.evaluate(
     () => (window as unknown as { foliaRiseCount?: number }).foliaRiseCount ?? 0,

@@ -4,6 +4,7 @@ import { renderConfig } from '../debug'
 import { ZoomRig } from '../input/ZoomRig'
 import { StressDraws } from '../perf/StressDraws'
 import { Fragment } from './Fragment'
+import { HoverHighlight } from './HoverHighlight'
 import { Lights } from './Lights'
 import { MaterialLook } from './MaterialLook'
 import { SkyEnvironment } from './SkyEnvironment'
@@ -24,6 +25,7 @@ export function LookDevScene() {
       <Suspense fallback={null}>
         <Fragment />
       </Suspense>
+      <HoverHighlight />
       {renderConfig.stress > 0 && <StressDraws count={renderConfig.stress} />}
     </>
   )

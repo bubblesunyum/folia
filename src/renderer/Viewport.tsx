@@ -28,7 +28,9 @@ export function Viewport({
           dpr={dpr}
           frameloop={maxFps ? 'never' : 'demand'}
           gl={{ antialias: false, alpha: false }}
-          camera={{ fov: 18, near: 1, far: 300, position: [40, 34, 40] }}
+          // 80 m out along the look-dev direction: the two-asset town fits
+          // with margin, and the zoom-step grid lands the far limit exactly.
+          camera={{ fov: 18, near: 1, far: 300, position: [49.23, 41.38, 49.23] }}
         >
           <RenderedFlag onFirstFrame={onFirstFrame} />
           <ContextLossProvider onLostChange={setContextLost}>{children}</ContextLossProvider>
