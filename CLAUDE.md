@@ -24,8 +24,9 @@ Vite + React Router v8 (framework mode, `prerender`, fully static), R3F 9 + drei
 - **UI copy:** one-word labels, spacing instead of rules, no eyebrow kickers, in-world before flat chrome (spec: design rules).
 
 ## Patterns worth repeating
-These have paid off (review 2026-09-29), so new systems should follow them.
-- **Pure core, thin rig.** Logic lives in plain modules with Vitest (`zoomModel`, `sources`, `shadowFit`, `look.ts`); the R3F component only wires events and uniforms.
+These have paid off (reviews 2026-09-29 and 09-30), so new systems should follow them.
+- **Pure core, thin rig.** Logic lives in plain modules with Vitest (`zoomModel`, `townRegistry`, `panelDolly`, `intent`); the R3F component only wires events and uniforms.
+- **Identity over names, all or nothing.** Classify batches by material identity, never by name; a registration lands whole or rolls back, and replaced GPU objects are disposed after commit.
 - **Spikes end with numbers.** A cost table goes in the decision entry, measured on the `?perf=base` proxy.
 - **Fail closed.** Gates and pipeline steps throw on a contract break rather than degrade quietly: the SSR-boundary step, pack's `_ID` remap, the manifest lock, inert shader defaults.
 - **Render on demand (D-056).** Anything that animates goes through one scheduler and keeps the e2e idle-rest test green.
