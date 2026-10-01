@@ -60,4 +60,11 @@ if [ "$mode" = "--full" ]; then
   # written to /tmp/fol-*.png where scripts/review.sh collects them.
   # The HTML report would otherwise open and block on the first failure.
   step "e2e" env PW_TEST_HTML_REPORT_OPEN=never "${PNPM[@]}" test:e2e
+else
+  # A skipped step must not keep an older lane's verdict (fol-fjv): readers
+  # take a stale e2e.log + .status for a suite that just ran. Same class as
+  # tests.log before the probe_step fix.
+  rm -f "$LOGS/e2e.log" "$LOGS/e2e.log.status"
+  echo "  skip  e2e ($mode lane, --full only)"
+  echo "0 e2e (skipped $mode)" >> "$LOGS/timings"
 fi
