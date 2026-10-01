@@ -24,6 +24,7 @@ export const customStorage: Readonly<Record<string, CustomStorage>> = {
   _ID: { componentType: UNSIGNED_BYTE, normalized: false, range: 1 },
   _AO: { componentType: UNSIGNED_BYTE, normalized: true, range: 1 },
   _NIGHT: { componentType: UNSIGNED_SHORT, normalized: true, range: 4 },
+  _SWAY: { componentType: UNSIGNED_BYTE, normalized: true, range: 1 },
 }
 
 /**
@@ -61,12 +62,16 @@ export type BatchSchema = Readonly<Record<string, number>>
 const BAKED: BatchSchema = { POSITION: 3, NORMAL: 3, _ID: 1, _AO: 1, _NIGHT: 3 }
 const UNBAKED: BatchSchema = { POSITION: 3, NORMAL: 3, _ID: 1 }
 
-/** One schema per shared-material batch. Neon and water are their own programs and bake nothing. */
+/**
+ * One schema per shared-material batch. Neon and water are their own programs
+ * and bake nothing. Foliage also carries the baked `_SWAY` sway weight; a
+ * second swaying batch adds `_SWAY: 1` to its schema here, no pack change.
+ */
 export const batchSchemas: Readonly<Record<string, BatchSchema>> = {
   cream: BAKED,
   gold: BAKED,
   ground: BAKED,
-  foliage: BAKED,
+  foliage: { ...BAKED, _SWAY: 1 },
   neon: UNBAKED,
   water: UNBAKED,
 }

@@ -1,9 +1,9 @@
-// fol-a83: the pack step carries the foliage-only `_SWAY` sway weight
-// (Blender bakes it, every other batch drops it at split) through
-// `validateDocument`, since the base schema file belongs to another workstream.
+// fol-a83 / fol-qwq: foliage carries the baked `_SWAY` sway weight (Blender
+// bakes it, every other batch drops it at split) through the shared batch
+// schemas and `customStorage`; `validateDocument` runs the generic check.
 import { Document } from '@gltf-transform/core'
 import { describe, expect, it } from 'vitest'
-import { packValues, UNSIGNED_BYTE } from '../../src/assets/batchSchema.ts'
+import { customStorage, packValues } from '../../src/assets/batchSchema.ts'
 import { validateDocument } from './pack'
 
 type SwayInput = {
@@ -71,12 +71,10 @@ describe('validateDocument with _SWAY', () => {
   })
 
   it('round-trips weights through the u8 packing', () => {
+    const sway = customStorage._SWAY
+    if (!sway) throw new Error('storage missing')
     const weights = new Float32Array([0, 0.25, 0.5, 0.75, 1])
-    const packed = packValues(weights, 1, {
-      componentType: UNSIGNED_BYTE,
-      normalized: true,
-      range: 1,
-    })
+    const packed = packValues(weights, 1, sway)
     for (const [i, w] of [...weights].entries()) {
       expect((packed[i] ?? 0) / 255).toBeCloseTo(w, 2)
     }

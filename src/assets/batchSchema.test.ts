@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   type AttributeInfo,
+  batchSchemas,
   customStorage,
   FLOAT,
   packValues,
   parseMeshName,
   UNSIGNED_BYTE,
+  UNSIGNED_SHORT,
   validateBatch,
 } from './batchSchema'
 
@@ -24,6 +26,18 @@ const i16 = (itemSize: number): AttributeInfo => ({
 const u8n = (itemSize: number): AttributeInfo => ({
   itemSize,
   componentType: UNSIGNED_BYTE,
+  normalized: true,
+})
+
+const u8id = (itemSize: number): AttributeInfo => ({
+  itemSize,
+  componentType: UNSIGNED_BYTE,
+  normalized: false,
+})
+
+const u16n = (itemSize: number): AttributeInfo => ({
+  itemSize,
+  componentType: UNSIGNED_SHORT,
   normalized: true,
 })
 
@@ -82,6 +96,68 @@ describe('validateBatch', () => {
     expect(validateBatch('glass', [], 'packed', schemas)).toEqual([
       'glass: no batch schema by that name',
     ])
+  })
+})
+
+describe('_SWAY in the shared schemas (fol-qwq)', () => {
+  const rawFoliage = {
+    POSITION: f32(3),
+    NORMAL: f32(3),
+    _ID: f32(1),
+    _AO: f32(1),
+    _NIGHT: f32(3),
+    _SWAY: f32(1),
+  }
+  const packedFoliage = {
+    POSITION: i16(3),
+    NORMAL: i16(3),
+    _ID: u8id(1),
+    _AO: u8n(1),
+    _NIGHT: u16n(3),
+    _SWAY: u8n(1),
+  }
+
+  it('stores _SWAY as normalized u8', () => {
+    expect(customStorage._SWAY).toEqual({
+      componentType: UNSIGNED_BYTE,
+      normalized: true,
+      range: 1,
+    })
+    expect(batchSchemas.foliage?._SWAY).toBe(1)
+    expect(batchSchemas.cream?._SWAY).toBeUndefined()
+  })
+
+  it('requires the weight on foliage and forbids it elsewhere', () => {
+    expect(validateBatch('foliage', [{ name: 'a', attributes: rawFoliage }], 'raw')).toEqual([])
+    expect(validateBatch('foliage', [{ name: 'a', attributes: packedFoliage }], 'packed')).toEqual(
+      [],
+    )
+    const { _SWAY: _, ...missing } = rawFoliage
+    expect(validateBatch('foliage', [{ name: 'a', attributes: missing }], 'raw')).toEqual([
+      'foliage/a: missing _SWAY',
+    ])
+    expect(
+      validateBatch('cream', [{ name: 'a', attributes: { ...packedFoliage } }], 'packed'),
+    ).toContain('cream/a: _SWAY is not in the schema')
+  })
+
+  it('rejects a _SWAY stored any other way than its fixed storage', () => {
+    expect(validateBatch('foliage', [{ name: 'a', attributes: packedFoliage }], 'raw')).toContain(
+      "foliage/a: _SWAY isn't stored as its raw storage",
+    )
+    const float = { ...packedFoliage, _SWAY: f32(1) }
+    expect(validateBatch('foliage', [{ name: 'a', attributes: float }], 'packed')).toEqual([
+      "foliage/a: _SWAY isn't stored as its packed storage",
+    ])
+  })
+
+  it('carries a second swaying batch with no pack change: schema only', () => {
+    const extended = { stone: { POSITION: 3, _SWAY: 1 } }
+    const raw = { POSITION: f32(3), _SWAY: f32(1) }
+    expect(validateBatch('stone', [{ name: 'a', attributes: raw }], 'raw', extended)).toEqual([])
+    expect(
+      validateBatch('stone', [{ name: 'a', attributes: { POSITION: f32(3) } }], 'raw', extended),
+    ).toEqual(['stone/a: missing _SWAY'])
   })
 })
 
