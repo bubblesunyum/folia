@@ -20,7 +20,8 @@ PNPM=(corepack pnpm run)
 step "typecheck" "${PNPM[@]}" typecheck
 step "lint" "${PNPM[@]}" lint
 # three and R3F stay out of the initial module graph (D-047); the walk starts
-# at index.html's module scripts and treats dynamic import() as the lazy boundary.
+# at the framework entries (src/root.tsx + src/routes/) and treats dynamic
+# import() as the lazy boundary.
 step "ssr-boundary" "${PNPM[@]}" check:ssr
 step "build" "${PNPM[@]}" build
 # Committed GLBs match their Blender sources (D-034); no Blender needed.

@@ -3,19 +3,25 @@
 // D-059's one-off grep only saw direct imports in src/shell/**. The real trap
 // is transitive: a shell file importing a helper that imports three (spike 7
 // nearly did exactly this with the zoom event constants). So this walks the
-// static import graph from index.html's module scripts and fails closed:
-// every reachable bare specifier must be on ALLOWLIST (react only —
-// everything else, including three-ecosystem packages like `postprocessing`
-// that carry three without naming it, is a violation), and every relative or
-// root-absolute specifier must resolve to a walked file. Exotic specifiers
-// (virtual:, ?worker) take the bare-specifier path and fail as outside ALLOWLIST.
-// Dynamic `import()` is the sanctioned lazy boundary (App's TownCanvas and
-// LevaPanel) and is not followed; statement-level `import type` is erased at
-// build and is not followed either.
+// static import graph from the framework entries (src/root.tsx + src/routes/)
+// and fails closed: every reachable bare specifier must be on ALLOWLIST
+// (react only — everything else, including three-ecosystem packages like
+// `postprocessing` that carry three without naming it, is a violation), and
+// every relative or root-absolute specifier must resolve to a walked file.
+// Exotic specifiers (virtual:, ?worker) take the bare-specifier path and fail
+// as outside ALLOWLIST. Dynamic `import()` is the sanctioned lazy boundary
+// (App's TownCanvas and LevaPanel) and is not followed; statement-level
+// `import type` is erased at build and is not followed either.
+//
+// Parsing is es-module-lexer (fol-s4f), not hand-rolled regexes: comments,
+// string literals and template `${}` regions are handled by a real ESM lexer,
+// so an `import` inside an error message is never mistaken for a statement.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { init, parse } from 'es-module-lexer'
+import { transformSync } from 'esbuild'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const SRC = join(ROOT, 'src')
@@ -33,14 +39,6 @@ const ALLOWLIST = [
 /** Three-ecosystem patterns, for a diagnostic that names the real problem. */
 const DENYLIST = [/three/i, /^@react-three\//, /^stats-gl(\/|$)/]
 
-const STATIC_FROM =
-  /(?:^|[;}\n])\s*import\s+(type\b)?([^'"]*?)\sfrom\s*['"]([^'"]+)['"]/g
-const STATIC_SIDE_EFFECT = /(?:^|[;}\n])\s*import\s*['"]([^'"]+)['"]/g
-const STATIC_EXPORT_FROM = /export\s+(type\b)?([^'"]*?)\sfrom\s*['"]([^'"]+)['"]/g
-const REQUIRE = /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g
-const SCRIPT_OPEN = /<script\b[^>]*>/g
-const SCRIPT_BLOCK = /<script\b[^>]*type\s*=\s*(["'])module\1[^>]*>([\s\S]*?)<\/script\s*>/g
-
 function fail(...lines) {
   for (const line of lines) console.error(`ssr-boundary: ${line}`)
   process.exit(1)
@@ -50,131 +48,17 @@ function lineNumberAt(text, index) {
   return text.slice(0, index).split('\n').length
 }
 
-/**
- * Blank comments length-preservingly without touching string literals, so a
- * `//` inside a string can't eat a real import and reported lines still point
- * at the original file.
- */
-function blankComments(text) {
-  const blank = (chunk) => chunk.replace(/[^\n]/g, ' ')
-  let out = ''
-  let i = 0
-  let quote = null
-  while (i < text.length) {
-    const char = text[i]
-    if (quote !== null) {
-      out += char
-      if (char === '\\') {
-        out += text[i + 1] ?? ''
-        i += 2
-        continue
-      }
-      if (char === quote) quote = null
-      i += 1
-      continue
-    }
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char
-      out += char
-      i += 1
-      continue
-    }
-    if (char === '/' && text[i + 1] === '/') {
-      const end = text.indexOf('\n', i)
-      const stop = end < 0 ? text.length : end
-      out += blank(text.slice(i, stop))
-      i = stop
-      continue
-    }
-    if (char === '/' && text[i + 1] === '*') {
-      const end = text.indexOf('*/', i + 2)
-      const stop = end < 0 ? text.length : end + 2
-      out += blank(text.slice(i, stop))
-      i = stop
-      continue
-    }
-    out += char
-    i += 1
-  }
-  return out
-}
-
-// A default import literally named `type` (`import type from './x'`) is a
-// runtime import, not erasure: only excuse `type` followed by a real clause.
-const isTypeErased = (type, middle) =>
-  type !== undefined && /^\s*(\{|\*|[A-Za-z_$][\w$]*)/.test(middle)
-
-/**
- * Spans of string content in already comment-blanked text, so an `import` or
- * `require` keyword inside a string (an error message, a docstring) is never
- * mistaken for a real statement. Template `${}` regions count as code.
- */
-function stringSpans(text) {
-  const spans = []
-  const stack = []
-  let segStart = -1
-  let i = 0
-  while (i < text.length) {
-    const char = text[i]
-    const top = stack[stack.length - 1]
-    if (!top) {
-      if (char === "'" || char === '"' || char === '`') {
-        stack.push({ quote: char, braces: 0 })
-        segStart = i + 1
-      }
-      i += 1
-      continue
-    }
-    if (top.quote === '`' && top.braces === 0 && char === '$' && text[i + 1] === '{') {
-      spans.push([segStart, i])
-      stack.push({ quote: '}', braces: 0 })
-      i += 2
-      continue
-    }
-    if (top.quote === '}') {
-      if (char === "'" || char === '"' || char === '`') {
-        stack.push({ quote: char, braces: 0 })
-        segStart = i + 1
-      } else if (char === '{') {
-        top.braces += 1
-      } else if (char === '}') {
-        if (top.braces === 0) {
-          stack.pop()
-          segStart = i + 1
-        } else {
-          top.braces -= 1
-        }
-      }
-      i += 1
-      continue
-    }
-    if (char === '\\') {
-      i += 2
-      continue
-    }
-    if (char === top.quote) {
-      spans.push([segStart, i])
-      stack.pop()
-    }
-    i += 1
-  }
-  return spans
-}
-
-function inString(spans, pos) {
-  return spans.some(([start, end]) => pos >= start && pos < end)
-}
+// es-module-lexer v3 reports `typeOnly` natively: a default import literally
+// named `type` (`import type from './x'`) is a runtime import, and only
+// `typeOnly === true` is skipped.
 
 /**
  * Graph roots. Framework mode (D-003) has no index.html: the document shell
  * is `src/root.tsx` and every route in `src/routes/` renders into it, so
  * those are the initial graph. `src/routes.ts` is build-time config (it
- * imports `@react-router/dev`) and is deliberately not a root. The legacy
- * index.html path is kept while the file exists, so the checker fails
- * usefully mid-migration instead of crashing on ENOENT.
+ * imports `@react-router/dev`) and is deliberately not a root.
  */
 function entryUnits() {
-  if (existsSync(join(ROOT, 'index.html'))) return legacyEntryUnits()
   const roots = ['src/root.tsx']
   const routesDir = join(SRC, 'routes')
   const walk = (dir) => {
@@ -202,39 +86,6 @@ function entryUnits() {
   return units
 }
 
-/**
- * Module scripts in index.html are the graph roots: external `src` files plus
- * inline bodies (walked as units rooted at ROOT).
- */
-function legacyEntryUnits() {
-  const html = readFileSync(join(ROOT, 'index.html'), 'utf8')
-  const units = []
-  for (const open of html.matchAll(SCRIPT_OPEN)) {
-    if (!/type\s*=\s*["']module["']/.test(open[0])) continue
-    const src = open[0].match(/\bsrc\s*=\s*["']([^"']+)["']/)?.[1]
-    if (src) {
-      const line = lineNumberAt(html, open.index ?? 0)
-      if (!src.startsWith('/src/')) fail(`index.html:${line}: module src '${src}' is not under /src/`)
-      const file = join(ROOT, src.slice(1))
-      if (!existsSync(file)) fail(`index.html:${line}: entry not found: ${src}`)
-      units.push({ key: file, dir: dirname(file), file })
-    }
-  }
-  for (const block of html.matchAll(SCRIPT_BLOCK)) {
-    const line = lineNumberAt(html, block.index ?? 0)
-    if (block[2].trim() !== '') {
-      units.push({
-        key: `index.html#inline-${line}`,
-        dir: ROOT,
-        text: block[2],
-        label: `index.html:${line} (inline)`,
-      })
-    }
-  }
-  if (units.length === 0) fail('index.html: no module scripts found')
-  return units
-}
-
 const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx']
 
 function resolveRelative(dir, spec, where) {
@@ -254,34 +105,54 @@ function resolveRelative(dir, spec, where) {
   return null
 }
 
-function collectImports(text) {
-  // Dynamic import() is the lazy boundary: blank it length-preserving so the
-  // line numbers below still point at the original file.
-  const blinded = text.replace(/\bimport\s*\(/g, (match) => ' '.repeat(match.length))
-  const spans = stringSpans(blinded)
-  const specLine = (match, spec) =>
-    lineNumberAt(text, (match.index ?? 0) + match[0].lastIndexOf(spec))
-  // The statement keyword must be real code, not string content (an error
-  // message mentioning require('x') is not an import).
-  const keywordAt = (match, word) => (match.index ?? 0) + match[0].indexOf(word)
+const REQUIRE_CALL = /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g
+
+function collectImports(text, file) {
+  const label = relativePath(file)
+  // es-module-lexer reads JS: strip TS types first (fol-s4f) with esbuild.
+  // Violation lines are approximate (esbuild elides type-only imports,
+  // shifting lines below up); the file and the chain are exact.
+  let code = text
+  if (file.endsWith('.ts') || file.endsWith('.tsx')) {
+    try {
+      code = transformSync(text, {
+        loader: file.endsWith('.tsx') ? 'tsx' : 'ts',
+        format: 'esm',
+      }).code
+    } catch (error) {
+      fail(`${label}: cannot transpile (${error?.message ?? error})`)
+    }
+  }
+  let imports
+  try {
+    ;[imports] = parse(code)
+  } catch (error) {
+    fail(`${label}: cannot parse module (${error?.message ?? error})`)
+  }
   const found = []
-  for (const match of blinded.matchAll(STATIC_FROM)) {
-    if (inString(spans, keywordAt(match, 'import'))) continue
-    if (isTypeErased(match[1], match[2])) continue
-    found.push({ spec: match[3], line: specLine(match, match[3]) })
+  for (const imp of imports) {
+    // Dynamic import() is the lazy boundary (v3 marks it type: 'dynamic'):
+    // skip it, non-string specifiers (`import.meta` reports specifier null —
+    // without this the walker below crashes on `.includes`), and `import
+    // type` (erased at build).
+    // Re-exports ride along: `export { a } from` is 'static' and `export *`
+    // from is 'reexport-star' — both must be walked, or a three import behind
+    // an `export *` would pass silently (fail-open).
+    if (imp.type === 'dynamic' || typeof imp.specifier !== 'string') continue
+    if (imp.typeOnly === true) continue
+    found.push({ spec: imp.specifier, line: lineNumberAt(code, imp.start ?? imp.importStart) })
   }
-  for (const match of blinded.matchAll(STATIC_SIDE_EFFECT)) {
-    if (inString(spans, keywordAt(match, 'import'))) continue
-    found.push({ spec: match[1], line: specLine(match, match[1]) })
-  }
-  for (const match of blinded.matchAll(STATIC_EXPORT_FROM)) {
-    if (inString(spans, keywordAt(match, 'export'))) continue
-    if (isTypeErased(match[1], match[2])) continue
-    found.push({ spec: match[3], line: specLine(match, match[3]) })
-  }
-  for (const match of blinded.matchAll(REQUIRE)) {
-    if (inString(spans, match.index ?? 0)) continue
-    found.push({ spec: match[1], line: specLine(match, match[1]) })
+  // require() is not ESM and the lexer never reports it, so a bare regex is
+  // the only eye on it. It errs fail-closed on purpose: a `require('x')`
+  // inside a string still trips the gate, and the author rewords. A require
+  // of anything — even an allowlisted package — is a violation, because the
+  // static graph cannot see it; use a static import instead.
+  for (const match of code.matchAll(REQUIRE_CALL)) {
+    found.push({
+      spec: match[1],
+      line: lineNumberAt(code, (match.index ?? 0) + match[0].lastIndexOf(match[1])),
+      dynamic: true,
+    })
   }
   return found
 }
@@ -307,6 +178,7 @@ function checkBare(spec, where, chain, violations) {
   }
 }
 
+await init()
 const visited = new Set()
 const violations = []
 const stack = entryUnits().map((unit) => ({ unit, chain: [] }))
@@ -315,11 +187,17 @@ while (stack.length > 0) {
   const { unit, chain } = stack.pop()
   if (visited.has(unit.key)) continue
   visited.add(unit.key)
-  const text =
-    unit.text ?? (existsSync(unit.file) ? readFileSync(unit.file, 'utf8') : null)
+  const text = existsSync(unit.file) ? readFileSync(unit.file, 'utf8') : null
   if (text === null) fail(`entry not found: ${relativePath(unit.file)}`)
-  const where = (line) => `${unit.label ?? relativePath(unit.file)}:${line}`
-  for (const { spec, line } of collectImports(blankComments(text))) {
+  const where = (line) => `${relativePath(unit.file)}:${line}`
+  for (const { spec, line, dynamic } of collectImports(text, unit.file)) {
+    if (dynamic === true) {
+      const via = chain.length > 0 ? ` via ${[...chain, where(line)].join(' -> ')}` : ''
+      violations.push(
+        `  require('${spec}') at ${where(line)}${via} (require is invisible to the static graph — use a static import so the boundary sees it)`,
+      )
+      continue
+    }
     if (spec.includes('?')) {
       // Query-suffixed imports (`?raw`, `?url`) inline the file as a string
       // or URL: they contribute no module to the graph, so they are neither
