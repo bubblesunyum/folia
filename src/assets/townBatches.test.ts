@@ -5,6 +5,7 @@ import {
   grownCapacity,
   LOD_RESERVE,
   type ManifestCounts,
+  manifestCounts,
   withDerivedCapacity,
 } from './townBatches'
 
@@ -83,6 +84,52 @@ describe('capacityFromManifest', () => {
     expect(cap?.maxIndices).toBe(531000 * LOD_RESERVE * 4)
     expect(cap?.maxVertices).toBeLessThan(legacy?.maxVertices ?? Infinity)
     expect((cap?.maxVertices ?? 0) / 131000).toBeLessThanOrEqual(LOD_RESERVE * 4)
+  })
+})
+
+describe('manifestCounts', () => {
+  const triangles = {
+    'cortico/fragment': { cream: 107920, neon: 1968 },
+    'cortico/second': { cream: 1000 },
+  }
+  const vertices = {
+    'cortico/fragment': { cream: 80000, neon: 1500 },
+  }
+  const indices = {
+    'cortico/fragment': { cream: 323760, neon: 5904 },
+  }
+
+  it('joins the per-batch maps into exact counts where both are present', () => {
+    expect(manifestCounts(triangles, vertices, indices)).toEqual({
+      'cortico/fragment': {
+        cream: { triangles: 107920, vertices: 80000, indices: 323760 },
+        neon: { triangles: 1968, vertices: 1500, indices: 5904 },
+      },
+      'cortico/second': { cream: 1000 },
+    })
+  })
+
+  it('leaves triangle totals alone when counts are missing entirely', () => {
+    expect(manifestCounts(triangles)).toEqual(triangles)
+  })
+
+  it('falls back per batch when only one of vertices/indices is present', () => {
+    const counts = manifestCounts(triangles, vertices, {
+      'cortico/fragment': { cream: 323760 },
+    })
+    expect(counts['cortico/fragment']).toEqual({
+      cream: { triangles: 107920, vertices: 80000, indices: 323760 },
+      neon: 1968,
+    })
+  })
+
+  it('sizes runtime capacity from the joined counts end to end', () => {
+    const cap = capacityFromManifest(manifestCounts(triangles, vertices, indices))
+    // cream has an uncounted asset, so the whole batch falls back to tris×3.
+    expect(cap.cream?.maxVertices).toBe((107920 + 1000) * 3 * 4)
+    // neon is fully counted: exact vertices times reserve and headroom.
+    expect(cap.neon?.maxVertices).toBe(1500 * LOD_RESERVE * 4)
+    expect(cap.neon?.maxIndices).toBe(5904 * LOD_RESERVE * 4)
   })
 })
 

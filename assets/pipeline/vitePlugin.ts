@@ -89,20 +89,31 @@ export function foliaAssets(): Plugin {
         readFileSync(join(root, 'assets/manifest.json'), 'utf8'),
       ) as Record<
         string,
-        { hash: string; groups?: Record<string, number>; triangles?: Record<string, number> }
+        {
+          hash: string
+          groups?: Record<string, number>
+          triangles?: Record<string, number>
+          vertices?: Record<string, number>
+          indices?: Record<string, number>
+        }
       >
       // One pass over the manifest for every client export: the content hash
-      // per asset, the global group slots (D-061), and the baked triangles per
-      // batch sizing the town registry (D-032).
+      // per asset, the global group slots (D-061), and the baked triangles
+      // plus pack-time vertex/index counts per batch sizing the town registry
+      // (D-032, fol-6po).
       const hashes: Record<string, string> = {}
       const slots: Record<string, Record<string, number>> = {}
       const triangles: Record<string, Record<string, number>> = {}
+      const vertices: Record<string, Record<string, number>> = {}
+      const indices: Record<string, Record<string, number>> = {}
       for (const [asset, record] of Object.entries(manifest)) {
         hashes[asset] = record.hash
         slots[asset] = record.groups ?? {}
         triangles[asset] = record.triangles ?? {}
+        vertices[asset] = record.vertices ?? {}
+        indices[asset] = record.indices ?? {}
       }
-      return `export default ${JSON.stringify(hashes)}\nexport const groupSlots = ${JSON.stringify(slots)}\nexport const assetTriangles = ${JSON.stringify(triangles)}`
+      return `export default ${JSON.stringify(hashes)}\nexport const groupSlots = ${JSON.stringify(slots)}\nexport const assetTriangles = ${JSON.stringify(triangles)}\nexport const assetVertices = ${JSON.stringify(vertices)}\nexport const assetIndices = ${JSON.stringify(indices)}`
     },
     async configureServer(server) {
       // The look-dev write-back (fol-qbb, D-034): the panel POSTs its working

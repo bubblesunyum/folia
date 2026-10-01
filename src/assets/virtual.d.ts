@@ -11,4 +11,14 @@ declare module 'virtual:folia-assets' {
   const assetTriangles: Readonly<Record<string, Readonly<Record<string, number>>>>
 
   export { assetTriangles }
+
+  /** Asset → batch → pack-time vertex counts (fol-6po); absent for legacy records. */
+  const assetVertices: Readonly<Record<string, Readonly<Record<string, number>>>>
+
+  export { assetVertices }
+
+  /** Asset → batch → pack-time index counts (fol-6po); absent for legacy records. */
+  const assetIndices: Readonly<Record<string, Readonly<Record<string, number>>>>
+
+  export { assetIndices }
 }

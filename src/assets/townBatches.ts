@@ -22,6 +22,39 @@ export type ManifestCounts = Readonly<
   Record<string, Readonly<Record<string, number | ManifestBatchCounts>>>
 >
 
+type ManifestPart = Readonly<Record<string, Readonly<Record<string, number>>>>
+
+/**
+ * Joins the `virtual:folia-assets` per-batch maps (fol-6po) into the
+ * `ManifestCounts` shape `capacityFromManifest` sizes from. Triangles are the
+ * source of truth for which batches exist; a batch gets exact counts only
+ * when both vertices and indices are present, otherwise it stays a legacy
+ * triangle total and falls back to the triangles×3 estimate.
+ */
+export function manifestCounts(
+  triangles: ManifestPart,
+  vertices: ManifestPart = {},
+  indices: ManifestPart = {},
+): ManifestCounts {
+  return Object.fromEntries(
+    Object.entries(triangles).map(([asset, batches]) => [
+      asset,
+      Object.fromEntries(
+        Object.entries(batches).map(([batch, tris]) => {
+          const v = vertices[asset]?.[batch]
+          const i = indices[asset]?.[batch]
+          return [
+            batch,
+            v === undefined || i === undefined
+              ? tris
+              : { triangles: tris, vertices: v, indices: i },
+          ]
+        }),
+      ),
+    ]),
+  )
+}
+
 export interface BatchCapacity {
   maxInstances: number
   maxVertices: number

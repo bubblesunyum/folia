@@ -4,7 +4,7 @@
 // unmount disposal, which would break StrictMode's remount the same way it
 // would for per-asset batches. GPU resources release with the context.
 
-import { assetTriangles } from 'virtual:folia-assets'
+import { assetIndices, assetTriangles, assetVertices } from 'virtual:folia-assets'
 import { addAfterEffect, useThree } from '@react-three/fiber'
 import {
   createContext,
@@ -20,6 +20,7 @@ import {
   type BatchCapacity,
   capacityFromManifest,
   MINIMUM_BATCH_CAPACITY,
+  manifestCounts,
   withDerivedCapacity,
 } from '../assets/townBatches'
 import { type TownGeometries, TownRegistry } from '../assets/townRegistry'
@@ -47,7 +48,10 @@ export function TownBatches({ children }: { children: ReactNode }) {
   // Bumped when a batch grows, so the new mesh object renders.
   const [, setGeneration] = useState(0)
   const [registry] = useState(() => {
-    const capacities = withDerivedCapacity(capacityFromManifest(assetTriangles), derivedBatches)
+    const capacities = withDerivedCapacity(
+      capacityFromManifest(manifestCounts(assetTriangles, assetVertices, assetIndices)),
+      derivedBatches,
+    )
     const caps = new Map<string, BatchCapacity>()
     for (const batch of Object.keys(materials)) {
       caps.set(batch, capacities[batch] ?? { ...MINIMUM_BATCH_CAPACITY })
