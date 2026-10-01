@@ -2,6 +2,10 @@
 // runs inside the Canvas tree, where rendering a DOM node would crash R3F,
 // so it reports here and `<BenchStatus/>` (DOM level, beside the leva panel
 // in `App`) renders it.
+//
+// Deliberately not the shared subscribe store (fol-8z6): reports fan out on
+// every call with no dedupe — two identical failures in a row must notify
+// twice — while a store drops consecutive equal values by contract.
 
 export type BenchStatusListener = (message: string) => void
 

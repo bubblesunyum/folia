@@ -68,32 +68,29 @@ export function isDismissKey(key: string): boolean {
   return key === 'Escape'
 }
 
-// Panel registration (wave 2 seam). Tiny subscribe store in the benchStatus
-// idiom: module-level state, `onX` returns the unsubscribe. No-op default —
-// no panel exists yet, so the layer resolves to rise until one registers.
+// Panel registration (wave 2 seam). Tiny subscribe store in the shared
+// subscribe idiom: module-level state, `onX` returns the unsubscribe. No-op
+// default — no panel exists yet, so the layer resolves to rise until one
+// registers.
+
+import { createSubscribeStore } from '../store/subscribe'
 
 export type PanelListener = (open: boolean) => void
 
-let panelOpen = false
-const panelListeners = new Set<PanelListener>()
+const panelStore = createSubscribeStore(false)
 
 /** Whether a 2D panel is currently open. False until wave 2 registers one. */
 export function isPanelOpen(): boolean {
-  return panelOpen
+  return panelStore.get()
 }
 
 /** Called by the future panel on open/close; fans out to subscribers. */
 export function setPanelOpen(open: boolean): void {
-  if (panelOpen === open) return
-  panelOpen = open
-  for (const listener of [...panelListeners]) listener(panelOpen)
+  panelStore.set(open)
 }
 
 export function onPanelOpen(listener: PanelListener): () => void {
-  panelListeners.add(listener)
-  return () => {
-    panelListeners.delete(listener)
-  }
+  return panelStore.on(listener)
 }
 
 // Window events between the rig and the future panel/picking. They live in

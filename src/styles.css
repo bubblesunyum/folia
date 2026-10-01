@@ -206,7 +206,11 @@ body,
 /* The case side sheet (fol-l1r.5, D-022/D-050): a solid sheet on the right —
    ~45% of the width capped at readable measure — scrolling internally while
    the world stays live behind it. Solid, never backdrop-filter: Safari would
-   re-blur it every frame. Below 900px it docks to the bottom instead. */
+   re-blur it every frame. Below 900px it docks to the bottom instead.
+   Widths mirror panel/metrics.ts (PANEL_WIDE_FRACTION/MAX, SHEET_FRACTION/MAX)
+   and the 899px query is the other half of its `>= 900` breakpoint: keep the
+   two in sync. The `data-variant` hook (side|bottom) mirrors panelVariant
+   for specs; the media query stays the styling mechanism. */
 .case-panel {
   position: fixed;
   top: 0;

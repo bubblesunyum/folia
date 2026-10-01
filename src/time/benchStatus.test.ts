@@ -13,4 +13,13 @@ describe('bench status', () => {
     reportBenchStatus('c')
     expect(seen).toEqual([['a'], ['a', 'b']])
   })
+
+  it('fans out repeats: identical consecutive reports notify twice, not once', () => {
+    const seen: string[] = []
+    const off = onBenchStatus((message) => seen.push(message))
+    reportBenchStatus('same failure')
+    reportBenchStatus('same failure')
+    off()
+    expect(seen).toEqual(['same failure', 'same failure'])
+  })
 })

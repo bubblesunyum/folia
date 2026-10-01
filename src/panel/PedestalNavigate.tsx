@@ -6,17 +6,17 @@
 
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
-import { type BatchedMesh, Raycaster, Vector2 } from 'three'
+import { Raycaster, Vector2 } from 'three'
 import { readReducedMotion, requestPanelClose } from '../input/intent'
-import { slotFromGroupId } from '../picking/hover'
+import { pickSlotFromHit } from '../picking/pickSlot'
 import { useTownBatches } from '../scene/TownBatches'
 import { getCaseInView, onCaseInView } from './caseInView'
 import { requestCaseOpen } from './pedestalEvents'
 import {
-  isPedestalSlot,
   nextTapState,
   type PedestalSlug,
   pedestalOnlyForPath,
+  shouldLiftSlot,
   slugForSlot,
 } from './pedestals'
 
@@ -44,14 +44,7 @@ export function PedestalNavigate() {
         ((clientX - rect.left) / rect.width) * 2 - 1,
         -((clientY - rect.top) / rect.height) * 2 + 1,
       )
-      rig.current.raycaster.setFromCamera(rig.current.pointer, camera)
-      const hits = rig.current.raycaster.intersectObjects([...meshes.values()], false)
-      const hit = hits[0]
-      if (!hit?.face) return null
-      const geometry = (hit.object as BatchedMesh).geometry
-      const attr = geometry.getAttribute('groupId')
-      if (!attr) throw new Error('pedestal picking: batch has no groupId attribute')
-      return slotFromGroupId((vertex) => attr.getX(vertex), hit.face.a)
+      return pickSlotFromHit(meshes, rig.current.raycaster, rig.current.pointer, camera)
     }
     const onPointerDown = (event: PointerEvent) => {
       if (!event.isPrimary) return
@@ -65,7 +58,7 @@ export function PedestalNavigate() {
       const moved = Math.hypot(event.clientX - rig.current.downX, event.clientY - rig.current.downY)
       if (moved > CLICK_DRAG_TOLERANCE_PX) return
       const slot = pick(event.clientX, event.clientY)
-      if (slot !== null && isPedestalSlot(slot)) {
+      if (slot !== null && shouldLiftSlot(slot, window.location.pathname)) {
         const step = nextTapState(rig.current.armedTap, slot, rig.current.downPointerType)
         rig.current.armedTap = step.armed
         if (step.action === 'open') {

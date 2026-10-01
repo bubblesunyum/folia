@@ -5,6 +5,8 @@
 // a hover stays one uniform write. The R3F rig in `scene/HoverHighlight.tsx`
 // owns the raycaster and the spring; everything here is plain math with tests.
 
+import { damp } from '../motion/damp'
+
 /** Lift in metres and glow applied to the hovered group. */
 export const HOVER_LIFT = 0.25
 export const HOVER_GLOW = 0.6
@@ -39,10 +41,5 @@ export function slotFromGroupId(
 
 /** Exponential damp of `current` toward `target` over `dt` seconds. */
 export function springTowards(current: number, target: number, dt: number): number {
-  if (dt <= 0) return current
-  const t = 1 - Math.exp(-HOVER_SPRING * dt)
-  const next = current + (target - current) * t
-  // Snap when close so the demand loop actually rests (1 mm / 0.001 glow
-  // are far below visible).
-  return Math.abs(next - target) < 1e-3 ? target : next
+  return damp(current, target, HOVER_SPRING, dt, 1e-3)
 }

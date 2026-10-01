@@ -16,6 +16,7 @@ import { PANEL_CLOSE_EVENT, setPanelOpen } from '../input/intent'
 import { RISE_EVENT } from '../input/sources'
 import { getCaseInView, setCaseInView } from './caseInView'
 import { type PedestalSlug, slotForSlug } from './pedestals'
+import { usePanelLayout } from './usePanelLayout'
 import { usePedestalRouteSync } from './usePedestalRouteSync'
 
 export interface PresenterContent extends CaseContent {
@@ -26,6 +27,7 @@ export function PanelPresenter({ content }: { content: PresenterContent }) {
   const navigate = useNavigate()
   const { slug, projectSlug } = content
   usePedestalRouteSync()
+  const { variant } = usePanelLayout()
 
   const close = useCallback(() => {
     navigate(`/${projectSlug}`)
@@ -64,7 +66,13 @@ export function PanelPresenter({ content }: { content: PresenterContent }) {
 
   const Panel = rendererFor(content.kind)
   return (
-    <aside className="case-panel" data-testid="case-panel" data-case={slug} aria-label="case panel">
+    <aside
+      className="case-panel"
+      data-testid="case-panel"
+      data-case={slug}
+      data-variant={variant}
+      aria-label="case panel"
+    >
       <div className="case-panel-top">
         <p className="case-breadcrumb" data-testid="panel-breadcrumb">
           {projectSlug} › {slug}

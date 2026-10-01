@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { readReducedMotion } from '../input/intent'
 import { signatureColor } from '../palette'
+import { makeRadialGlowTexture } from '../scene/glowSprite'
 import { getCaseInView, onCaseInView } from './caseInView'
 import { PEDESTAL_ANCHOR_BY_SLUG, type PedestalSlug } from './pedestals'
 
@@ -25,33 +26,13 @@ const ARRIVE_M = 0.02
 /** Scratch perch target, reused every frame while the wisp is out. */
 const scratchHome = new THREE.Vector3()
 
-let glowTexture: THREE.CanvasTexture | null = null
-
-/** A soft radial glow sprite map, built once and shared. */
-function wispGlowTexture(): THREE.CanvasTexture {
-  if (glowTexture) return glowTexture
-  const canvas = document.createElement('canvas')
-  canvas.width = 64
-  canvas.height = 64
-  const context = canvas.getContext('2d')
-  if (!context) throw new Error('wisp: no 2d context for the glow sprite')
-  const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32)
-  gradient.addColorStop(0, 'rgba(255,255,255,1)')
-  gradient.addColorStop(0.35, 'rgba(255,255,255,0.55)')
-  gradient.addColorStop(1, 'rgba(255,255,255,0)')
-  context.fillStyle = gradient
-  context.fillRect(0, 0, 64, 64)
-  glowTexture = new THREE.CanvasTexture(canvas)
-  return glowTexture
-}
-
 export function WispLight() {
   const invalidate = useThree((state) => state.invalidate)
   const group = useRef<THREE.Group>(null)
   const light = useRef<THREE.PointLight>(null)
   const sprite = useRef<THREE.Sprite>(null)
   const rig = useRef({ slug: null as PedestalSlug | null, phase: 0 })
-  const map = useMemo(() => wispGlowTexture(), [])
+  const map = useMemo(() => makeRadialGlowTexture(), [])
 
   useEffect(() => {
     rig.current.slug = getCaseInView()

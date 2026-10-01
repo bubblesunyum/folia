@@ -7,6 +7,7 @@ import {
   PEDESTAL_SLOT_BY_SLUG,
   pedestalOnlyForPath,
   resolveCaseNav,
+  shouldLiftSlot,
   slotForSlug,
   slugForSlot,
 } from './pedestals'
@@ -68,6 +69,21 @@ describe('pedestalOnlyForPath', () => {
   it('leaves town-level hover alone', () => {
     expect(pedestalOnlyForPath('/')).toBe(false)
     expect(pedestalOnlyForPath('/corticosteroid')).toBe(false)
+  })
+})
+
+describe('shouldLiftSlot', () => {
+  it('lifts only pedestals under /cortico', () => {
+    expect(shouldLiftSlot(9, '/cortico')).toBe(true)
+    expect(shouldLiftSlot(9, '/cortico/platform')).toBe(true)
+    expect(shouldLiftSlot(7, '/cortico')).toBe(false)
+    expect(shouldLiftSlot(3, '/cortico')).toBe(false)
+  })
+
+  it('lifts everything at town level', () => {
+    expect(shouldLiftSlot(9, '/')).toBe(true)
+    expect(shouldLiftSlot(7, '/')).toBe(true)
+    expect(shouldLiftSlot(3, '/')).toBe(true)
   })
 })
 

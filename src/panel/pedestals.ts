@@ -64,6 +64,11 @@ export function pedestalOnlyForPath(pathname: string): boolean {
   return pathname === '/cortico' || pathname === '/cortico/' || pathname.startsWith('/cortico/')
 }
 
+/** Whether a slot may take lift/route at a path: the one filter both picking rigs share. */
+export function shouldLiftSlot(slot: number, pathname: string): boolean {
+  return !pedestalOnlyForPath(pathname) || isPedestalSlot(slot)
+}
+
 export interface CaseNav {
   to: string
   replace: boolean

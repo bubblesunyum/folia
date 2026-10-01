@@ -14,11 +14,12 @@
 
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
-import { type BatchedMesh, Raycaster, Vector2, Vector3 } from 'three'
+import { Raycaster, Vector2, Vector3 } from 'three'
 import { FOCUS_LIFT_EVENT, type FocusLiftDetail } from '../input/intent'
 import { clearGroupSlot, setGroupSlot } from '../materials/groupState'
-import { isPedestalSlot, pedestalOnlyForPath, slotForSlug } from '../panel/pedestals'
-import { glowForNight, HOVER_LIFT, slotFromGroupId, springTowards } from '../picking/hover'
+import { shouldLiftSlot, slotForSlug } from '../panel/pedestals'
+import { glowForNight, HOVER_LIFT, springTowards } from '../picking/hover'
+import { pickSlotFromHit } from '../picking/pickSlot'
 import { clearProjector, setCanvasHook, setProjector } from '../testHooks'
 import { useLook } from '../time/lookContext'
 import { useTownBatches } from './TownBatches'
@@ -122,16 +123,7 @@ export function HoverHighlight() {
     const dt = Math.min(Math.max(rawDt, 1 / 240), 0.05)
     if (r.dirty) {
       r.dirty = false
-      r.raycaster.setFromCamera(r.pointer, camera)
-      const hits = r.raycaster.intersectObjects([...meshes.values()], false)
-      const hit = hits[0]
-      let slot: number | null = null
-      if (hit?.face) {
-        const geometry = (hit.object as BatchedMesh).geometry
-        const attr = geometry.getAttribute('groupId')
-        if (!attr) throw new Error('hover picking: batch has no groupId attribute')
-        slot = slotFromGroupId((vertex) => attr.getX(vertex), hit.face.a)
-      }
+      const slot = pickSlotFromHit(meshes, r.raycaster, r.pointer, camera)
       if (slot !== r.hovered) {
         r.hovered = slot
         setCanvasHook(gl.domElement, 'hover', slot === null ? '' : String(slot))
@@ -141,21 +133,19 @@ export function HoverHighlight() {
     const glowTarget = glowForNight(night)
     // Under /cortico only pedestals take lift (D-021); the raw hovered slot
     // still reports through data-hover, so the filter itself is observable.
-    const pedestalOnly = pedestalOnlyForPath(window.location.pathname)
     const candidates = new Set<number>()
     if (r.hovered !== null) candidates.add(r.hovered)
     if (r.focusSlot !== null) candidates.add(r.focusSlot)
-    const targets = new Set<number>()
-    for (const slot of candidates) {
-      if (!pedestalOnly || isPedestalSlot(slot)) targets.add(slot)
-    }
-    for (const slot of r.springs.keys()) targets.add(slot)
-    // Easing-out slots stay in the set until they delete themselves at rest;
-    // only allowed slots ease toward on.
+    // Allowed slots ease toward on; easing-out slots stay in the set until
+    // they delete themselves at rest. Read live: the canvas persists across
+    // route changes, so a captured pathname would go stale.
+    const pathname = window.location.pathname
     const lifting = new Set<number>()
     for (const slot of candidates) {
-      if (!pedestalOnly || isPedestalSlot(slot)) lifting.add(slot)
+      if (shouldLiftSlot(slot, pathname)) lifting.add(slot)
     }
+    const targets = new Set(lifting)
+    for (const slot of r.springs.keys()) targets.add(slot)
     for (const slot of targets) {
       const current = r.springs.get(slot) ?? { lift: 0, glow: 0 }
       const on = lifting.has(slot)
