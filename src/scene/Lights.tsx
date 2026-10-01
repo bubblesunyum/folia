@@ -4,7 +4,12 @@ import { type DirectionalLight, Vector3 } from 'three'
 import { renderConfig } from '../debug'
 import { SHADOW_FITS } from '../perf/renderConfig'
 import { useLook } from '../time/lookContext'
-import { quantizeExtent, SHADOW_MAP_SIZE, snapShadowToTexels } from './shadowFit'
+import {
+  quantizeExtent,
+  resolveShadowRefresh,
+  SHADOW_MAP_SIZE,
+  snapShadowToTexels,
+} from './shadowFit'
 
 const DISTANCE = 40
 
@@ -29,6 +34,10 @@ export function Lights() {
   const scene = useThree((state) => state.scene)
   const invalidate = useThree((state) => state.invalidate)
   const sunRef = useRef<DirectionalLight>(null)
+  // Last pass's sun state: sunset issues one final shadow refresh, then the
+  // map holds frozen until sunrise. Starts up so a mount at night settles
+  // the same way (one refresh, then frozen).
+  const wasSunUpRef = useRef(true)
   const extent = quantizeExtent(SHADOW_FITS[renderConfig.shadowFit])
   const at = (d: readonly number[]) => d.map((v) => v * DISTANCE) as [number, number, number]
 
@@ -49,16 +58,27 @@ export function Lights() {
     light.shadow.camera.updateProjectionMatrix()
   }, [])
 
-  // The shadow policy (D-041). Static freezes the map after this frame and
-  // re-freezes whenever the time of day moves the sun.
+  // The shadow policy (D-041) plus the night freeze (fol-779). Static
+  // freezes the map after this frame and re-freezes whenever the time of day
+  // moves the sun. Live re-renders every frame while the sun is up, but at
+  // daylight 0 the sun's intensity is 0 and the shadow pass is pure cost
+  // (spike 5: 475k tris), so sunset freezes after one final refresh and
+  // sunrise restores autoUpdate. Only the autoUpdate/needsUpdate flags move —
+  // never castShadow or shadowMap.enabled, which recompile all programs.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `look` is the re-freeze trigger
   useEffect(() => {
-    gl.shadowMap.autoUpdate = renderConfig.shadowPolicy === 'live'
-    if (renderConfig.shadowPolicy === 'static') {
+    const { autoUpdate, needsRefresh } = resolveShadowRefresh(
+      renderConfig.shadowPolicy,
+      sun.daylight,
+      wasSunUpRef.current,
+    )
+    wasSunUpRef.current = sun.daylight > 0
+    gl.shadowMap.autoUpdate = autoUpdate
+    if (needsRefresh) {
       gl.shadowMap.needsUpdate = true
       invalidate()
     }
-  }, [gl, invalidate, look])
+  }, [gl, invalidate, look, sun.daylight])
 
   // Texel-snapped every rendered frame, so a moving sun or a tracking frustum
   // never shimmers; static otherwise, by construction. Snaps from the

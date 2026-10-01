@@ -4,6 +4,7 @@
 // perf/renderConfig.ts; everything here takes plain metres.
 
 import { type DirectionalLight, Vector3 } from 'three'
+import type { ShadowPolicy } from '../perf/renderConfig'
 
 export const SHADOW_MAP_SIZE = 2048
 
@@ -15,6 +16,31 @@ export function quantizeExtent(metres: number): number {
 /** World metres per shadow texel at this fit. */
 export function texelSize(extent: number, mapSize: number): number {
   return (extent * 2) / mapSize
+}
+
+export interface ShadowRefresh {
+  /** What `gl.shadowMap.autoUpdate` should be. Never `castShadow` or
+   *  `shadowMap.enabled`: those recompile every program (D-043). */
+  autoUpdate: boolean
+  /** Whether to issue one `gl.shadowMap.needsUpdate` refresh on this pass. */
+  needsRefresh: boolean
+}
+
+/**
+ * The night freeze (fol-779): on the live policy the shadow map re-renders
+ * every frame, including all night while the sun's intensity is 0 (spike 5:
+ * 475k tris at daylight 0). So live means live-while-the-sun-is-up — sunset
+ * issues one final refresh then holds frozen, sunrise restores autoUpdate.
+ * The static policy keeps its D-041 re-freeze on every sun move.
+ */
+export function resolveShadowRefresh(
+  policy: ShadowPolicy,
+  daylight: number,
+  wasSunUp: boolean,
+): ShadowRefresh {
+  if (policy === 'static') return { autoUpdate: false, needsRefresh: true }
+  if (daylight > 0) return { autoUpdate: true, needsRefresh: false }
+  return { autoUpdate: false, needsRefresh: wasSunUp }
 }
 
 const _right = new Vector3()

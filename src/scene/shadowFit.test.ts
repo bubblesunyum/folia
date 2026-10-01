@@ -4,6 +4,7 @@ import { SHADOW_FITS } from '../perf/renderConfig'
 import {
   computeSnapDelta,
   quantizeExtent,
+  resolveShadowRefresh,
   SHADOW_MAP_SIZE,
   type ShadowSnapBase,
   snapShadowToTexels,
@@ -20,6 +21,47 @@ describe('shadow fits', () => {
   it('sizes texels from the fit at 2048', () => {
     expect(texelSize(SHADOW_FITS.town, SHADOW_MAP_SIZE)).toBeCloseTo(0.0156, 4)
     expect(texelSize(SHADOW_FITS.vantage, SHADOW_MAP_SIZE)).toBeCloseTo(0.0078, 4)
+  })
+})
+
+describe('resolveShadowRefresh', () => {
+  it('stays live while the sun is up', () => {
+    expect(resolveShadowRefresh('live', 1, true)).toEqual({ autoUpdate: true, needsRefresh: false })
+    expect(resolveShadowRefresh('live', 0.01, true)).toEqual({
+      autoUpdate: true,
+      needsRefresh: false,
+    })
+  })
+
+  it('freezes after one final refresh at sunset, then holds all night', () => {
+    // Sunset transition: freeze, but refresh once to settle the map.
+    expect(resolveShadowRefresh('live', 0, true)).toEqual({
+      autoUpdate: false,
+      needsRefresh: true,
+    })
+    // Deep night: frozen, no per-frame refresh (the 475k-tri night pass).
+    expect(resolveShadowRefresh('live', 0, false)).toEqual({
+      autoUpdate: false,
+      needsRefresh: false,
+    })
+  })
+
+  it('restores live shadows at sunrise', () => {
+    expect(resolveShadowRefresh('live', 0.5, false)).toEqual({
+      autoUpdate: true,
+      needsRefresh: false,
+    })
+  })
+
+  it('keeps the static re-freeze regardless of sun', () => {
+    expect(resolveShadowRefresh('static', 1, true)).toEqual({
+      autoUpdate: false,
+      needsRefresh: true,
+    })
+    expect(resolveShadowRefresh('static', 0, false)).toEqual({
+      autoUpdate: false,
+      needsRefresh: true,
+    })
   })
 })
 
