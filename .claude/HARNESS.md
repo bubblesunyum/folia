@@ -231,8 +231,7 @@ roster still picks the model everywhere a model is actually chosen:
 `scripts/agent.py` passes it as `-m`.
 
 A role's roster entry may add a `variant` — the provider's reasoning effort,
-such as `xhigh` — which agent.py appends to `-m` as `provider/model#variant`
-(opencode 2 dropped `--variant`). Only there: no
+such as `xhigh` — which agent.py sends as `-m provider/model#variant`. Only there: no
 generated file carries one, and `implement` runs opencode's own build agent,
 which has no generated file at all.
 
@@ -241,11 +240,16 @@ reviewers; the roster names `scripts/agent.py`'s; opencode's generated agents
 and Codex inherit the session's and the host's. A model named in one path says
 nothing about the others.
 
-**`scripts/agent.py` is how any tool reaches the roster.** It runs one role
-through `opencode run` — so Claude Code can put its reviewers, and delegated
-implementation, on another provider's bill without the packet ever entering its
-own context. Three behaviours of `opencode run` shaped it, all found by running
-it:
+**`scripts/agent.py` is how every tool except opencode reaches the roster.**
+
+It runs one role through `opencode run` — so Claude Code can put its
+reviewers, and delegated implementation, on another provider's bill without
+the packet ever entering its own context. Inside opencode itself, reviewers
+always run as native subagents on the session model — no reviewer is ever
+routed through `agent.py` from an opencode session. (Delegated implementation
+is the exception: the `delegate` skill sends it through `agent.py` from any
+tool, for the roster model.) Three behaviours of `opencode run` shaped it, all
+found by running it:
 
 - `--agent` given a `mode: subagent` agent prints a warning and falls back to
   the default agent, so the reviewer runs without its prompt. The script
@@ -259,15 +263,14 @@ it:
   without it — including reads outside the project, which is where review.sh
   puts the packet. Reviewers are granted `/tmp`, and any other refusal makes
   the script exit non-zero rather than pass on a reply written blind.
-- `reviewer-design` checks `opencode models --verbose` (opencode 1) or, when
-  that flag is gone (opencode 2), the models.dev cache opencode keeps at
-  `~/.cache/opencode/models.json`, for image input on its selected model before
-  running. Unknown or text-only models fail, leaving the
-  visual pass to the native reviewer instead of accepting a blind reply.
+- `reviewer-design` checks its selected model for image input before running:
+  the legacy `opencode models --verbose` lookup first, then opencode's cached
+  models.dev catalog (v2 dropped the flag). Unknown or text-only models fail,
+  leaving the visual pass to the native reviewer instead of accepting a blind reply.
 
 The revision cap lives in the script rather than in the `delegate` skill's prose
 because guidance is what a long thread erodes first. It counts the session's
-messages back out of `opencode export`, so there is no counter file to lose.
+messages back out of `opencode session export`, so there is no counter file to lose.
 
 **There is no session-start hook to write.** opencode's plugin hooks are
 `event`, `chat.message`, `chat.params`, `chat.headers`, `chat.completion`,
@@ -284,6 +287,17 @@ costs nothing and says what the harness intends. `HARNESS.md` is deliberately
 not in the list: it is the rationale, read when the pieces are being rearranged,
 and always-loading it in one tool and not the other would put the two sessions
 on different budgets while `context.py` counted neither.
+
+The root `opencode.json` is the single source of truth for both keys —
+`instructions` and any `plugin` entries. A `.opencode/opencode.json` shadows
+it: opencode reads only the deeper file when both exist, so a copy carrying a
+plugin but no `instructions` silently unloads `AGENTS.md`, and a copy
+duplicating either key hides drift the contract check never compares, because
+it tracks only the root file. `harness update` fails the check on both — a missing
+`instructions` list, or a copy duplicating either key — and `harness add` merges the root
+instructions into an existing shadow. `.opencode/tui.json` carries UI
+overrides only and must not hold plugin entries; plugin configuration lives in
+the root file.
 
 ## Staleness is the failure review can't catch
 

@@ -19,7 +19,8 @@ written without what it asked for.
 This is how a session in any tool — Claude Code included — hands work to a
 model that isn't its own: the packet or the brief is read in a separate
 opencode process, off the caller's context, on whatever model
-harness/models.json names for the role.
+harness/models.json names for the role. (Reviewers are the exception: under
+opencode they always run as native subagents, never through this script.)
 
 Roles with an agent in .opencode/agent/ (the reviewers, the librarian) run that
 agent. `implement` runs opencode's own build agent behind a short contract,
@@ -42,7 +43,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OPENCODE_AGENTS = ROOT / ".opencode/agent"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from models import model_for, opencode_bin, variant_for
+from models import catalog_entry, model_for, opencode_bin, variant_for
 
 MAX_ROUNDS = 3
 # Long enough for an implementer that runs the gate twice; short enough that a
@@ -139,13 +140,11 @@ def catalog_accepts_images(model):
     """Whether opencode's cached models.dev catalog lists `model` as taking
     images. opencode 2 dropped `models --verbose`; the catalog it refreshes
     is what's left to ask."""
-    provider, _, name = model.partition("/")
-    cache = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "opencode/models.json"
-    try:
-        catalog = json.loads(cache.read_text())
-        inputs = catalog[provider]["models"][name]["modalities"]["input"]
-    except (OSError, ValueError, KeyError, TypeError):
+    entry = catalog_entry(model)
+    if entry is None:
         return False
+    modalities = entry.get("modalities", {})
+    inputs = modalities.get("input") if isinstance(modalities, dict) else None
     return isinstance(inputs, list) and "image" in inputs
 
 
@@ -243,8 +242,11 @@ def rounds_so_far(session):
 
 def explain(error):
     """One line for an opencode error event, with the fix where one is known."""
-    data = error.get("data", {}) if isinstance(error, dict) else {}
-    message = data.get("message") or error.get("name") or str(error)
+    if not isinstance(error, dict):
+        return str(error)
+    data = error.get("data", {})
+    message = data.get("message") if isinstance(data, dict) else None
+    message = message or error.get("message") or error.get("name") or str(error)
     if "free tier can only be used from within OpenCode" in message:
         return (f"{message}\n  OpenCode's free models refuse every agent but "
                 f"opencode's built-in ones. Point this role at a paid model "

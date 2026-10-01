@@ -222,6 +222,30 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(out.returncode, 1)
         self.assertIn("harness/models.json", out.stderr)
 
+    def test_v2_error_shape_reads_the_message_directly(self):
+        # Live v2 errors carry the message on the error itself ({type,
+        # message}), not under data — printing anything else is a dict repr.
+        v2 = (json.dumps({"type": "error", "sessionID": "ses_fake",
+                          "error": {"type": "provider.no-route",
+                                    "message": "Model unavailable: x/y"}}) + "\n")
+        out = self.agent("reviewer-taste", "review", events=v2)
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("Model unavailable: x/y", out.stderr)
+        self.assertNotIn("{'type'", out.stderr)
+
+    def test_image_catalog_covers_a_legacy_models_failure(self):
+        # opencode 2 dropped `models --verbose`, so the legacy check fails —
+        # the cached models.dev catalog is what's left to ask.
+        cache = Path(self.env["HOME"]) / ".cache/opencode"
+        cache.mkdir(parents=True)
+        (cache / "models.json").write_text(json.dumps({
+            "go": {"models": {"vision":
+                              {"modalities": {"input": ["text", "image"]}}}}}))
+        out = self.agent("reviewer-design", "review", models_exit="1",
+                         events=text_event("visual ok"))
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(out.stdout.strip(), "visual ok")
+
     def test_a_role_without_a_model_is_refused(self):
         out = self.agent("reviewer-correctness", "review")
         self.assertEqual(out.returncode, 1)

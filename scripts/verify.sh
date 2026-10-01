@@ -3,15 +3,16 @@
 # agent can prove its own work without a human reading a screen.
 #
 #   scripts/verify.sh           # build + tests
-#   scripts/verify.sh --full    # + slower checks and any smoke test
-#   scripts/verify.sh --quick   # fast lane: everything but tests and e2e
+#   scripts/verify.sh --full    # accepted, and today the same as the default:
+#                               # there is no --full-only tier yet
+#   scripts/verify.sh --quick   # fast lane only: no throwaway-repo probes
 #
-# Two lanes, one contract. The test suite and the browser smoke cost far more
-# than the checks around them, which prices a full run out of the
-# edit-and-check loop. --quick runs the steps that prove the tree as it stands
-# and skips the slow ones loudly (probe_step) rather than silently. Run it
-# while iterating, the full gate before committing: a quick green is a signal,
-# not proof.
+# Two lanes, one contract. The probe steps below each build a throwaway repo
+# and cost seconds apiece, which prices a full run in minutes — too slow for
+# the edit-and-check loop. --quick runs only the steps that prove the tree as
+# it stands (parses, staleness, contract match, unit checks) and skips the
+# probes loudly rather than silently. Run it while iterating, the full gate
+# before committing: a quick green is a signal, not proof.
 #
 # Output is deliberately tiny. A build tool prints tens of thousands of lines
 # and an agent that pipes that into its context has spent a chunk of the day's
@@ -55,9 +56,9 @@ _harness_prefix() {
 LOGS=/tmp/$(_harness_prefix)-verify
 mkdir -p "$LOGS"
 # Per-step seconds for the last run, in run order (`sort -rn` for
-# slowest-first): the gate's total cost had no breakdown, so the next slowdown
-# gets measured rather than guessed at. Truncated here so the file describes
-# one run.
+# slowest-first): har-ckm showed the gate's total cost with no breakdown, so
+# the next slowdown gets measured rather than guessed at. Truncated here so
+# the file describes one run.
 rm -f "$LOGS/timings"
 
 mode="${1:---default}"
@@ -92,19 +93,13 @@ step() {
   report "$name" "$log" $status
 }
 
-# A step too slow for the --quick lane: heavy suites. Skipped there, loudly:
-# a green suite that silently ran nothing is the failure the steps file warns
-# about, so skips print as skips. Everything else about the step is unchanged.
+# A step too slow for the --quick lane: throwaway-repo probes and heavy
+# suites. Skipped there, loudly: a green suite that silently ran nothing is
+# the failure the steps file warns about, so skips print as skips. Everything
+# else about the step is unchanged.
 probe_step() {
   if [ "$mode" = "--quick" ]; then
     echo "  skip  $1 (--quick lane)"
-    # A skipped step must not keep an older lane's verdict: readers
-    # (scripts/dashboard.py read_logs) take a stale tests.log + .status for
-    # a suite that just ran. Drop both, so the step simply has no entry
-    # until a lane that really runs it — and note the skip in timings, where
-    # a missing line would read as a step that never existed.
-    rm -f "$LOGS/${1// /-}.log" "$LOGS/${1// /-}.log.status"
-    echo "0 $1 (skipped --quick)" >> "$LOGS/timings"
     return 0
   fi
   step "$@"
@@ -244,6 +239,8 @@ fi
 step "codex support" python3 scripts/codex-support.py check
 step "codex regression" python3 scripts/test-codex-support.py
 step "agent runner" python3 scripts/test-agent.py
+step "model probes" python3 scripts/test-models-probe.py
+step "opencode permissions" python3 scripts/test-opencode-permissions.py
 
 # The knowledge layer gets the same treatment as the code. A doc that quietly
 # stopped being true is worse than a missing one, and it can't be caught by
@@ -284,14 +281,21 @@ else
 fi
 # ── END PROJECT STEPS ─────────────────────────────────────────────────────
 
+# The golden probe fixture pays one install per run and every probe copies it
+# instead of installing — but probe bodies reset the EXIT trap, so the fixture
+# cannot reap itself. Reaped here, once, whatever the outcome — and only when
+# this run built it (GOLDEN_MINE is never exported, so a nested --quick gate
+# inheriting GOLDEN can never reap the outer run's fixture mid-flight).
+if [ "${GOLDEN_MINE:-}" = 1 ] && [ -n "${GOLDEN:-}" ] && [ -d "$GOLDEN" ]; then
+  rm -rf "$GOLDEN"
+fi
+
 # What the gate proved, as a git tree. Comparing a commit's timestamp against the
 # gate's can only ever say "you committed after you verified", which is the
 # order the loop prescribes — so it marked every fresh commit unverified. The
 # tree says the thing actually worth knowing: whether the content in that commit
-# is the content the gate ran against. The --quick lane skips the suite, so it
-# attests nothing: rewriting the tree here would stamp an untested tree as
-# proven.
-if [ "$failed" -eq 0 ] && [ "$mode" != "--quick" ]; then
+# is the content the gate ran against.
+if [ "$failed" -eq 0 ]; then
   idx="$LOGS/index"
   rm -f "$idx"
   GIT_INDEX_FILE="$idx" git read-tree HEAD 2>/dev/null &&

@@ -35,7 +35,12 @@ base="${1:-}"
 _harness_prefix() {
   local p=""
   if command -v bd >/dev/null 2>&1; then
-    p="$(bd config get issue_prefix 2>/dev/null | tr -d '[:space:]')" || true
+    # Never `bd config get` or `bd info` here: both auto-import a stale
+    # .beads/issues.jsonl when the ledger looks stale to them, resurrecting
+    # deleted beads (har-67c). `bd list` never imports, so the prefix comes
+    # from the first bead id instead; an empty ledger has no ids and falls
+    # through to the directory name below.
+    p="$(bd list --json --all 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); i=(d[0].get("id","") if d else ""); print(i.split("-",1)[0] if "-" in i else "")' 2>/dev/null)" || true
   fi
   if ! printf '%s' "$p" | grep -qE '^[a-z0-9]{1,10}$'; then
     # Physical path, matching what `harness add` derived at install time and what
@@ -46,7 +51,11 @@ _harness_prefix() {
   fi
   printf '%s\n' "$p"
 }
-packet=/tmp/$(_harness_prefix)-review-packet.md
+packet=/tmp/$(_harness_prefix)-review-packet-$$.md
+# Namespaced by PID, not just by project prefix: two sessions in one checkout
+# — a Claude Code session and an opencode session, the exact scenario this
+# cross-app effort is built for — otherwise overwrite each other's packet
+# mid-review, and the reviewer reports on work nobody asked about.
 
 # No base given: review what isn't committed yet, and fall back to the last
 # commit when the tree is clean — "review my work" almost never means "review
