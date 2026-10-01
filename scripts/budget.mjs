@@ -5,6 +5,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
+import { assertBuildFresh, CLIENT_INDEX } from './lib/fresh-build.mjs';
 
 let failed = false;
 const bad = (m) => { failed = true; console.error(`budget: failed: ${m}`); };
@@ -46,40 +47,12 @@ for (const [hood, h] of Object.entries(hoods)) {
 // The client build must be current. React Router framework mode emits
 // build/client (dist/ is pre-router output and must not be read). Fail closed
 // when the build is missing or older than the sources that feed it.
-const CLIENT_INDEX = join('build/client', 'index.html');
 const ASSET_DIR = join('build/client', 'assets');
-let buildStamp = NaN;
-try {
-  buildStamp = statSync(CLIENT_INDEX).mtimeMs;
-} catch {
-  bad('no build/client/index.html here — run the build first (the gate builds before this step)');
-}
-const newestSource = () => {
-  let newest = { path: null, mtimeMs: -Infinity };
-  const consider = (p) => {
-    let st;
-    try {
-      st = statSync(p);
-    } catch {
-      return;
-    }
-    if (st.isDirectory()) {
-      for (const e of readdirSync(p)) {
-        if (/\.test\.tsx?$/.test(e)) continue; // vitest-only, never in the client graph
-        consider(join(p, e));
-      }
-    } else if (st.mtimeMs > newest.mtimeMs) {
-      newest = { path: p, mtimeMs: st.mtimeMs };
-    }
-  };
-  consider('src');
-  for (const f of ['react-router.config.ts', 'vite.config.ts', 'package.json', join('assets/pipeline', 'vitePlugin.ts')]) consider(f);
-  return newest;
-};
 if (!failed) {
-  const newest = newestSource();
-  if (newest.path && newest.mtimeMs > buildStamp) {
-    bad(`build predates sources (${newest.path} is newer than ${CLIENT_INDEX}) — rebuild first`);
+  try {
+    assertBuildFresh(CLIENT_INDEX);
+  } catch (e) {
+    bad(e.message);
   }
 }
 if (failed) process.exit(1);
