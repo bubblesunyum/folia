@@ -71,13 +71,15 @@ body,
   height: 40px;
   font-size: 1.25rem;
   color: var(--cream);
-  background: color-mix(in srgb, var(--forest) 80%, transparent);
-  border: 1px solid color-mix(in srgb, var(--cream) 30%, transparent);
+  background: color-mix(in srgb, var(--forest) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cream) 65%, transparent);
   border-radius: 8px;
+  box-shadow: 0 1px 8px rgb(0 0 0 / 0.45);
   cursor: pointer;
 }
 
 .zoom-buttons button:hover {
+  background: var(--forest);
   border-color: var(--cream);
 }
 
