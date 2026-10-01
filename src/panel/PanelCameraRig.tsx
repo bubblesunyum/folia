@@ -1,6 +1,7 @@
 // The camera reframe for the open panel (fol-l1r.5, D-022/D-050): the orbit
-// target eases toward the open pedestal (back to town when it closes), and
-// the camera takes a view offset so the scene sits centered in the uncovered
+// target eases toward the open pedestal (back to town when it closes), the
+// camera dollies to the panel vantage on wide screens (fol-bsw), and the
+// camera takes a view offset so the scene sits centered in the uncovered
 // area — right of nothing on wide screens (the sheet takes the right),
 // above the bottom sheet on narrow ones. The offset animates with the panel
 // and re-applies on every resize; reduced motion jumps straight there.
@@ -8,9 +9,12 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { beginCameraFlight, currentCameraFlight } from '../input/cameraFlight'
 import { readReducedMotion } from '../input/intent'
 import { damp, expFactor } from '../motion/damp'
+import { setOrbitDistance } from '../motion/orbit'
 import { setCanvasHook } from '../testHooks'
+import { resolvePanelDolly } from './panelDolly'
 import { PEDESTAL_ANCHOR_BY_SLUG, type PedestalSlug, TOWN_ORBIT_TARGET } from './pedestals'
 import { usePanelLayout } from './usePanelLayout'
 
@@ -18,6 +22,8 @@ const FOCUS_RATE = 3
 const OFFSET_RATE = 6
 const FOCUS_SNAP_M = 0.02
 const OFFSET_SNAP_PX = 0.5
+const DOLLY_RATE = 3
+const DOLLY_SNAP_M = 0.1
 
 interface ControlsLike {
   target: THREE.Vector3
@@ -41,11 +47,18 @@ export function PanelCameraRig() {
     targetY: 0,
     writtenOffset: '',
     writtenFocus: '',
+    // Panel vantage dolly (fol-bsw): the goal distance, the pre-open
+    // distance to restore on close, and our flight generation. Another
+    // driver (user zoom) bumps the generation and we yield.
+    dollyGoal: null as number | null,
+    dollyRestore: null as number | null,
+    dollyFlight: 0,
   })
   const controlsRef = useRef(controls)
   controlsRef.current = controls
 
   const { x: viewTargetX, y: viewTargetY } = layout.viewTarget
+  const layoutVariant = layout.variant
   useEffect(() => {
     const canvas = gl.domElement
     const slug = layout.slug
@@ -55,10 +68,22 @@ export function PanelCameraRig() {
     rig.current.focusArrived = slug === null && rig.current.viewX === 0 && rig.current.viewY === 0
     // The open case reports at once; focus follows once the ease lands.
     setCanvasHook(canvas, 'panel', slug ?? '')
+    // Panel vantage dolly (fol-bsw): the pure step decides, the effect only
+    // applies. See panelDolly.ts for the session semantics.
+    const target = controlsRef.current?.target
+    const decision = resolvePanelDolly({
+      slug,
+      variant: layoutVariant,
+      distance: target ? camera.position.distanceTo(target) : null,
+      state: { goal: rig.current.dollyGoal, restore: rig.current.dollyRestore },
+    })
+    rig.current.dollyGoal = decision.state.goal
+    rig.current.dollyRestore = decision.state.restore
+    if (decision.claim) rig.current.dollyFlight = beginCameraFlight()
     // A new target always needs frames until the ease lands; a resize
     // re-targets while the demand loop may be at rest.
     invalidate()
-  }, [gl, invalidate, layout.slug, viewTargetX, viewTargetY])
+  }, [gl, invalidate, camera, layout.slug, layoutVariant, viewTargetX, viewTargetY])
 
   useEffect(() => {
     const canvas = gl.domElement
@@ -101,6 +126,30 @@ export function PanelCameraRig() {
       setCanvasHook(canvas, 'focus', focusText)
     }
     r.focusArrived = focusText !== '' || r.slug === null
+
+    // Panel vantage dolly (fol-bsw): ease the orbit distance toward the goal
+    // alongside the focus ease. Another driver bumps the flight generation
+    // (user zoom claims it on every step) and we yield, clearing the session
+    // restore with it. Arrival clears the goal; arriving back at the restore
+    // ends the session.
+    if (r.dollyGoal !== null && target) {
+      if (currentCameraFlight() !== r.dollyFlight) {
+        r.dollyGoal = null
+        r.dollyRestore = null
+      } else {
+        const goal = r.dollyGoal
+        const distance = camera.position.distanceTo(target)
+        const step = reduced ? goal : damp(distance, goal, DOLLY_RATE, dt, DOLLY_SNAP_M)
+        if (step !== distance) {
+          setOrbitDistance(camera, target, step, controlsRef.current)
+          busy = true
+        }
+        if (step === goal) {
+          if (goal === r.dollyRestore) r.dollyRestore = null
+          r.dollyGoal = null
+        }
+      }
+    }
 
     // View-offset ease with the panel; re-applied live on resize above.
     const easeOffset = (current: number, goal: number): number => {

@@ -1,7 +1,9 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { setOrbitDistance } from '../motion/orbit'
 import { type RiseCountHost, recordRise, setCanvasHook } from '../testHooks'
+import { beginCameraFlight, currentCameraFlight } from './cameraFlight'
 import {
   isDismissKey,
   isPanelOpen,
@@ -50,14 +52,8 @@ function isGestureEvent(event: Event): event is SafariGestureEvent {
   return 'scale' in event && typeof (event as { scale: unknown }).scale === 'number'
 }
 
-/** Arbitrary non-degenerate axis, so the dolly direction can never NaN. */
-const FALLBACK_DIRECTION = new THREE.Vector3(1, 0.6, 1).normalize()
-
 /** Default orbit target, shared so the per-frame loop never allocates. */
 const FALLBACK_TARGET = new THREE.Vector3(0, 2, 0)
-
-/** Scratch dolly direction, reused every frame while a tween is active. */
-const scratchDirection = new THREE.Vector3()
 
 /** Two-pointer pinch tracking: finger distance in CSS pixels feeds one delta. */
 function createPinchTracker(onPinch: (delta: number) => void) {
@@ -111,6 +107,8 @@ interface ZoomTween {
   from: number
   to: number
   start: number
+  /** Camera-flight generation at creation: another driver cancels this. */
+  flight: number
 }
 
 /**
@@ -146,26 +144,27 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
   invalidateRef.current = invalidate
 
   // Discrete steps ease toward their render target. Continuous input cancels
-  // the tween by writing a new one (or jumping straight there); Phase 2
-  // flights own the camera and must clear tweenRef when they take over.
+  // the tween by writing a new one (or jumping straight there). Other camera
+  // drivers claim via beginCameraFlight(); the loop yields when its flight
+  // is stale.
   useFrame(() => {
     const tween = tweenRef.current
     if (!tween) return
+    // Another driver (the panel vantage dolly) took the camera: yield.
+    if (tween.flight !== currentCameraFlight()) {
+      tweenRef.current = null
+      return
+    }
     const target = controlsRef.current?.target ?? FALLBACK_TARGET
     const now = performance.now()
     const t = Math.min(Math.max((now - tween.start) / ZOOM_STEP_DURATION_MS, 0), 1)
     const renderDistance = tween.from + (tween.to - tween.from) * easeOutCubic(t)
-    const direction = scratchDirection.copy(camera.position).sub(target)
-    if (direction.lengthSq() === 0) direction.copy(FALLBACK_DIRECTION)
-    direction.normalize()
-    camera.position.copy(target).addScaledVector(direction, renderDistance)
-    controlsRef.current?.update()
+    setOrbitDistance(camera, target, renderDistance, controlsRef.current)
     const canvas = gl.domElement
     setCanvasHook(canvas, 'zoom', renderDistance.toFixed(2))
     if (t >= 1 || Math.abs(tween.to - renderDistance) < ZOOM_SETTLE_EPS) {
       tweenRef.current = null
-      camera.position.copy(target).addScaledVector(direction, tween.to)
-      controlsRef.current?.update()
+      setOrbitDistance(camera, target, tween.to, controlsRef.current)
       setCanvasHook(canvas, 'zoom', camera.position.distanceTo(target).toFixed(2))
     }
     invalidateRef.current()
@@ -181,12 +180,9 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
     }
 
     const dollyTo = (renderDistance: number) => {
+      beginCameraFlight()
       const target = targetOf()
-      const direction = scratchDirection.copy(camera.position).sub(target)
-      if (direction.lengthSq() === 0) direction.copy(FALLBACK_DIRECTION)
-      direction.normalize()
-      camera.position.copy(target).addScaledVector(direction, renderDistance)
-      controlsRef.current?.update()
+      setOrbitDistance(camera, target, renderDistance, controlsRef.current)
       publishCamera()
       invalidate()
     }
@@ -201,7 +197,12 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
         dollyTo(renderDistance)
         return
       }
-      tweenRef.current = { from, to: renderDistance, start: performance.now() }
+      tweenRef.current = {
+        from,
+        to: renderDistance,
+        start: performance.now(),
+        flight: beginCameraFlight(),
+      }
       invalidate()
     }
 
