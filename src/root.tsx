@@ -1,10 +1,19 @@
 import { type ComponentType, type ReactNode, useEffect, useState } from 'react'
 import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration } from 'react-router'
+import { palette } from './palette'
 import { CanvasHost } from './shell/CanvasHost'
 import { SkyShell } from './shell/SkyShell'
 import './styles.css'
 
 // The root route must live at <appDirectory>/root.tsx, i.e. src/root.tsx.
+
+// Palette as :root custom properties at prerender (fol-95g, D-024): the
+// prerendered HTML ships the vars so first paint and no-JS never depend on
+// hex fallbacks in CSS. palette.ts is pure (no window), so it stays inside
+// the ssr-boundary (D-047).
+const paletteStyle = `:root{${Object.entries(palette)
+  .map(([name, value]) => `--${name}:${value}`)
+  .join(';')}}`
 
 // The document shell, shared by the app, the hydrate fallback and the error
 // boundary so the shell never remounts between them.
@@ -18,6 +27,9 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="robots" content="noindex" />
         <Meta />
         <Links />
+        {/* palette vars at prerender: static string from palette.ts, no user input. */}
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: static palette string */}
+        <style dangerouslySetInnerHTML={{ __html: paletteStyle }} />
       </head>
       <body>
         {children}

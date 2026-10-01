@@ -135,14 +135,7 @@ body,
 .sky-shell-gradient {
   position: absolute;
   inset: 0;
-  /* Hex fallbacks mirror palette.ts so the gradient paints before JS publishes
-     the `--*` properties (and with JS disabled). */
-  background: linear-gradient(
-    to bottom,
-    var(--skyZenith, #8397d4),
-    var(--skyDusk, #f3c79b) 45%,
-    var(--forest, #001e17)
-  );
+  background: linear-gradient(to bottom, var(--skyZenith), var(--skyDusk) 45%, var(--forest));
 }
 
 .sky-shell-content {
@@ -156,13 +149,13 @@ body,
   font-size: 1.5rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--cream, #f4eee1);
+  color: var(--cream);
 }
 
 .sky-shell-content p {
   margin: 8px 0 0;
   font-size: 1rem;
-  color: var(--cream, #f4eee1);
+  color: var(--cream);
   opacity: 0.75;
 }
 
@@ -177,8 +170,8 @@ body,
   max-height: 60vh;
   overflow: auto;
   padding: 16px 20px;
-  color: var(--forest, #001e17);
-  background: var(--cream, #f4eee1);
+  color: var(--forest);
+  background: var(--cream);
   border-radius: 12px;
 }
 
@@ -222,8 +215,8 @@ body,
   width: min(45vw, 640px);
   overflow-y: auto;
   padding: 20px 24px 24px;
-  color: var(--forest, #001e17);
-  background: var(--cream, #f4eee1);
+  color: var(--forest);
+  background: var(--cream);
   border-top-left-radius: 16px;
   border-bottom-left-radius: 16px;
   animation: case-panel-in 450ms ease;
@@ -259,8 +252,8 @@ body,
   padding: 4px 10px;
   font-size: 0.85rem;
   letter-spacing: 0.04em;
-  color: var(--mint, #4bfed2);
-  background: var(--forest, #001e17);
+  color: var(--mint);
+  background: var(--forest);
   border-radius: 999px;
 }
 
@@ -271,10 +264,10 @@ body,
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--mint, #4bfed2);
+  background: var(--mint);
   box-shadow:
-    0 0 8px 2px var(--mint, #4bfed2),
-    0 0 20px 6px color-mix(in srgb, var(--mint, #4bfed2) 45%, transparent);
+    0 0 8px 2px var(--mint),
+    0 0 20px 6px color-mix(in srgb, var(--mint) 45%, transparent);
   animation: wisp-bob 2.8s ease-in-out infinite;
 }
 
@@ -283,20 +276,20 @@ body,
   padding: 8px 18px;
   font-size: 1rem;
   letter-spacing: 0.06em;
-  color: var(--cream, #f4eee1);
+  color: var(--cream);
   cursor: pointer;
-  background: var(--forest, #001e17);
+  background: var(--forest);
   border: none;
   border-radius: 999px;
 }
 
 .case-panel button:hover {
-  outline: 2px solid var(--mint, #4bfed2);
+  outline: 2px solid var(--mint);
   outline-offset: 2px;
 }
 
 .case-panel button:focus-visible {
-  outline: 2px solid var(--mint, #4bfed2);
+  outline: 2px solid var(--mint);
   outline-offset: 2px;
 }
 
