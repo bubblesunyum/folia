@@ -3,8 +3,7 @@
 # agent can prove its own work without a human reading a screen.
 #
 #   scripts/verify.sh           # build + tests
-#   scripts/verify.sh --full    # accepted, and today the same as the default:
-#                               # there is no --full-only tier yet
+#   scripts/verify.sh --full    # accepted lane: default + the --full-only e2e suite
 #   scripts/verify.sh --quick   # fast lane only: no throwaway-repo probes
 #
 # Two lanes, one contract. The probe steps below each build a throwaway repo

@@ -30,7 +30,14 @@ export function PanelPresenter({ content }: { content: PresenterContent }) {
   const { variant } = usePanelLayout()
 
   const close = useCallback(() => {
-    navigate(`/${projectSlug}`)
+    // Open pushes /cortico → /cortico/<slug> (case-for-case swaps replace),
+    // so popping returns to the project page without stacking a duplicate
+    // /cortico entry — otherwise Back would reopen the closed panel
+    // (fol-e6h). A directly loaded case has no previous entry (router idx
+    // 0), so replace to the project page instead.
+    const idx = (window.history.state as { idx?: unknown } | null)?.idx
+    if (typeof idx === 'number' && idx > 0) navigate(-1)
+    else navigate(`/${projectSlug}`, { replace: true })
   }, [navigate, projectSlug])
 
   // Open-case registration: the canvas rigs (focus ease, view offset, wisp)

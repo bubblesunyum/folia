@@ -84,11 +84,26 @@ describe('swayOffset', () => {
 })
 
 describe('sway chunks', () => {
-  it('derives phase from the batch/instance anchor with height-weighted amplitude', () => {
+  it('derives phase from the batch/instance anchor with baked-weight amplitude', () => {
     const after = sway.vertex.chunks.begin_vertex.after
     expect(after).toContain('(batchingMatrix * vec4(swayAnchor, 1.0)).xyz')
     expect(after).toContain('(instanceMatrix * vec4(swayAnchor, 1.0)).xyz')
-    expect(after).toContain(`smoothstep(${SWAY_BASE_M}, ${SWAY_TOP_M}, position.y)`)
+    expect(after).toContain('float swayWeight = _sway')
     expect(after).toContain('* uSwayStrength * swayWeight')
+  })
+
+  it('ramps on no world height: world-baked batches would pin terrace foliage', () => {
+    const after = sway.vertex.chunks.begin_vertex.after
+    expect(after).not.toContain('position.y')
+    expect(after).not.toContain('smoothstep')
+  })
+
+  it('declares the baked weight under its loader-lowercased name', () => {
+    expect(sway.vertex.header).toContain('attribute float _sway')
+    expect(sway.depthVertex?.header).toContain('attribute float _sway')
+  })
+
+  it('defaults the strength to inert: still renders sit on the authored shape', () => {
+    expect(sway.uniforms.uSwayStrength.value).toBe(0)
   })
 })

@@ -264,19 +264,28 @@ export const revealBasic = {
 } satisfies Feature
 
 /**
- * Sway (spike 5, D-041): a procedural breeze over foliage, driven by `Sway`'s
- * clock. The phase rides on the batch/instance-space anchor — the vertex
- * carried through the batch then instance matrices — so instances sharing one
- * geometry never sway in lockstep; under today's identity batching the anchor
- * is `position`, exactly the old phase. Amplitude is height-weighted on the
- * geometry-local Y (see `swayModel.ts`): trunks hold still, tops take the full
- * breeze. It moves the shadow too, so it's also in the depth material —
+ * Sway (spike 5, D-041; fol-a83): a procedural breeze over foliage, driven by
+ * `Sway`'s clock. The phase rides on the batch/instance-space anchor — the
+ * vertex carried through the batch then instance matrices — so instances
+ * sharing one geometry never sway in lockstep; under today's identity
+ * batching the anchor is `position`, exactly the old phase. Amplitude is the
+ * per-vertex `_SWAY` weight Blender bakes (height above the clump base,
+ * smoothstepped 0.5→2.5 m; see `swayModel.ts`): trunks hold still, tops take
+ * the full breeze. Batches are world-baked, so a world-height ramp here would
+ * pin terrace foliage to its terrace and freeze everything under 0.5 m world
+ * — the weight comes from the attribute, never `position.y`. A missing
+ * attribute reads 0 in WebGL, so un-baked geometry holds still (inert
+ * default). It moves the shadow too, so it's also in the depth material —
  * freezing shadows while sway runs detaches them (D-041's static fallback).
  */
 const swayVertex = {
   header: /* glsl */ `
     uniform float uSwayTime;
-    uniform float uSwayStrength;`,
+    uniform float uSwayStrength;
+    // Baked in Blender as _SWAY; GLTFLoader lowercases custom attributes
+    // (see assets/batches.ts), and the loader path leaves it un-renamed,
+    // so the shader reads it as _sway.
+    attribute float _sway;`,
   chunks: {
     begin_vertex: {
       after: /* glsl */ `
@@ -287,7 +296,7 @@ const swayVertex = {
         #ifdef USE_INSTANCING
           swayAnchor = (instanceMatrix * vec4(swayAnchor, 1.0)).xyz;
         #endif
-        float swayWeight = smoothstep(0.5, 2.5, position.y);
+        float swayWeight = _sway;
         float swayPhase = uSwayTime * 1.6 + swayAnchor.x * 0.35 + swayAnchor.z * 0.45;
         transformed.x += sin(swayPhase) * uSwayStrength * swayWeight;
         transformed.z += cos(swayPhase * 0.83) * uSwayStrength * 0.6 * swayWeight;`,

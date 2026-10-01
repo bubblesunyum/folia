@@ -13,8 +13,10 @@ const say = (m) => console.log(`budget: ${m}`);
 // Per-neighborhood allowance: cortico ships 1.82 MB / 171,540 tris.
 const HOOD_BYTES = 2_500_000;
 const HOOD_TRIS = 225_000;
-// Shell/canvas JS gz caps (D-059 split): shell 70 KB, canvas 360 KB gz now.
-const SHELL_GZ = 100_000;
+// Shell/canvas JS gz caps: shell re-measured post-router (fol-3qa) — the `/`
+// initial-route chunk union is ~113 KB gz, so the cap holds ~20% headroom.
+// Canvas re-measures at ~365 KB gz against its 450 KB cap.
+const SHELL_GZ = 140_000;
 const CANVAS_GZ = 450_000;
 
 const manifest = JSON.parse(readFileSync('assets/manifest.json', 'utf8'));
@@ -41,7 +43,48 @@ for (const [hood, h] of Object.entries(hoods)) {
   if (h.tris > HOOD_TRIS) bad(`${hood} tris ${h.tris} over allowance ${HOOD_TRIS}`);
 }
 
-const chunks = readdirSync('dist/assets').filter((f) => f.endsWith('.js'));
+// The client build must be current. React Router framework mode emits
+// build/client (dist/ is pre-router output and must not be read). Fail closed
+// when the build is missing or older than the sources that feed it.
+const CLIENT_INDEX = join('build/client', 'index.html');
+const ASSET_DIR = join('build/client', 'assets');
+let buildStamp = NaN;
+try {
+  buildStamp = statSync(CLIENT_INDEX).mtimeMs;
+} catch {
+  bad('no build/client/index.html here — run the build first (the gate builds before this step)');
+}
+const newestSource = () => {
+  let newest = { path: null, mtimeMs: -Infinity };
+  const consider = (p) => {
+    let st;
+    try {
+      st = statSync(p);
+    } catch {
+      return;
+    }
+    if (st.isDirectory()) {
+      for (const e of readdirSync(p)) {
+        if (/\.test\.tsx?$/.test(e)) continue; // vitest-only, never in the client graph
+        consider(join(p, e));
+      }
+    } else if (st.mtimeMs > newest.mtimeMs) {
+      newest = { path: p, mtimeMs: st.mtimeMs };
+    }
+  };
+  consider('src');
+  for (const f of ['react-router.config.ts', 'vite.config.ts', 'package.json', join('assets/pipeline', 'vitePlugin.ts')]) consider(f);
+  return newest;
+};
+if (!failed) {
+  const newest = newestSource();
+  if (newest.path && newest.mtimeMs > buildStamp) {
+    bad(`build predates sources (${newest.path} is newer than ${CLIENT_INDEX}) — rebuild first`);
+  }
+}
+if (failed) process.exit(1);
+
+const chunks = readdirSync(ASSET_DIR).filter((f) => f.endsWith('.js'));
 const pick = (re, what) => {
   const hit = chunks.filter((f) => re.test(f));
   if (hit.length !== 1) {
@@ -50,13 +93,83 @@ const pick = (re, what) => {
   }
   return hit[0];
 };
-const gz = (f) => gzipSync(readFileSync(join('dist/assets', f)), { level: 9 }).length;
-const shell = pick(/^index-[A-Za-z0-9_-]+\.js$/, 'shell');
-if (shell) {
-  const n = gz(shell);
-  say(`shell js gz ${(n / 1e3).toFixed(1)} KB (${shell})`);
-  if (n > SHELL_GZ) bad(`shell js gz ${n} over cap ${SHELL_GZ}`);
+const gz = (f) => gzipSync(readFileSync(join(ASSET_DIR, f)), { level: 9 }).length;
+
+// Shell JS is the `/` initial-route union from the React Router client
+// manifest: the entry module plus its imports, the index route's chain up to
+// the root (each route module plus its imports), and the manifest chunk
+// itself, which the document imports before hydration. Anything ambiguous —
+// not one manifest, not one index route, a broken parent chain — fails closed
+// instead of measuring the wrong set.
+const shellFiles = new Set();
+{
+  const manifests = chunks.filter((f) => /^manifest-[A-Za-z0-9_-]+\.js$/.test(f));
+  if (manifests.length !== 1) {
+    bad(`expected exactly one client manifest chunk, found ${manifests.length}${manifests.length ? ` (${manifests.join(', ')})` : ''} — update the budget step`);
+  } else {
+    const raw = readFileSync(join(ASSET_DIR, manifests[0]), 'utf8');
+    const prefix = 'window.__reactRouterManifest=';
+    if (!raw.startsWith(prefix)) {
+      bad(`${manifests[0]} has an unexpected shape — update the budget step`);
+    } else {
+      let rr = null;
+      try {
+        rr = JSON.parse(raw.slice(prefix.length).replace(/;\s*$/, ''));
+      } catch {
+        rr = null;
+      }
+      if (!rr || !rr.entry || !rr.routes) {
+        bad(`${manifests[0]} did not parse — update the budget step`);
+      } else {
+        const strip = (u) => String(u).replace(/^\/assets\//, '');
+        shellFiles.add(manifests[0]);
+        shellFiles.add(strip(rr.entry.module));
+        for (const u of rr.entry.imports ?? []) shellFiles.add(strip(u));
+        const indexRoutes = Object.values(rr.routes).filter((r) => r.index);
+        if (indexRoutes.length !== 1) {
+          bad(`expected exactly one index route, found ${indexRoutes.length} — update the budget step`);
+        } else {
+          let r = indexRoutes[0];
+          const seen = new Set();
+          for (;;) {
+            if (seen.has(r.id)) {
+              bad(`route parent chain loops at ${r.id} — update the budget step`);
+              break;
+            }
+            seen.add(r.id);
+            shellFiles.add(strip(r.module));
+            for (const u of r.imports ?? []) shellFiles.add(strip(u));
+            if (!r.parentId) break;
+            r = rr.routes[r.parentId];
+            if (!r) {
+              bad('route parent chain leaves the manifest — update the budget step');
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
 }
+if (failed) process.exit(1);
+{
+  let total = 0;
+  for (const f of [...shellFiles].sort()) {
+    let n;
+    try {
+      n = gz(f);
+    } catch {
+      bad(`shell chunk ${f} missing from ${ASSET_DIR} — rebuild first`);
+      continue;
+    }
+    total += n;
+  }
+  if (!failed) {
+    say(`shell js gz ${(total / 1e3).toFixed(1)} KB across ${shellFiles.size} initial-route chunks (${[...shellFiles].sort().join(', ')})`);
+    if (total > SHELL_GZ) bad(`shell js gz ${total} over cap ${SHELL_GZ}`);
+  }
+}
+if (failed) process.exit(1);
 const canvas = pick(/^TownCanvas-[A-Za-z0-9_-]+\.js$/, 'canvas');
 if (canvas) {
   const n = gz(canvas);

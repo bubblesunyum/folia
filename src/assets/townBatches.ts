@@ -6,6 +6,22 @@
 /** Asset → batch → baked triangles, from `assets/manifest.json`. */
 export type ManifestTriangles = Readonly<Record<string, Readonly<Record<string, number>>>>
 
+/**
+ * Asset → batch → pack-time geometry counts, from `assets/manifest.json`
+ * (fol-3w2). `vertices`/`indices` are absent on records packed before the
+ * counts landed; those batches fall back to the triangle estimate.
+ */
+export interface ManifestBatchCounts {
+  triangles: number
+  vertices?: number
+  indices?: number
+}
+
+/** Either legacy triangle totals or pack-time counts per batch. */
+export type ManifestCounts = Readonly<
+  Record<string, Readonly<Record<string, number | ManifestBatchCounts>>>
+>
+
 export interface BatchCapacity {
   maxInstances: number
   maxVertices: number
@@ -34,25 +50,52 @@ export const MINIMUM_BATCH_CAPACITY: BatchCapacity = { ...MINIMUM }
 
 /** Town-wide capacity per batch: manifest totals times headroom. */
 export function capacityFromManifest(
-  triangles: ManifestTriangles,
+  manifest: ManifestCounts,
   headroom: { instances: number; vertices: number; indices: number } = CAPACITY_HEADROOM,
 ): Record<string, BatchCapacity> {
-  const totals = new Map<string, { assets: number; tris: number }>()
-  for (const batches of Object.values(triangles)) {
-    for (const [batch, tris] of Object.entries(batches)) {
-      const total = totals.get(batch) ?? { assets: 0, tris: 0 }
+  const totals = new Map<
+    string,
+    { assets: number; tris: number; vertices: number; indices: number; exact: boolean }
+  >()
+  for (const batches of Object.values(manifest)) {
+    for (const [batch, value] of Object.entries(batches)) {
+      const counts: ManifestBatchCounts = typeof value === 'number' ? { triangles: value } : value
+      const total = totals.get(batch) ?? {
+        assets: 0,
+        tris: 0,
+        vertices: 0,
+        indices: 0,
+        exact: true,
+      }
       total.assets += 1
-      total.tris += tris
+      total.tris += counts.triangles
+      if (counts.vertices === undefined || counts.indices === undefined) {
+        // Legacy record (or a batch the pack step didn't count): keep the
+        // pre-fol-3w2 triangles×3 estimate for the whole batch.
+        total.exact = false
+      } else {
+        total.vertices += counts.vertices
+        total.indices += counts.indices
+      }
       totals.set(batch, total)
     }
   }
   return Object.fromEntries(
-    [...totals].map(([batch, { assets, tris }]) => [
+    // Exact counts already are vertices, so they still need the per-geometry
+    // LOD reservation the registry adds at registration on top, then headroom
+    // for breadth assets exactly like the triangle estimate.
+    [...totals].map(([batch, total]) => [
       batch,
       {
-        maxInstances: Math.max(MINIMUM.maxInstances, assets * headroom.instances),
-        maxVertices: Math.max(MINIMUM.maxVertices, tris * 3 * headroom.vertices),
-        maxIndices: Math.max(MINIMUM.maxIndices, tris * 3 * headroom.indices),
+        maxInstances: Math.max(MINIMUM.maxInstances, total.assets * headroom.instances),
+        maxVertices: Math.max(
+          MINIMUM.maxVertices,
+          (total.exact ? total.vertices * LOD_RESERVE : total.tris * 3) * headroom.vertices,
+        ),
+        maxIndices: Math.max(
+          MINIMUM.maxIndices,
+          (total.exact ? total.indices * LOD_RESERVE : total.tris * 3) * headroom.indices,
+        ),
       },
     ]),
   )

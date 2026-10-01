@@ -1,13 +1,16 @@
-// Sway's CPU mirror (spike 5, D-041): the same phase, height weight and
-// offsets the GLSL in `features.ts` computes, in plain numbers so Vitest can
-// pin them. The ramp constants must match the shader's literals; the shader
-// can't import them, so a test below asserts the chunk contains them.
+// Sway's CPU mirror (spike 5, D-041; fol-a83): the same phase, baked weight
+// curve and offsets the GLSL in `features.ts` computes, in plain numbers so
+// Vitest can pin them. The ramp constants must match the Blender bake
+// (`assets/blender/folia/foliage.py` smoothsteps each foliage vertex by this
+// curve and exports it as `_SWAY`); the shader reads the attribute and holds
+// no literals, so a test below asserts the chunk reads `_sway` and ramps on
+// no world height.
 
 import type { Vec3 } from './vec'
 
-/** Local height where the breeze starts to bite, in metres. */
+/** Height above the clump base where the breeze starts to bite, in metres. */
 export const SWAY_BASE_M = 0.5
-/** Local height taking the full breeze, in metres. */
+/** Height above the clump base taking the full breeze, in metres. */
 export const SWAY_TOP_M = 2.5
 /** Phase drift per metre of anchor x/z. */
 export const SWAY_X_RATE = 0.35
@@ -26,10 +29,11 @@ export function smoothstep(edge0: number, edge1: number, x: number): number {
 }
 
 /**
- * Height weight for a geometry-local Y: instanced trees stand on their base,
- * so trunks hold still while tops take the full breeze. For today's
- * world-baked batches local Y is world height off a ground near zero, which
- * degrades to the same ramp.
+ * The bake curve over height above the clump base, in metres: Blender bakes
+ * each foliage vertex's weight with this ramp and exports it as `_SWAY`, and
+ * the shader reads the attribute directly. Trunks hold still while tops take
+ * the full breeze. Batches are world-baked, so ramping on world height would
+ * pin terrace foliage to its terrace — the base here is the clump's own.
  */
 export function swayWeight(localY: number): number {
   return smoothstep(SWAY_BASE_M, SWAY_TOP_M, localY)

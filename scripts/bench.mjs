@@ -5,14 +5,16 @@
 //   node scripts/bench.mjs aa=smaa 'time=22:00'     # one run per argument
 //   node scripts/bench.mjs aa=msaa stress=2000      # add 2000 tiny instances (4000 sub-draws)
 //
-// Each argument is extra query params on top of `?perf=base`. It serves the last
-// `vite build` from dist/ itself, so run scripts/verify.sh first. Every run draws
+// Each argument is extra query params on top of `?perf=base`. It serves the
+// last `react-router build` from build/client/ itself, so run
+// scripts/verify.sh first (the gate builds before bench can run). Every run draws
 // four bursts of 240 frames back to back (see src/perf/bench.ts) and prints ms per
 // frame alongside the slice-exit verdict. Close other active scene tabs first
 // so they do not compete for GPU time.
 
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { chromium } from '@playwright/test'
 
 // Slice-exit budget: read from the single source in src/perf/renderConfig.ts
@@ -35,12 +37,41 @@ if (runs.some((run) => run.startsWith('-'))) {
   console.error('usage: node scripts/bench.mjs [query-params ...]   e.g. aa=smaa "time=22:00"')
   process.exit(2)
 }
-if (!existsSync('dist/index.html')) {
-  console.error('bench: no dist/ build here — run scripts/verify.sh (or vite build) from the repo root first')
+const CLIENT_INDEX = join('build/client', 'index.html')
+if (!existsSync(CLIENT_INDEX)) {
+  console.error('bench: no build/client/ build here — run scripts/verify.sh (or pnpm build) from the repo root first')
   process.exit(1)
 }
+// Fail closed on a stale build: bench numbers must come from the current
+// sources, never from a bundle an older tree produced.
+{
+  const buildStamp = statSync(CLIENT_INDEX).mtimeMs
+  let newest = { path: null, mtimeMs: -Infinity }
+  const consider = (p) => {
+    let st
+    try {
+      st = statSync(p)
+    } catch {
+      return
+    }
+    if (st.isDirectory()) {
+      for (const e of readdirSync(p)) {
+        if (/\.test\.tsx?$/.test(e)) continue // vitest-only, never in the client graph
+        consider(join(p, e))
+      }
+    } else if (st.mtimeMs > newest.mtimeMs) {
+      newest = { path: p, mtimeMs: st.mtimeMs }
+    }
+  }
+  consider('src')
+  for (const f of ['react-router.config.ts', 'vite.config.ts', 'package.json', join('assets/pipeline', 'vitePlugin.ts')]) consider(f)
+  if (newest.path && newest.mtimeMs > buildStamp) {
+    console.error(`bench: build predates sources (${newest.path} is newer than ${CLIENT_INDEX}) — rebuild first`)
+    process.exit(1)
+  }
+}
 
-const server = spawn('node_modules/.bin/vite', ['preview', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'], {
+const server = spawn('node_modules/.bin/vite', ['preview', '--outDir', 'build/client', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'], {
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 let browser

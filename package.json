@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "react-router dev",
-    "build": "react-router build",
+    "build": "react-router build && node scripts/twin-data.mjs",
     "preview": "vite preview --outDir build/client",
     "assets": "node assets/pipeline/build.ts",
     "assets:check": "node assets/pipeline/build.ts --check",

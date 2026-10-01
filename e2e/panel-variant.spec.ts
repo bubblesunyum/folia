@@ -98,7 +98,7 @@ test.describe('vantage dolly', () => {
     // Close before the ~80 m → 50 m dolly lands: a surviving restore proves
     // the user never drove, so the camera must fly home, not strand mid-way.
     await page.getByTestId('panel-close').click()
-    await expect(page).toHaveURL(/\/cortico\/?$/, { timeout: 15_000 })
+    await expect(page).toHaveURL(/\/cortico\/?(\?.*)?$/, { timeout: 15_000 })
     await expect.poll(zoomOf, { timeout: 30_000 }).toBeCloseTo(townDistance, 0)
     expectNoErrors(errors)
   })

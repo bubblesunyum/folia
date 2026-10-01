@@ -1,30 +1,58 @@
 // Pedestal ↔ case-study mapping for the cortico forum (fol-l1r.5, D-009).
-// Pure core: slots come from assets/manifest.json (forum=7, medley=8,
-// platform=9, recorder=10), anchors are the approx pedestal worlds from
-// fol-l1r.4 in three.js coords (x, y-up, z). The canvas rigs own the
-// raycaster and the springs; everything here is plain data with tests.
+// Pure core: slots come from the manifest's cortico/forum groups
+// (assets/manifest.json) — no literals here, so a forum rename/remap flows
+// through instead of misrouting clicks with green tests. Anchors are the
+// approx pedestal worlds from fol-l1r.4 in three.js coords (x, y-up, z).
+// The canvas rigs own the raycaster and the springs; everything here is
+// plain data with tests.
+
+import manifest from '../../assets/manifest.json' with { type: 'json' }
+
+/** The cortico/forum group slots from the asset manifest, fail closed. */
+const forumSlots: Readonly<Record<string, number>> = (() => {
+  const slots = manifest['cortico/forum']?.groups
+  if (!slots) throw new Error('pedestals: missing "cortico/forum" groups in the asset manifest')
+  return slots
+})()
+
+/** A required forum group slot: throws on a missing name, never defaults. */
+function requireForumSlot(name: string): number {
+  const slot = forumSlots[name]
+  if (slot === undefined) {
+    throw new Error(`pedestals: missing "cortico/forum" group "${name}" in the asset manifest`)
+  }
+  return slot
+}
 
 /** The forum floor medallion: hoverable geometry that must never lift. */
-export const FORUM_FLOOR_SLOT = 7
+export const FORUM_FLOOR_SLOT = requireForumSlot('forum')
 
 /** Case slug → town-wide group slot (assets/manifest.json). */
 export const PEDESTAL_SLOT_BY_SLUG = {
-  platform: 9,
-  recorder: 10,
-  medley: 8,
+  platform: requireForumSlot('platform'),
+  recorder: requireForumSlot('recorder'),
+  medley: requireForumSlot('medley'),
 } as const
 
 export type PedestalSlug = keyof typeof PEDESTAL_SLOT_BY_SLUG
 
-const SLUG_BY_PEDESTAL_SLOT: Readonly<Record<number, PedestalSlug>> = {
-  9: 'platform',
-  10: 'recorder',
-  8: 'medley',
-}
+/** Slug by slot, derived from the manifest map so a remap can't desync it. */
+const SLUG_BY_PEDESTAL_SLOT: Readonly<Record<number, PedestalSlug>> = (() => {
+  const reverse = new Map<number, PedestalSlug>()
+  for (const [slug, slot] of Object.entries(PEDESTAL_SLOT_BY_SLUG) as Array<
+    [PedestalSlug, number]
+  >) {
+    if (reverse.has(slot)) {
+      throw new Error(`pedestals: "cortico/forum" slot ${slot} maps to more than one pedestal`)
+    }
+    reverse.set(slot, slug)
+  }
+  return Object.fromEntries(reverse) as Record<number, PedestalSlug>
+})()
 
 /**
  * Pedestal focus targets in world metres (three.js x, y-up, z), the approx
- * worlds from fol-l1r.4: laptop slot 9, phone slot 10, glyph slot 8. The
+ * worlds from fol-l1r.4: laptop (platform), phone (recorder), glyph (medley). The
  * camera ease and the wisp perch aim here; exact contact doesn't matter, the
  * pedestal filling the left area does.
  */
@@ -50,7 +78,7 @@ export function slugForSlot(slot: number): PedestalSlug | null {
   return SLUG_BY_PEDESTAL_SLOT[slot] ?? null
 }
 
-/** Only the three pedestal slots lift; the floor (7) and town never do here. */
+/** Only the three pedestal slots lift; the floor and town never do here. */
 export function isPedestalSlot(slot: number): boolean {
   return slugForSlot(slot) !== null
 }

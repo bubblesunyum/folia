@@ -81,7 +81,7 @@ itself in `bd remember`.
 ```bash
 scripts/verify.sh          # build + tests + throwaway-repo probes
 scripts/verify.sh --quick  # fast lane only, no probes — iterate here
-scripts/verify.sh --full   # accepted, same as the default today: no --full-only tier yet
+scripts/verify.sh --full   # accepted lane: default + the --full-only e2e suite
 ```
 
 Run this rather than raw build commands. It swallows tens of thousands of log

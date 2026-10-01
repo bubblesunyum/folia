@@ -4,10 +4,21 @@ import {
   capacityFromManifest,
   grownCapacity,
   LOD_RESERVE,
+  type ManifestCounts,
   withDerivedCapacity,
 } from './townBatches'
 
 const FRAGMENT = { 'cortico/fragment': { cream: 107920, neon: 1968, water: 360 } }
+
+// Same fragment shape with the pack-time counts fol-3w2 writes: fewer verts
+// than tris×3 because indexed geometry shares vertices.
+const FRAGMENT_COUNTS: ManifestCounts = {
+  'cortico/fragment': {
+    cream: { triangles: 107920, vertices: 80000, indices: 323760 },
+    neon: { triangles: 1968, vertices: 1500, indices: 5904 },
+    water: { triangles: 360, vertices: 300, indices: 1080 },
+  },
+}
 
 describe('capacityFromManifest', () => {
   it('sizes batches from manifest totals times headroom', () => {
@@ -35,6 +46,43 @@ describe('capacityFromManifest', () => {
     expect(cap.tiny).toBeUndefined()
     const empty = capacityFromManifest({ tiny: { cream: 0 } })
     expect(empty.cream).toEqual({ maxInstances: 16, maxVertices: 1024, maxIndices: 1024 })
+  })
+
+  it('sizes vertices and indices from pack-time counts times reserve and headroom', () => {
+    const cap = capacityFromManifest(FRAGMENT_COUNTS)
+    expect(cap.cream).toEqual({
+      maxInstances: 16,
+      maxVertices: 80000 * LOD_RESERVE * 4,
+      maxIndices: 323760 * LOD_RESERVE * 4,
+    })
+    expect(cap.neon).toEqual({
+      maxInstances: 16,
+      maxVertices: 1500 * LOD_RESERVE * 4,
+      maxIndices: 5904 * LOD_RESERVE * 4,
+    })
+  })
+
+  it('falls back to triangles×3 for a batch any asset left uncounted', () => {
+    const cap = capacityFromManifest({
+      'cortico/fragment': {
+        cream: { triangles: 107920, vertices: 80000, indices: 323760 },
+      },
+      'cortico/second': { cream: 1000 },
+    })
+    expect(cap.cream?.maxVertices).toBe((107920 + 1000) * 3 * 4)
+    expect(cap.cream?.maxIndices).toBe((107920 + 1000) * 3 * 4)
+    expect(cap.cream?.maxInstances).toBe(2 * 16)
+  })
+
+  it('cuts the shipped-GLB over-allocation from ~16x to reserve times headroom', () => {
+    // The shipped town: 0.74 verts/tri (131k verts for 177k tris).
+    const shipped = { town: { cream: { triangles: 177000, vertices: 131000, indices: 531000 } } }
+    const cap = capacityFromManifest(shipped).cream
+    const legacy = capacityFromManifest({ town: { cream: 177000 } }).cream
+    expect(cap?.maxVertices).toBe(131000 * LOD_RESERVE * 4)
+    expect(cap?.maxIndices).toBe(531000 * LOD_RESERVE * 4)
+    expect(cap?.maxVertices).toBeLessThan(legacy?.maxVertices ?? Infinity)
+    expect((cap?.maxVertices ?? 0) / 131000).toBeLessThanOrEqual(LOD_RESERVE * 4)
   })
 })
 

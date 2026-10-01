@@ -28,8 +28,18 @@ sys.path.insert(0, str(HERE))
 from folia import bake, export  # noqa: E402
 from folia.mesh import set_point_attribute, triangle_count  # noqa: E402
 
-# Batches whose schema leaves out the baked light (neon and water are their own programs).
-UNBAKED = {"neon": ("_AO", "_NIGHT"), "water": ("_AO", "_NIGHT")}
+# Attributes each batch schema leaves out. Sway is foliage-only (fol-a83):
+# every other batch drops the baked `_SWAY` weight at split, so only the
+# foliage schema carries it — a new non-swaying material must drop it too, or
+# the pack step fails closed on the extra attribute. Neon and water are their
+# own unlit programs and additionally drop the baked light.
+DROP = {
+    "cream": ("_SWAY",),
+    "gold": ("_SWAY",),
+    "ground": ("_SWAY",),
+    "neon": ("_AO", "_NIGHT", "_SWAY"),
+    "water": ("_AO", "_NIGHT", "_SWAY"),
+}
 
 
 def check_version():
@@ -108,7 +118,7 @@ def main():
         bake.bake(joined, params["bake"], ["neon"])
     baked = time.perf_counter()
 
-    batches = export.split_by_material(joined, lambda mat: f"{hood}.{name}.{mat}.{lod}", UNBAKED)
+    batches = export.split_by_material(joined, lambda mat: f"{hood}.{name}.{mat}.{lod}", DROP)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     export.export(batches, out, {"hood": hood, "asset": name, "lod": lod, "groups": params["groups"]})

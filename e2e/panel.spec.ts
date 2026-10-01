@@ -137,20 +137,20 @@ test('Escape, Close and empty-click all close the panel', async ({ page }) => {
 
   // Escape rises to the parent through the intent layer, never the ZoomRig.
   await page.keyboard.press('Escape')
-  await expect(page).toHaveURL(/\/cortico\/?$/, { timeout: 15_000 })
+  await expect(page).toHaveURL(/\/cortico\/?(\?.*)?$/, { timeout: 15_000 })
   await expect(panel).toHaveCount(0)
   await expect(canvas).toHaveAttribute(canvasHookAttribute('panel'), '')
 
   // The one-word Close button.
   await openPlatform(page)
   await page.getByTestId('panel-close').click()
-  await expect(page).toHaveURL(/\/cortico\/?$/, { timeout: 15_000 })
+  await expect(page).toHaveURL(/\/cortico\/?(\?.*)?$/, { timeout: 15_000 })
   await expect(panel).toHaveCount(0)
 
   // A clean miss over empty world (top-strip sky) closes too.
   await openPlatform(page)
   await page.mouse.click(720, 40)
-  await expect(page).toHaveURL(/\/cortico\/?$/, { timeout: 15_000 })
+  await expect(page).toHaveURL(/\/cortico\/?(\?.*)?$/, { timeout: 15_000 })
   await expect(panel).toHaveCount(0)
 
   expectNoErrors(errors)

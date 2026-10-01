@@ -18,19 +18,34 @@ export interface PanelLayout {
 /** Wide-viewport fallback for prerender, where there is no window. */
 const SERVER_VIEWPORT = { width: 1440, height: 900 }
 
-function currentLayout(slug: PedestalSlug | null): PanelLayout {
-  const width = typeof window === 'undefined' ? SERVER_VIEWPORT.width : window.innerWidth
-  const height = typeof window === 'undefined' ? SERVER_VIEWPORT.height : window.innerHeight
-  return { slug, variant: panelVariant(width), viewTarget: viewOffsetTarget(width, height, slug) }
+function serverLayout(slug: PedestalSlug | null): PanelLayout {
+  return {
+    slug,
+    variant: panelVariant(SERVER_VIEWPORT.width),
+    viewTarget: viewOffsetTarget(SERVER_VIEWPORT.width, SERVER_VIEWPORT.height, slug),
+  }
+}
+
+function clientLayout(slug: PedestalSlug | null): PanelLayout {
+  return {
+    slug,
+    variant: panelVariant(window.innerWidth),
+    viewTarget: viewOffsetTarget(window.innerWidth, window.innerHeight, slug),
+  }
 }
 
 export function usePanelLayout(): PanelLayout {
-  const [layout, setLayout] = useState<PanelLayout>(() => currentLayout(getCaseInView()))
+  // The initial state must match the prerendered HTML on every viewport:
+  // React 19 does not patch attributes that mismatch during hydration, so
+  // reading window.innerWidth here would leave data-variant stuck at 'side'
+  // after a direct load on a phone. Measure the real viewport in the mount
+  // effect instead; that posts a normal state update React applies.
+  const [layout, setLayout] = useState<PanelLayout>(() => serverLayout(getCaseInView()))
   useEffect(() => {
-    const sync = (slug: PedestalSlug | null): void => setLayout(currentLayout(slug))
+    const sync = (slug: PedestalSlug | null): void => setLayout(clientLayout(slug))
     const off = onCaseInView(sync)
     sync(getCaseInView())
-    const onResize = (): void => setLayout(currentLayout(getCaseInView()))
+    const onResize = (): void => setLayout(clientLayout(getCaseInView()))
     window.addEventListener('resize', onResize)
     return () => {
       off()

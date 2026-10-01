@@ -10,10 +10,13 @@ import { EXTMeshoptCompression, KHRMeshQuantization } from '@gltf-transform/exte
 import { quantize, reorder } from '@gltf-transform/functions'
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer'
 import {
+  type CustomStorage,
   customStorage,
+  FLOAT,
   type PrimitiveAttributes,
   packValues,
   parseMeshName,
+  UNSIGNED_BYTE,
   validateBatch,
 } from '../../src/assets/batchSchema.ts'
 import { writeFileAtomic } from './atomic.ts'
@@ -26,6 +29,62 @@ const QUANTIZE = {
   quantizeNormal: 10,
   quantizationVolume: 'mesh',
 } as const
+
+/**
+ * Sway weight (fol-a83): Blender bakes `_SWAY` (the bake curve over height
+ * above the clump base) on foliage, and every other batch drops it at split.
+ * The base schema file is owned by another workstream, so the foliage-only
+ * extension lives here: `validateDocument` strips `_SWAY` before the shared
+ * check (whose packed-storage lookup only knows the base file) and verifies
+ * it below against the merged storage, and packing reads the same map. A
+ * second swaying batch extends `SWAY_BATCHES`, never the base file.
+ */
+const swayStorage: CustomStorage = { componentType: UNSIGNED_BYTE, normalized: true, range: 1 }
+const SWAY_BATCHES: ReadonlySet<string> = new Set(['foliage'])
+const storages: Readonly<Record<string, CustomStorage>> = { ...customStorage, _SWAY: swayStorage }
+
+/** `_SWAY` stripped out, so the shared check runs against the base schemas. */
+function withoutSway(prim: PrimitiveAttributes): PrimitiveAttributes {
+  const { _SWAY: _, ...rest } = prim.attributes
+  return { ...prim, attributes: rest }
+}
+
+/**
+ * The `_SWAY` half of the contract, mirroring `validateBatch`'s error
+ * strings: swaying batches must carry one float weight in the stage's
+ * storage, and every other batch must not carry it at all.
+ */
+function checkSway(
+  batch: string,
+  prims: readonly PrimitiveAttributes[],
+  stage: 'raw' | 'packed',
+): string[] {
+  const errors: string[] = []
+  for (const prim of prims) {
+    const where = `${batch}/${prim.name}`
+    const sway = prim.attributes._SWAY
+    if (!SWAY_BATCHES.has(batch)) {
+      if (sway) errors.push(`${where}: _SWAY is not in the schema`)
+      continue
+    }
+    if (!sway) {
+      errors.push(`${where}: missing _SWAY`)
+      continue
+    }
+    if (sway.itemSize !== 1) {
+      errors.push(`${where}: _SWAY has ${sway.itemSize} components, schema says 1`)
+      continue
+    }
+    const want =
+      stage === 'raw'
+        ? { componentType: FLOAT, normalized: false }
+        : { componentType: swayStorage.componentType, normalized: swayStorage.normalized }
+    if (sway.componentType !== want.componentType || sway.normalized !== want.normalized) {
+      errors.push(`${where}: _SWAY isn't stored as its ${stage} storage`)
+    }
+  }
+  return errors
+}
 
 async function io(): Promise<NodeIO> {
   await MeshoptEncoder.ready
@@ -66,17 +125,18 @@ export function validateDocument(doc: Document, stage: 'raw' | 'packed'): string
     }
   }
   for (const [batch, prims] of batches) {
-    errors.push(...validateBatch(batch, prims, stage).map((e) => `${stage}: ${e}`))
+    errors.push(...validateBatch(batch, prims.map(withoutSway), stage).map((e) => `${stage}: ${e}`))
+    errors.push(...checkSway(batch, prims, stage).map((e) => `${stage}: ${e}`))
   }
   return errors
 }
 
-/** Rewrites every custom attribute into its `customStorage` (see `packValues`). */
+/** Rewrites every custom attribute into its `storages` entry (see `packValues`). */
 function packCustomAttributes(doc: Document): void {
   for (const mesh of doc.getRoot().listMeshes()) {
     for (const prim of mesh.listPrimitives()) {
       for (const semantic of prim.listSemantics()) {
-        const storage = customStorage[semantic]
+        const storage = storages[semantic]
         const accessor = prim.getAttribute(semantic)
         const source = accessor?.getArray()
         if (!storage || !accessor || !(source instanceof Float32Array)) continue

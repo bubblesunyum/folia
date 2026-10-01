@@ -14,6 +14,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { NodeIO } from '@gltf-transform/core'
+import { EXTMeshoptCompression, KHRMeshQuantization } from '@gltf-transform/extensions'
+import { MeshoptDecoder } from 'meshoptimizer'
+import { parseMeshName } from '../../src/assets/batchSchema.ts'
 import { palette } from '../../src/palette.ts'
 import { withFileLock, writeFileAtomic } from './atomic.ts'
 import { allocateSlots, assetLocalIds, type GroupRegistry, type GroupTable } from './groups.ts'
@@ -31,6 +35,10 @@ export interface AssetRecord {
   hash: string
   bytes: number
   triangles: Record<string, number>
+  /** Per-batch packed vertex counts, sizing the town batches (fol-3w2). */
+  vertices: Record<string, number>
+  /** Per-batch packed index counts, sizing the town batches (fol-3w2). */
+  indices: Record<string, number>
   /** Group name → global `uGroupState` slot (D-061). */
   groups: GroupTable
 }
@@ -145,8 +153,42 @@ export function staleAssets(): string[] {
     (a) =>
       manifest[a]?.hash !== hashAsset(a) ||
       manifest[a]?.groups == null ||
+      manifest[a]?.vertices == null ||
+      manifest[a]?.indices == null ||
       !existsSync(outputPath(a)),
   )
+}
+
+/**
+ * Per-batch vertex and index counts in the packed `glbPath` (fol-3w2):
+ * POSITION accessor counts and index counts grouped by the material segment
+ * of each `<hood>.<object>.<material>.<lod>` mesh name. Quantization and
+ * Meshopt change storage, never counts, so these are what the town batches
+ * size from. Non-indexed primitives contribute no index room: BatchedMesh
+ * only advances its index cursor for geometries with an index.
+ */
+export async function countBatchGeometry(glbPath: string): Promise<{
+  vertices: Record<string, number>
+  indices: Record<string, number>
+}> {
+  await MeshoptDecoder.ready
+  const nodeIO = new NodeIO()
+    .registerExtensions([EXTMeshoptCompression, KHRMeshQuantization])
+    .registerDependencies({ 'meshopt.decoder': MeshoptDecoder })
+  const doc = await nodeIO.read(glbPath)
+  const vertices: Record<string, number> = {}
+  const indices: Record<string, number> = {}
+  for (const mesh of doc.getRoot().listMeshes()) {
+    const name = parseMeshName(mesh.getName())
+    if (!name) throw new Error(`mesh "${mesh.getName()}" is not <hood>.<object>.<material>.<lod>`)
+    for (const prim of mesh.listPrimitives()) {
+      const position = prim.getAttribute('POSITION')
+      const index = prim.getIndices()
+      vertices[name.material] = (vertices[name.material] ?? 0) + (position?.getCount() ?? 0)
+      indices[name.material] = (indices[name.material] ?? 0) + (index?.getCount() ?? 0)
+    }
+  }
+  return { vertices, indices }
 }
 
 /** Builds one asset; null when it was already fresh and `force` is off. */
@@ -157,6 +199,8 @@ export async function buildAsset(asset: string, force = false): Promise<BuildRes
     !force &&
     manifest[asset]?.hash === hash &&
     manifest[asset]?.groups != null &&
+    manifest[asset]?.vertices != null &&
+    manifest[asset]?.indices != null &&
     existsSync(outputPath(asset))
   )
     return null
@@ -200,6 +244,8 @@ export async function buildAsset(asset: string, force = false): Promise<BuildRes
 
   let bytes = 0
   let groups: GroupTable = {}
+  let vertices: Record<string, number> = {}
+  let indices: Record<string, number> = {}
   try {
     // Allocation, pack and record land in one lock hold: two concurrent
     // first-builds of different assets must not claim the same slot, and
@@ -219,7 +265,17 @@ export async function buildAsset(asset: string, force = false): Promise<BuildRes
       const allocated = allocateSlots(asset, assetLocalIds(asset), registry)
       groups = allocated.table
       ;({ bytes } = await pack(raw, outputPath(asset), allocated.remap))
-      const record: AssetRecord = { hash, bytes, triangles: report.triangles, groups }
+      // Pack-time counts for the town batches (fol-3w2), read off the packed
+      // GLB just published: quantization and Meshopt never change counts.
+      ;({ vertices, indices } = await countBatchGeometry(outputPath(asset)))
+      const record: AssetRecord = {
+        hash,
+        bytes,
+        triangles: report.triangles,
+        vertices,
+        indices,
+        groups,
+      }
       await writeManifest({ ...kept, [asset]: record })
     })
   } finally {
@@ -231,7 +287,7 @@ export async function buildAsset(asset: string, force = false): Promise<BuildRes
     blender: round((blenderDone - started) / 1000),
     pack: round((performance.now() - blenderDone) / 1000),
   }
-  return { asset, hash, bytes, triangles: report.triangles, groups, seconds }
+  return { asset, hash, bytes, triangles: report.triangles, vertices, indices, groups, seconds }
 }
 
 const round = (s: number) => Math.round(s * 100) / 100

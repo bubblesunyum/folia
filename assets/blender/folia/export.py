@@ -13,9 +13,18 @@ from .mesh import set_point_attribute
 
 
 def join(parts, name):
-    """One object from all parts, each vertex carrying its part's `_ID`."""
+    """One object from all parts, each vertex carrying its part's `_ID`.
+
+    Sway is foliage-only: parts without a baked `_SWAY` get an inert 0, so
+    the joined mesh carries the attribute on every vertex and the split below
+    can drop it outside the foliage batch.
+    """
     for part in parts:
         set_point_attribute(part.obj.data, "_ID", np.full(len(part.obj.data.vertices), part.group))
+        if "_SWAY" not in part.obj.data.attributes:
+            set_point_attribute(
+                part.obj.data, "_SWAY", np.zeros(len(part.obj.data.vertices), dtype=np.float32)
+            )
     objects = [part.obj for part in parts]
     target = objects[0]
     with bpy.context.temp_override(

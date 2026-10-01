@@ -11,6 +11,7 @@ import * as THREE from 'three'
 import { readReducedMotion } from '../input/intent'
 import { signatureColor } from '../palette'
 import { makeRadialGlowTexture } from '../scene/glowSprite'
+import { ambient } from '../time/ambient'
 import { getCaseInView, onCaseInView } from './caseInView'
 import { PEDESTAL_ANCHOR_BY_SLUG, type PedestalSlug } from './pedestals'
 
@@ -43,7 +44,7 @@ export function WispLight() {
     })
   }, [invalidate])
 
-  useFrame(({ clock }, rawDt) => {
+  useFrame((_, rawDt) => {
     const node = group.current
     const lamp = light.current
     const dot = sprite.current
@@ -61,19 +62,27 @@ export function WispLight() {
     }
     const anchor = PEDESTAL_ANCHOR_BY_SLUG[slug]
     scratchHome.set(anchor[0], anchor[1] + WISP_PERCH_HEIGHT_M, anchor[2])
+    // The travel ease is the only thing that spends frames: while the wisp
+    // is still flying to its perch every frame invalidates, and once it is
+    // perched nothing here asks for another frame (D-056). The bob pose
+    // reads the shared ambient clock, so it stays smooth inside frames
+    // other drivers cause (and rides the ~30 Hz ambient schedule when sway
+    // runs it) instead of pinning the longest dwell state at display rate.
+    let travelling = false
     if (reduced) {
       node.position.copy(scratchHome)
     } else if (node.position.distanceTo(scratchHome) > ARRIVE_M) {
       node.position.lerp(scratchHome, 1 - Math.exp(-EASE_RATE * dt))
       if (node.position.distanceTo(scratchHome) <= ARRIVE_M) node.position.copy(scratchHome)
+      else travelling = true
     }
     if (lamp.intensity === 0) {
       lamp.intensity = 20
       dot.visible = true
     }
-    rig.current.phase = reduced ? 0 : clock.elapsedTime * WISP_BOB_RATE
+    rig.current.phase = reduced ? 0 : ambient.time * WISP_BOB_RATE
     dot.position.y = reduced ? 0 : Math.sin(rig.current.phase) * WISP_BOB_M
-    invalidate()
+    if (travelling) invalidate()
   })
 
   return (

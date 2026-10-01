@@ -5,7 +5,7 @@
 // would for per-asset batches. GPU resources release with the context.
 
 import { assetTriangles } from 'virtual:folia-assets'
-import { useThree } from '@react-three/fiber'
+import { addAfterEffect, useThree } from '@react-three/fiber'
 import {
   createContext,
   type ReactNode,
@@ -23,6 +23,7 @@ import {
   withDerivedCapacity,
 } from '../assets/townBatches'
 import { type TownGeometries, TownRegistry } from '../assets/townRegistry'
+import { debug } from '../debug'
 import { derivedBatches, materials } from '../materials/shared'
 import { createTownMesh } from './townMesh'
 
@@ -85,6 +86,48 @@ export function TownBatches({ children }: { children: ReactNode }) {
         <primitive key={mesh.name} object={mesh} />
       ))}
       {children}
+      {debug.hud && <RendererMemory />}
     </TownBatchesContext.Provider>
   )
+}
+
+/**
+ * Renderer memory in the HUD (fol-3w2): `renderer.info.memory` (live
+ * geometries and textures) beside PerfHud's counters. Its own body-level div
+ * because PerfHud owns the readout element; it parks under the readout and
+ * only rewrites when the numbers move, so idle frames stay quiet.
+ */
+function RendererMemory() {
+  const gl = useThree((state) => state.gl)
+
+  useEffect(() => {
+    const el = document.createElement('div')
+    el.className = 'perf-mem'
+    el.style.cssText =
+      'position:fixed;left:0;padding:4px 8px;top:48px;' +
+      'font:11px/1.4 ui-monospace,monospace;color:var(--mint);' +
+      'background:var(--forest);pointer-events:none;white-space:pre;'
+    document.body.append(el)
+    const place = () => {
+      const readout = document.querySelector('.perf-readout')
+      const top = readout ? 48 + readout.getBoundingClientRect().height + 4 : 48
+      el.style.top = `${top}px`
+    }
+    let last = ''
+    const stop = addAfterEffect(() => {
+      const { geometries, textures } = gl.info.memory
+      const text = `geo ${geometries} · tex ${textures}`
+      if (text !== last) {
+        last = text
+        el.textContent = text
+        place()
+      }
+    })
+    return () => {
+      stop()
+      el.remove()
+    }
+  }, [gl])
+
+  return null
 }

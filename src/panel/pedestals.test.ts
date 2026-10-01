@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import manifest from '../../assets/manifest.json' with { type: 'json' }
 import {
   FORUM_FLOOR_SLOT,
   isPedestalSlot,
@@ -12,10 +13,39 @@ import {
   slugForSlot,
 } from './pedestals'
 
+const rawForumGroups = manifest['cortico/forum']?.groups
+if (!rawForumGroups)
+  throw new Error('pedestals.test: missing "cortico/forum" groups in the asset manifest')
+const forumGroups: Readonly<Record<string, number>> = rawForumGroups
+
+/** The manifest slot for a forum group name: throws, never defaults. */
+function manifestSlot(name: string): number {
+  const slot = forumGroups[name]
+  if (slot === undefined) throw new Error(`pedestals.test: missing "cortico/forum" group "${name}"`)
+  return slot
+}
+
+const PLATFORM = PEDESTAL_SLOT_BY_SLUG.platform
+const RECORDER = PEDESTAL_SLOT_BY_SLUG.recorder
+const MEDLEY = PEDESTAL_SLOT_BY_SLUG.medley
+
+/** A slot no pedestal or floor uses, whatever the allocator hands out. */
+const SPARE = Math.max(FORUM_FLOOR_SLOT, PLATFORM, RECORDER, MEDLEY) + 100
+
 describe('slug ↔ slot mapping', () => {
-  it('pins the fol-l1r.4 manifest slots', () => {
-    expect(PEDESTAL_SLOT_BY_SLUG).toEqual({ platform: 9, recorder: 10, medley: 8 })
-    expect(FORUM_FLOOR_SLOT).toBe(7)
+  it('derives every pedestal slot from the manifest forum groups', () => {
+    expect(PEDESTAL_SLOT_BY_SLUG).toEqual({
+      platform: manifestSlot('platform'),
+      recorder: manifestSlot('recorder'),
+      medley: manifestSlot('medley'),
+    })
+    expect(FORUM_FLOOR_SLOT).toBe(manifestSlot('forum'))
+  })
+
+  it('keeps every pedestal on its own slot, off the floor', () => {
+    const slots = Object.values(PEDESTAL_SLOT_BY_SLUG)
+    expect(new Set(slots).size).toBe(slots.length)
+    for (const slot of slots) expect(slot).not.toBe(FORUM_FLOOR_SLOT)
   })
 
   it('round-trips every pedestal slug', () => {
@@ -30,17 +60,17 @@ describe('slug ↔ slot mapping', () => {
     expect(slotForSlug('cortico')).toBeNull()
     expect(slotForSlug('')).toBeNull()
     expect(slugForSlot(FORUM_FLOOR_SLOT)).toBeNull()
-    expect(slugForSlot(0)).toBeNull()
-    expect(slugForSlot(99)).toBeNull()
+    expect(slugForSlot(SPARE)).toBeNull()
+    expect(slugForSlot(SPARE + 1)).toBeNull()
   })
 
   it('only the three pedestals lift: the floor and town never do', () => {
-    expect(isPedestalSlot(8)).toBe(true)
-    expect(isPedestalSlot(9)).toBe(true)
-    expect(isPedestalSlot(10)).toBe(true)
+    expect(isPedestalSlot(MEDLEY)).toBe(true)
+    expect(isPedestalSlot(PLATFORM)).toBe(true)
+    expect(isPedestalSlot(RECORDER)).toBe(true)
     expect(isPedestalSlot(FORUM_FLOOR_SLOT)).toBe(false)
-    expect(isPedestalSlot(0)).toBe(false)
-    expect(isPedestalSlot(6)).toBe(false)
+    expect(isPedestalSlot(SPARE)).toBe(false)
+    expect(isPedestalSlot(SPARE + 1)).toBe(false)
   })
 
   it('every pedestal has a focus anchor near the forum terrace', () => {
@@ -74,16 +104,16 @@ describe('pedestalOnlyForPath', () => {
 
 describe('shouldLiftSlot', () => {
   it('lifts only pedestals under /cortico', () => {
-    expect(shouldLiftSlot(9, '/cortico')).toBe(true)
-    expect(shouldLiftSlot(9, '/cortico/platform')).toBe(true)
-    expect(shouldLiftSlot(7, '/cortico')).toBe(false)
-    expect(shouldLiftSlot(3, '/cortico')).toBe(false)
+    expect(shouldLiftSlot(PLATFORM, '/cortico')).toBe(true)
+    expect(shouldLiftSlot(PLATFORM, '/cortico/platform')).toBe(true)
+    expect(shouldLiftSlot(FORUM_FLOOR_SLOT, '/cortico')).toBe(false)
+    expect(shouldLiftSlot(SPARE, '/cortico')).toBe(false)
   })
 
   it('lifts everything at town level', () => {
-    expect(shouldLiftSlot(9, '/')).toBe(true)
-    expect(shouldLiftSlot(7, '/')).toBe(true)
-    expect(shouldLiftSlot(3, '/')).toBe(true)
+    expect(shouldLiftSlot(PLATFORM, '/')).toBe(true)
+    expect(shouldLiftSlot(FORUM_FLOOR_SLOT, '/')).toBe(true)
+    expect(shouldLiftSlot(SPARE, '/')).toBe(true)
   })
 })
 
@@ -114,26 +144,29 @@ describe('resolveCaseNav', () => {
 
 describe('nextTapState', () => {
   it('a mouse click opens any pedestal at once', () => {
-    expect(nextTapState(null, 9, 'mouse')).toEqual({ action: 'open', armed: null })
-    expect(nextTapState(9, 10, 'mouse')).toEqual({ action: 'open', armed: null })
+    expect(nextTapState(null, PLATFORM, 'mouse')).toEqual({ action: 'open', armed: null })
+    expect(nextTapState(PLATFORM, RECORDER, 'mouse')).toEqual({ action: 'open', armed: null })
   })
 
   it('a first touch tap arms, the second tap on the same pedestal opens', () => {
-    expect(nextTapState(null, 9, 'touch')).toEqual({ action: 'arm', armed: 9 })
-    expect(nextTapState(9, 9, 'touch')).toEqual({ action: 'open', armed: null })
+    expect(nextTapState(null, PLATFORM, 'touch')).toEqual({ action: 'arm', armed: PLATFORM })
+    expect(nextTapState(PLATFORM, PLATFORM, 'touch')).toEqual({ action: 'open', armed: null })
   })
 
   it('a touch tap on another pedestal re-arms instead of opening', () => {
-    expect(nextTapState(9, 10, 'touch')).toEqual({ action: 'arm', armed: 10 })
+    expect(nextTapState(PLATFORM, RECORDER, 'touch')).toEqual({ action: 'arm', armed: RECORDER })
   })
 
   it('a miss clears a stale arm instead of letting it fire later', () => {
-    expect(nextTapState(9, null, 'touch')).toEqual({ action: 'ignore', armed: null })
-    expect(nextTapState(9, null, 'mouse')).toEqual({ action: 'ignore', armed: null })
+    expect(nextTapState(PLATFORM, null, 'touch')).toEqual({ action: 'ignore', armed: null })
+    expect(nextTapState(PLATFORM, null, 'mouse')).toEqual({ action: 'ignore', armed: null })
   })
 
   it('a scenery tap never opens and keeps the armed tap', () => {
-    expect(nextTapState(9, 7, 'touch')).toEqual({ action: 'ignore', armed: 9 })
-    expect(nextTapState(null, 7, 'mouse')).toEqual({ action: 'ignore', armed: null })
+    expect(nextTapState(PLATFORM, FORUM_FLOOR_SLOT, 'touch')).toEqual({
+      action: 'ignore',
+      armed: PLATFORM,
+    })
+    expect(nextTapState(null, FORUM_FLOOR_SLOT, 'mouse')).toEqual({ action: 'ignore', armed: null })
   })
 })

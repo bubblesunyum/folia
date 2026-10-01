@@ -10,12 +10,31 @@ shade together between the lobe and the leaf.
 
 import numpy as np
 
-from .mesh import new_object
+from .mesh import new_object, set_point_attribute
 
 # Leaf outline: (position along the midrib, half-width) from base to tip.
 _OUTLINE = [(-0.5, 0.0), (-0.15, 0.9), (0.2, 0.75), (0.5, 0.0)]
 # Base, left 1, left 2, tip, right 2, right 1: four triangles, one winding.
 _FACES = [(0, 1, 5), (1, 2, 4), (1, 4, 5), (2, 3, 4)]
+
+
+# Sway weight (fol-a83): height above the clump's own base, so terrace
+# foliage sways from its clump instead of from world height. The edges match
+# `src/materials/swayModel.ts` (`SWAY_BASE_M`, `SWAY_TOP_M`); the shader reads
+# the baked `_SWAY` and holds no literals.
+SWAY_BASE_M = 0.5
+SWAY_TOP_M = 2.5
+
+
+def _sway_weights(corners):
+    """Per-vertex breeze weight: the bake curve over height above the clump base.
+
+    Computed here in clump-local space, before `place()` moves the clump onto
+    its terrace — afterwards local Y is world height and the base is gone.
+    """
+    height = corners[:, 2] - corners[:, 2].min()
+    t = np.clip((height - SWAY_BASE_M) / (SWAY_TOP_M - SWAY_BASE_M), 0.0, 1.0)
+    return (t * t * (3 - 2 * t)).astype(np.float32)
 
 
 def _unit(v):
@@ -129,7 +148,9 @@ def clump(name, p, rng):
     leaf_normals = np.stack(leaf_normals, axis=1).reshape(-1, 3)
 
     faces = [tuple(6 * i + v for v in face) for i in range(len(points)) for face in _FACES]
+    weights = _sway_weights(corners)
     ob = new_object(name, corners, faces, merge=False)
+    set_point_attribute(ob.data, "_SWAY", weights)
     blend = p["leaf_normal"]
     proxy = _proxy_normals(corners, centres, sizes, p["sharpness"])
     ob.data.normals_split_custom_set_from_vertices(_unit(proxy * (1 - blend) + leaf_normals * blend).tolist())
