@@ -1,7 +1,9 @@
 // Sway's instancing contract (fol-esq): phase from the per-instance anchor,
 // amplitude weighted by local height, and bit-identical rest output.
 
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import foliageParams from '../../assets/blender/folia/foliage_params.json' with { type: 'json' }
 import { sway } from './features'
 import {
   IDENTITY_BATCH,
@@ -80,6 +82,42 @@ describe('swayOffset', () => {
       x: Math.sin(phase) * strength,
       z: Math.cos(phase * 0.83) * strength * 0.6,
     })
+  })
+})
+
+describe('sway bake curve pin (fol-6di)', () => {
+  it('reads one source with the Blender bake: TS edges equal foliage.py', () => {
+    // The retune point is foliage_params.json: swayModel.ts imports it, and
+    // terraces.py threads it through clump(). Any numeric drift on any side
+    // retunes the breeze everywhere, so this fails closed on it.
+    expect(SWAY_BASE_M).toBe(foliageParams.sway_base_m)
+    expect(SWAY_TOP_M).toBe(foliageParams.sway_top_m)
+    const py = readFileSync(
+      new URL('../../assets/blender/folia/foliage.py', import.meta.url),
+      'utf8',
+    )
+    const base = py.match(/^SWAY_BASE_M\s*=\s*([0-9.]+)/m)?.[1]
+    const top = py.match(/^SWAY_TOP_M\s*=\s*([0-9.]+)/m)?.[1]
+    expect(base, 'foliage.py SWAY_BASE_M fallback literal').toBeDefined()
+    expect(top, 'foliage.py SWAY_TOP_M fallback literal').toBeDefined()
+    expect(SWAY_BASE_M).toBe(Number(base))
+    expect(SWAY_TOP_M).toBe(Number(top))
+  })
+
+  it('threads the edges through clump() params, not module literals', () => {
+    const foliage = readFileSync(
+      new URL('../../assets/blender/folia/foliage.py', import.meta.url),
+      'utf8',
+    )
+    expect(foliage).toContain('p.get("sway_base_m"')
+    expect(foliage).toContain('p.get("sway_top_m"')
+    const terraces = readFileSync(
+      new URL('../../assets/blender/folia/terraces.py', import.meta.url),
+      'utf8',
+    )
+    expect(terraces).toContain('foliage_params.json')
+    expect(terraces).toContain('sway_base_m')
+    expect(terraces).toContain('sway_top_m')
   })
 })
 

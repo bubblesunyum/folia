@@ -18,22 +18,25 @@ _OUTLINE = [(-0.5, 0.0), (-0.15, 0.9), (0.2, 0.75), (0.5, 0.0)]
 _FACES = [(0, 1, 5), (1, 2, 4), (1, 4, 5), (2, 3, 4)]
 
 
-# Sway weight (fol-a83): height above the clump's own base, so terrace
-# foliage sways from its clump instead of from world height. The edges match
-# `src/materials/swayModel.ts` (`SWAY_BASE_M`, `SWAY_TOP_M`); the shader reads
-# the baked `_SWAY` and holds no literals.
+# Sway weight (fol-a83; fol-6di): height above the clump's own base, so terrace
+# foliage sways from its clump instead of from world height. The retune point
+# is `foliage_params.json` (`sway_base_m`, `sway_top_m`): `edge_planting` in
+# `terraces.py` threads it through `clump()`, and `src/materials/swayModel.ts`
+# reads the same file, so the baked `_SWAY` holds no other literals. These stay
+# as the fallback when a caller passes no edges, pinned equal by
+# `swayModel.test.ts` — retune the JSON, never one side alone.
 SWAY_BASE_M = 0.5
 SWAY_TOP_M = 2.5
 
 
-def _sway_weights(corners):
+def _sway_weights(corners, base_m=SWAY_BASE_M, top_m=SWAY_TOP_M):
     """Per-vertex breeze weight: the bake curve over height above the clump base.
 
     Computed here in clump-local space, before `place()` moves the clump onto
     its terrace — afterwards local Y is world height and the base is gone.
     """
     height = corners[:, 2] - corners[:, 2].min()
-    t = np.clip((height - SWAY_BASE_M) / (SWAY_TOP_M - SWAY_BASE_M), 0.0, 1.0)
+    t = np.clip((height - base_m) / (top_m - base_m), 0.0, 1.0)
     return (t * t * (3 - 2 * t)).astype(np.float32)
 
 
@@ -148,7 +151,9 @@ def clump(name, p, rng):
     leaf_normals = np.stack(leaf_normals, axis=1).reshape(-1, 3)
 
     faces = [tuple(6 * i + v for v in face) for i in range(len(points)) for face in _FACES]
-    weights = _sway_weights(corners)
+    weights = _sway_weights(
+        corners, p.get("sway_base_m", SWAY_BASE_M), p.get("sway_top_m", SWAY_TOP_M)
+    )
     ob = new_object(name, corners, faces, merge=False)
     set_point_attribute(ob.data, "_SWAY", weights)
     blend = p["leaf_normal"]

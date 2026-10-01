@@ -1,17 +1,19 @@
-// Sway's CPU mirror (spike 5, D-041; fol-a83): the same phase, baked weight
+// Sway's CPU mirror (spike 5, D-041; fol-a83; fol-6di): the same phase, baked weight
 // curve and offsets the GLSL in `features.ts` computes, in plain numbers so
-// Vitest can pin them. The ramp constants must match the Blender bake
-// (`assets/blender/folia/foliage.py` smoothsteps each foliage vertex by this
-// curve and exports it as `_SWAY`); the shader reads the attribute and holds
-// no literals, so a test below asserts the chunk reads `_sway` and ramps on
-// no world height.
+// Vitest can pin them. The ramp edges live in
+// `assets/blender/folia/foliage_params.json` — the single retune point shared
+// with the Blender bake (`assets/blender/folia/foliage.py` smoothsteps each
+// foliage vertex by this curve and exports it as `_SWAY`); the shader reads
+// the attribute and holds no literals, so a test below asserts the chunk reads
+// `_sway` and ramps on no world height.
 
+import foliageParams from '../../assets/blender/folia/foliage_params.json' with { type: 'json' }
 import type { Vec3 } from './vec'
 
 /** Height above the clump base where the breeze starts to bite, in metres. */
-export const SWAY_BASE_M = 0.5
+export const SWAY_BASE_M: number = foliageParams.sway_base_m
 /** Height above the clump base taking the full breeze, in metres. */
-export const SWAY_TOP_M = 2.5
+export const SWAY_TOP_M: number = foliageParams.sway_top_m
 /** Phase drift per metre of anchor x/z. */
 export const SWAY_X_RATE = 0.35
 export const SWAY_Z_RATE = 0.45

@@ -4,7 +4,9 @@ foliage clumps spilling off the edges. `cortico/fragment` and
 `cortico/meadow` build the same kinds, so the next tweak lands once.
 """
 
+import json
 import math
+from pathlib import Path
 
 import numpy as np
 
@@ -13,6 +15,13 @@ from folia.mesh import Part
 from . import foliage, forms
 
 TAU = math.tau
+
+# Sway bake curve (fol-6di): the single retune point for the breeze ramp,
+# shared with `src/materials/swayModel.ts`. Threaded into every clump below so
+# `foliage.clump()` bakes from params, never from its fallback literals.
+_FOLIAGE_PARAMS = json.loads(
+    (Path(__file__).resolve().parent / "foliage_params.json").read_text()
+)
 
 
 def place(ob, x, y, z=0.0, rot=0.0):
@@ -79,6 +88,15 @@ def edge_planting(p, outlines, levels, rng, group, prefix="clump"):
         radii = spot["radii"]
         x, y = point + out * radii[0] * pl["overhang"]
         z = levels[spot["level"]]["top"] + radii[2] * 0.35
-        ob = foliage.clump(f"{prefix}{i}", {**pl, "radii": radii}, rng)
+        ob = foliage.clump(
+            f"{prefix}{i}",
+            {
+                **pl,
+                "radii": radii,
+                "sway_base_m": _FOLIAGE_PARAMS["sway_base_m"],
+                "sway_top_m": _FOLIAGE_PARAMS["sway_top_m"],
+            },
+            rng,
+        )
         parts.append(Part(place(ob, x, y, z, rng.uniform(0, TAU)), "foliage", group))
     return parts

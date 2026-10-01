@@ -75,11 +75,15 @@ export function listAssets(): string[] {
  * reaches the bake. The slot limit lives in `src/groupSlots.ts`, which is
  * listed: shrinking it can invalidate packed `_ID`s, so a change must
  * re-validate (and fail closed in `allocateSlots`) rather than pass `--check`.
+ * The shared sway retune point `folia/foliage_params.json` is listed
+ * explicitly (it is not `*.py`, so the shared glob misses it): a retune must
+ * change `hashAsset` and wake the dev watcher, not ship stale geometry.
  */
 export function assetSources(asset: string): string[] {
-  const shared = readdirSync(join(BLENDER_DIR, 'folia'))
+  const sharedPy = readdirSync(join(BLENDER_DIR, 'folia'))
     .filter((f) => f.endsWith('.py'))
     .map((f) => join(BLENDER_DIR, 'folia', f))
+  const shared = [...sharedPy, join(BLENDER_DIR, 'folia', 'foliage_params.json')]
   return [
     ...shared,
     join(BLENDER_DIR, 'build.py'),
