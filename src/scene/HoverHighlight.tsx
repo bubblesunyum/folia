@@ -25,6 +25,42 @@ import { clearProjector, setCanvasHook, setProjector } from '../testHooks'
 import { useLook } from '../time/lookContext'
 import { useTownBatches } from './TownBatches'
 
+interface SpringState {
+  lift: number
+  glow: number
+}
+
+/**
+ * Eases one slot toward on/off. Returns whether the spring map changed (set
+ * or delete): the rig rebuilds the `lifted` hook string only then, so rest
+ * frames allocate nothing. Reads/writes nothing else.
+ */
+function stepSpring(
+  springs: Map<number, SpringState>,
+  slot: number,
+  on: boolean,
+  dt: number,
+  glowTarget: number,
+): boolean {
+  const current = springs.get(slot)
+  const fromLift = current?.lift ?? 0
+  const fromGlow = current?.glow ?? 0
+  const lift = springTowards(fromLift, on ? HOVER_LIFT : 0, dt)
+  const glow = springTowards(fromGlow, on ? glowTarget : 0, dt)
+  if (!on && lift === 0 && glow === 0) {
+    if (springs.delete(slot)) {
+      clearGroupSlot(slot)
+      return true
+    }
+    return false
+  }
+  // At rest the values already equal the target: no write, no frame.
+  if (current !== undefined && lift === fromLift && glow === fromGlow) return false
+  springs.set(slot, { lift, glow })
+  setGroupSlot(slot, lift, glow)
+  return true
+}
+
 export function HoverHighlight() {
   const { meshes } = useTownBatches()
   const camera = useThree((state) => state.camera)
@@ -41,7 +77,11 @@ export function HoverHighlight() {
     // keyboard). Pointer hover and focus compose: both lift while held.
     focusSlot: null as number | null,
     // Slot → current lift/glow easing toward (targeted ? on : off).
-    springs: new Map<number, { lift: number; glow: number }>(),
+    springs: new Map<number, SpringState>(),
+    // Scratch lifting set + cached `lifted` hook string, reused across
+    // frames so the steady-state frame allocates nothing (fol-o3v).
+    lifting: new Set<number>(),
+    liftedCache: '',
   })
 
   useEffect(() => {
@@ -134,48 +174,56 @@ export function HoverHighlight() {
     const glowTarget = glowForNight(night)
     // Under /cortico only pedestals take lift (D-021); the raw hovered slot
     // still reports through data-hover, so the filter itself is observable.
-    const candidates = new Set<number>()
-    if (r.hovered !== null) candidates.add(r.hovered)
-    if (r.focusSlot !== null) candidates.add(r.focusSlot)
-    // Allowed slots ease toward on; easing-out slots stay in the set until
-    // they delete themselves at rest. Read live: the canvas persists across
-    // route changes, so a captured pathname would go stale.
+    // Read live: the canvas persists across route changes, so a captured
+    // pathname would go stale. The scratch set is cleared and reused — no
+    // per-frame Set allocation — and hover/focus compose with no candidate
+    // collection at all.
     const pathname = window.location.pathname
-    const lifting = new Set<number>()
-    for (const slot of candidates) {
-      if (shouldLiftSlot(slot, pathname)) lifting.add(slot)
+    const lifting = r.lifting
+    lifting.clear()
+    if (r.hovered !== null && shouldLiftSlot(r.hovered, pathname)) lifting.add(r.hovered)
+    if (
+      r.focusSlot !== null &&
+      r.focusSlot !== r.hovered &&
+      shouldLiftSlot(r.focusSlot, pathname)
+    ) {
+      lifting.add(r.focusSlot)
     }
-    const targets = new Set(lifting)
-    for (const slot of r.springs.keys()) targets.add(slot)
-    for (const slot of targets) {
-      const current = r.springs.get(slot) ?? { lift: 0, glow: 0 }
-      const on = lifting.has(slot)
-      const lift = springTowards(current.lift, on ? HOVER_LIFT : 0, dt)
-      const glow = springTowards(current.glow, on ? glowTarget : 0, dt)
-      if (!on && lift === 0 && glow === 0) {
-        if (r.springs.delete(slot)) clearGroupSlot(slot)
-        continue
+    // Allowed slots ease toward on; easing-out slots stay in the map until
+    // they delete themselves at rest. Two passes over live collections, no
+    // union set: updating or deleting the visited entry during Map iteration
+    // is safe, and the second pass adds no keys (off-target rests at 0).
+    let moved = false
+    for (const slot of lifting) {
+      moved = stepSpring(r.springs, slot, true, dt, glowTarget) || moved
+    }
+    for (const slot of r.springs.keys()) {
+      if (lifting.has(slot)) continue
+      moved = stepSpring(r.springs, slot, false, dt, glowTarget) || moved
+    }
+    let settled = !r.dirty && (lifting.size === 0 ? r.springs.size === 0 : true)
+    if (settled) {
+      for (const slot of lifting) {
+        const state = r.springs.get(slot)
+        if (state === undefined || state.lift !== HOVER_LIFT || state.glow !== glowTarget) {
+          settled = false
+          break
+        }
       }
-      // At rest the values already equal the target: no write, no frame.
-      if (lift === current.lift && glow === current.glow && r.springs.has(slot)) continue
-      r.springs.set(slot, { lift, glow })
-      setGroupSlot(slot, lift, glow)
     }
-    const atRest = (slot: number): boolean => {
-      const state = r.springs.get(slot)
-      return state !== undefined && state.lift === HOVER_LIFT && state.glow === glowTarget
-    }
-    const settled =
-      !r.dirty && (lifting.size === 0 ? r.springs.size === 0 : [...lifting].every(atRest))
     setCanvasHook(gl.domElement, 'hoverSettled', settled ? 'true' : '')
     // Which slots hold lift right now: the e2e proof that only the pedestal
-    // lifts (data-hover still reports the raw slot, filtered or not).
-    const lifted = [...r.springs.entries()]
-      .filter(([, state]) => state.lift > 0)
-      .map(([slot]) => slot)
-      .sort((a, b) => a - b)
-      .join(',')
-    setCanvasHook(gl.domElement, 'lifted', lifted)
+    // lifts (data-hover still reports the raw slot, filtered or not). The
+    // string is rebuilt only when the springs changed; the hook call itself
+    // short-circuits on identical values, so rest frames write nothing.
+    if (moved) {
+      r.liftedCache = [...r.springs.entries()]
+        .filter(([, state]) => state.lift > 0)
+        .map(([slot]) => slot)
+        .sort((a, b) => a - b)
+        .join(',')
+    }
+    setCanvasHook(gl.domElement, 'lifted', r.liftedCache)
     // Settle-driven: any frame that leaves the hover easing (or a fresh
     // pointer unpicked) asks for the next one, so the loop can neither stall
     // early nor spin once everything rests.

@@ -35,8 +35,12 @@ export interface DatasetHost {
   dataset: Record<string, string | undefined>
 }
 
-/** Writes one canvas hook (`dataset.zoom = …`, `data-hover-settled`, …). */
+/** Writes one canvas hook (`dataset.zoom = …`, `data-hover-settled`, …).
+ * Short-circuits when the value is unchanged, so per-frame rigs (hover,
+ * zoom) don't pay a DOM write at rest — the demand loop stays settled
+ * (D-056) even while other rigs keep frames coming. */
 export function setCanvasHook(host: DatasetHost, name: CanvasHookName, value: string): void {
+  if (readCanvasHook(host, name) === value) return
   host.dataset[name] = value
 }
 
