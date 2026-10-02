@@ -107,8 +107,8 @@
           "horizon": "skyDusk",
           "ground": "forest",
           "glow": "sunGlow",
-          "glowIntensity": 6,
-          "glowSharpness": 12,
+          "glowIntensity": 7,
+          "glowSharpness": 9,
           "clouds": 0.5
         },
         "sun": {
@@ -165,7 +165,7 @@
         },
         "moon": {
           "color": "moonlight",
-          "intensity": 0.6
+          "intensity": 1.1
         },
         "env": {
           "intensity": 0.4

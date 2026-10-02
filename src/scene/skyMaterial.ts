@@ -2,6 +2,12 @@
 // lobe around the sun, low cloud bands warmed on the sun side, and a dark
 // green ground hemisphere so gold and glossy cream reflect the forest, not a
 // void. Rendered only into the env cube, in linear HDR.
+//
+// The town vantage looks down past the ground disc, so its whole backdrop is
+// the below-horizon hemisphere (fol-1nr): the ground branch carries a warm
+// gradient falling from the horizon plus an azimuthal sun lobe spilling past
+// the horizon, all uniform-driven so night keeps its own spill. Without this
+// the golden-hour frame is a flat dark-teal.
 
 import { BackSide, ShaderMaterial, Vector3 } from 'three'
 import type { Look } from '../time/look'
@@ -56,6 +62,21 @@ export function createSkyMaterial(): SkyMaterial {
         sky = mix(sky, cloud, uClouds * band * streaks);
 
         vec3 ground = mix(uHorizon * 0.35, uGround, smoothstep(0.0, 0.12, -up));
+        // Below-horizon golden-hour read (fol-1nr): a warm gradient falling
+        // from the horizon into the dark-green ground, plus an azimuthal sun
+        // lobe that spills past the horizon. Sunward rays glow even looking
+        // down, while away-from-sun stays forest; the slow depth falloff keeps
+        // deep-below grounded in dark green. Uniform-driven, so each keyframe
+        // (golden warmth, night lavender, midday haze) keeps its own spill.
+        {
+          vec2 flatView = d.xz / max(length(d.xz), 1e-4);
+          vec2 flatSun = uSunDirection.xz / max(length(uSunDirection.xz), 1e-4);
+          float sunward = max(dot(flatView, flatSun), 0.0);
+          float depth = smoothstep(0.05, 0.9, -up);
+          float spill = pow(sunward, 4.0) * (1.0 - depth);
+          ground = mix(uHorizon * 0.55, uGround, pow(depth, 0.6));
+          ground += uGlow * (uGlowIntensity * 0.5) * spill;
+        }
         gl_FragColor = vec4(up < 0.0 ? ground : sky, 1.0);
       }`,
   }) as SkyMaterial
