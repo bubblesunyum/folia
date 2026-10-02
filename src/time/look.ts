@@ -53,17 +53,6 @@ interface LookShape<Color> {
 export type Look = LookShape<RGB>
 export type LookSource = LookShape<PaletteColor>
 
-/** Keyframe sources that predate fog (panel fixtures, old files) omit it. */
-type LookSourceInput = LookSource & { fog?: LookSource['fog'] }
-
-/** Neutral stand-in for a missing fog: thin, high, cream. Real files carry fog. */
-const DEFAULT_FOG: LookSource['fog'] = {
-  color: 'cream',
-  density: 0.002,
-  heightFalloff: 0.04,
-  baseHeight: 4,
-}
-
 export interface Keyframe {
   name: string
   hours: number
@@ -83,8 +72,9 @@ export function linear(name: PaletteColor, pal: PaletteColors = palette): RGB {
   return [channel(0), channel(1), channel(2)]
 }
 
-function resolve(src: LookSourceInput, pal: PaletteColors = palette): Look {
-  const fog = src.fog ?? DEFAULT_FOG
+function resolve(name: string, src: LookSource, pal: PaletteColors = palette): Look {
+  if (!src.fog) throw new Error(`keyframes.json: keyframe "${name}" is missing "fog"`)
+  const fog = src.fog
   return {
     ...src,
     sky: {
@@ -129,10 +119,10 @@ export function loadKeyframes(
       name: string
       hours: number
       provisional?: boolean
-      look: LookSourceInput
+      look: LookSource
     }[]
   )
-    .map((k) => ({ ...k, look: resolve(k.look, pal) }))
+    .map((k) => ({ ...k, look: resolve(k.name, k.look, pal) }))
     .sort((a, b) => a.hours - b.hours)
 }
 

@@ -57,6 +57,7 @@ const KEYFRAMES = [
       night: 0,
       emissive: 1.2,
       bloom: { intensity: 0.35, threshold: 1, smoothing: 0.2 },
+      fog: { color: 'skyDusk', density: 0.0032, heightFalloff: 0.05, baseHeight: 2.5 },
       grade: {
         lift: [0, 0, 0.01],
         gamma: [1, 1, 1],

@@ -79,16 +79,14 @@ describe('fog', () => {
     )
   })
 
-  it('defaults fog for sources that predate it', () => {
+  it('fails closed when a keyframe omits fog', () => {
     const draft = initialDraft()
     const source = draft.keyframes[0]
     if (!source) throw new Error('no keyframes')
     const { fog: _dropped, ...lookWithoutFog } = source.look
-    const frames = loadKeyframes(
-      { keyframes: [{ ...source, look: lookWithoutFog }] },
-      draft.palette,
-    )
-    expect(frames[0]?.look.fog.density).toBeGreaterThan(0)
+    expect(() =>
+      loadKeyframes({ keyframes: [{ ...source, look: lookWithoutFog }] }, draft.palette),
+    ).toThrowError(`keyframes.json: keyframe "${source.name}" is missing "fog"`)
   })
 })
 
