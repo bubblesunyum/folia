@@ -7,6 +7,8 @@
  * far limit into a rise-one-level detent (D-006).
  */
 
+import { readReducedMotion } from './intent'
+
 export interface ZoomLimits {
   /** Closest the camera may come to the target, in metres. */
   minDistance: number
@@ -57,6 +59,16 @@ export const ZOOM_EXTERNAL_EPS = 0.05
 
 /** Animation steps smaller than this are settled. */
 export const ZOOM_SETTLE_EPS = 0.005
+
+/**
+ * Whether a discrete zoom step snaps instead of tweening (fol-582). Reduced
+ * motion goes through the one shared reader (intent.readReducedMotion, safe
+ * outside the browser), never a local matchMedia call; settled steps snap
+ * regardless. Pure apart from the guarded reader, so Vitest pins the matrix.
+ */
+export function shouldSnapZoom(renderDistance: number, fromDistance: number): boolean {
+  return readReducedMotion() || Math.abs(renderDistance - fromDistance) < ZOOM_SETTLE_EPS
+}
 
 /** Clamp a measured camera distance into the Place limits. */
 export function clampZoomDistance(distance: number, limits: ZoomLimits): number {

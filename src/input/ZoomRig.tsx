@@ -25,6 +25,7 @@ import {
   applyZoomDelta,
   easeOutCubic,
   resolveZoomBase,
+  shouldSnapZoom,
   ZOOM_SETTLE_EPS,
   ZOOM_STEP_DURATION_MS,
   type ZoomLimits,
@@ -104,7 +105,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 interface ZoomTween {
-  from: number
+  fromDistance: number
   to: number
   start: number
   /** Camera-flight generation at creation: another driver cancels this. */
@@ -158,7 +159,7 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
     const target = controlsRef.current?.target ?? FALLBACK_TARGET
     const now = performance.now()
     const t = Math.min(Math.max((now - tween.start) / ZOOM_STEP_DURATION_MS, 0), 1)
-    const renderDistance = tween.from + (tween.to - tween.from) * easeOutCubic(t)
+    const renderDistance = tween.fromDistance + (tween.to - tween.fromDistance) * easeOutCubic(t)
     setOrbitDistance(camera, target, renderDistance, controlsRef.current)
     const canvas = gl.domElement
     setCanvasHook(canvas, 'zoom', renderDistance.toFixed(2))
@@ -188,17 +189,14 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
     }
 
     const easeTo = (renderDistance: number) => {
-      const from = camera.position.distanceTo(targetOf())
-      if (
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
-        Math.abs(renderDistance - from) < ZOOM_SETTLE_EPS
-      ) {
+      const fromDistance = camera.position.distanceTo(targetOf())
+      if (shouldSnapZoom(renderDistance, fromDistance)) {
         tweenRef.current = null
         dollyTo(renderDistance)
         return
       }
       tweenRef.current = {
-        from,
+        fromDistance,
         to: renderDistance,
         start: performance.now(),
         flight: beginCameraFlight(),

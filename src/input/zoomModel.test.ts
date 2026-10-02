@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   applyZoomDelta,
   clampZoomDistance,
@@ -7,11 +8,17 @@ import {
   easeOutCubic,
   initialZoomState,
   resolveZoomBase,
+  shouldSnapZoom,
+  ZOOM_SETTLE_EPS,
   ZOOM_STEP_DURATION_MS,
   zoomRenderDistance,
 } from './zoomModel'
 
 const limits = { minDistance: 20, maxDistance: 80 }
+
+function stubReducedMotion(matches: boolean) {
+  vi.stubGlobal('window', { matchMedia: () => ({ matches, media: '' }) })
+}
 
 describe('applyZoomDelta', () => {
   it('moves within the limits without tripping the detent', () => {
@@ -158,5 +165,53 @@ describe('resolveZoomBase', () => {
   it('clamps the base into the limits', () => {
     expect(clampZoomDistance(10, limits)).toBe(20)
     expect(clampZoomDistance(100, limits)).toBe(80)
+  })
+})
+
+describe('shouldSnapZoom', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('snaps far steps when the intent reader reports reduced motion', () => {
+    stubReducedMotion(true)
+    expect(shouldSnapZoom(50, 80)).toBe(true)
+  })
+
+  it('eases far steps when motion is full', () => {
+    stubReducedMotion(false)
+    expect(shouldSnapZoom(50, 80)).toBe(false)
+  })
+
+  it('snaps settled steps even with full motion', () => {
+    stubReducedMotion(false)
+    expect(shouldSnapZoom(80, 80)).toBe(true)
+    expect(shouldSnapZoom(80 + ZOOM_SETTLE_EPS / 2, 80)).toBe(true)
+  })
+
+  it('reads false outside the browser through the guarded reader', () => {
+    expect(shouldSnapZoom(50, 80)).toBe(false)
+  })
+
+  it('follows the intent reader, not its own media query', () => {
+    // A matchMedia that answers true to anything except the reduce query
+    // must still read as full motion: the decision echoes the reader.
+    vi.stubGlobal('window', {
+      matchMedia: (query: string) => ({
+        matches: query !== '(prefers-reduced-motion: reduce)',
+        media: query,
+      }),
+    })
+    expect(shouldSnapZoom(50, 80)).toBe(false)
+  })
+})
+
+describe('one reduced-motion reader', () => {
+  it('zoomModel holds no local matchMedia query', () => {
+    const source = readFileSync(new URL('./zoomModel.ts', import.meta.url), 'utf8')
+    expect(source).not.toContain('window.matchMedia')
+    expect(source).not.toContain('.matchMedia(')
+    expect(source).not.toContain('prefers-reduced-motion')
+    expect(source).toContain('readReducedMotion')
   })
 })
