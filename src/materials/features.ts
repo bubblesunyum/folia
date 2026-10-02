@@ -100,21 +100,48 @@ export const group = {
 } satisfies Feature
 
 /**
+ * Pure mirror of the foliage back-light curve (fol-rzn, fol-bv8): the shader
+ * below interpolates FOLIAGE_THIN_FALLOFF, so the shape is pinned in vitest
+ * instead of pixels. Inputs saturate exactly like the GLSL.
+ */
+export const FOLIAGE_THIN_FALLOFF = 0.45
+
+/** View-ray-to-sun alignment shaped by the translucency power. */
+export function foliageBacklit(viewSun: number, power: number): number {
+  const s = Math.min(Math.max(viewSun, 0), 1)
+  return s ** power
+}
+
+/** Thickness proxy: sun-facing leaves read thick, edges and backs read thin. */
+export function foliageThin(ndl: number): number {
+  return 1 - FOLIAGE_THIN_FALLOFF * Math.min(Math.max(ndl, 0), 1)
+}
+
+/**
  * Foliage (D-045): leaves are single-sided cards drawn DoubleSide, shaded by
  * their clump's proxy normals, so the back face keeps the front's normal
  * rather than flipping. Adds wrap lighting and a back-lit translucency term
  * from the sun, and a value jitter so clumps don't read as one flat green.
- * The translucency ignores the sun's shadow for now.
+ * The translucency is gated by the sun's shadow attenuation (fol-rzn), so
+ * shaded clumps stop glowing.
  */
 export const foliage = {
   key: 'foliage',
   uniforms: {
     uWrap: { value: 0.5 },
-    uTranslucency: { value: 0.9 },
-    uTranslucencyPower: { value: 3 },
+    uTranslucency: { value: 1.2 },
+    uTranslucencyPower: { value: 2 },
     uJitter: { value: 0.18 },
     uNewGrowth: { value: new Color() },
     uGrowth: { value: 0.45 },
+    // Night spill weight (fol-2rl): driven by the look's night weight, so the
+    // term is exactly zero by day. Zero until `applyLook` claims it: the
+    // feature composes unconditionally, so a nonzero default would tint still
+    // renders with the look unapplied.
+    uFoliageNight: { value: 0 },
+    // Neon tint for the spill (fol-2rl, fol-5co): the hood's signature color,
+    // written by `applyLook`. Black until claimed, for the same reason.
+    uSpillColor: { value: new Color(0, 0, 0) },
   },
   vertex: {
     header: 'varying vec3 vFoliageWorld;',
@@ -137,7 +164,11 @@ export const foliage = {
       uniform float uJitter;
       uniform vec3 uNewGrowth;
       uniform float uGrowth;
+      uniform float uFoliageNight;
+      uniform vec3 uSpillColor;
       varying vec3 vFoliageWorld;
+      // vBakedNight is declared by the bakedLight feature's header: foliage
+      // always composes after lit, so the declaration precedes this use.
       float foliageHash(vec3 p) {
         return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
       }
@@ -178,11 +209,28 @@ export const foliage = {
             float ndl = dot(normal, sunDir);
             float wrapped = saturate((ndl + uWrap) / (1.0 + uWrap)) - saturate(ndl);
             float backLit = pow(saturate(dot(-geometryViewDir, sunDir)), uTranslucencyPower);
-            float thin = 1.0 - 0.6 * saturate(ndl);
+            float thin = 1.0 - ${FOLIAGE_THIN_FALLOFF.toFixed(2)} * saturate(ndl);
+            // The sun's shadow attenuation for light 0 (fol-rzn): shaded
+            // clumps keep wrap but lose the back-light glow. This is the stock
+            // shadow term, so intensity-0 tiers read 1.0 and render unchanged.
+            float sunShadow = 1.0;
+            #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+              if (receiveShadow) {
+                sunShadow = getShadow( directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize, directionalLightShadows[ 0 ].shadowIntensity, directionalLightShadows[ 0 ].shadowBias, directionalLightShadows[ 0 ].shadowRadius, vDirectionalShadowCoord[ 0 ] );
+              }
+            #endif
             // On Lambert's scale (1/π), so wrap tops out below a sun-facing leaf.
             reflectedLight.directDiffuse += sunColor * material.diffuseContribution * RECIPROCAL_PI
-              * (wrapped + uTranslucency * backLit * thin);
+              * (wrapped + sunShadow * uTranslucency * backLit * thin);
           #endif`,
+      },
+      emissivemap_fragment: {
+        after: /* glsl */ `
+          // Neon spill on dark leaves (fol-2rl): the _NIGHT bake is D-038's
+          // neon-proximity field, but leaf albedo crushes the diffuse path,
+          // so near-neon clumps ride emissive and read lit from every side.
+          // Weighted by the night weight, so daylight is exactly unchanged.
+          totalEmissiveRadiance += uSpillColor * dot(vBakedNight, vec3(0.3333)) * uFoliageNight;`,
       },
     },
   },
