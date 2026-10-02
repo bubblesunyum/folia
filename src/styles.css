@@ -269,6 +269,9 @@ body,
   flex: none;
   width: 12px;
   height: 12px;
+  /* Absorbs the header row's free space so the dot perches beside the
+     breadcrumb instead of stranding at the far gutter. */
+  margin-right: auto;
   border-radius: 50%;
   background: var(--mint);
   box-shadow:
