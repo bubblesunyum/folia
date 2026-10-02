@@ -22,6 +22,7 @@ import {
 } from './features'
 import { neonGlow } from './neonGlow'
 import { water } from './water'
+import { windowBands } from './windowBands'
 
 interface ProgramShaders {
   vertexShader: string
@@ -56,6 +57,13 @@ describe('feature injection against three shaders', () => {
     }
   })
 
+  it('puts the window bands on the standard program (fol-snu.3)', () => {
+    expect(() => check(windowBands, ShaderLib.standard, windowBands.key)).not.toThrow()
+  })
+
+  it('keeps the window bands out of depth: they move no vertices', () => {
+    expect((windowBands as Feature).depthVertex).toBeUndefined()
+  })
   it('puts the glow shell on the basic program with the lift', () => {
     expect(() => check(neonGlow, ShaderLib.basic, neonGlow.key)).not.toThrow()
   })

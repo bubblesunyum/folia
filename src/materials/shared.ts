@@ -15,8 +15,11 @@ import { type PaletteColors, palette, signatureColor } from '../palette'
 import type { Look } from '../time/look'
 import { composeDepthMaterial, composeMaterial, type Feature } from './composer'
 import { bakedLight, foliage, group, groupLift, reveal, revealBasic, sway } from './features'
+import { lightPoolUniforms } from './lightPool'
+import { moonRim } from './moonRim'
 import { neonGlow } from './neonGlow'
 import { water } from './water'
+import { windowBands } from './windowBands'
 
 export interface SharedMaterial {
   material: Material
@@ -39,17 +42,20 @@ function shared(
   }
 }
 
-const lit = [bakedLight, group, reveal]
+const lit = [bakedLight, group, reveal, moonRim]
+// Facades (fol-snu.3): the lit set plus the warm window bands. Ground stays
+// on `lit`: terrain gets no windows.
+const facadeLit = [...lit, windowBands]
 // The town-wide default signature until wave 2 threads the current hood.
 const DEFAULT_HOOD = 'cortico'
 const neonColor = new Color(signatureColor(DEFAULT_HOOD))
 
 /** Batch name → its shared material. The batch names are batchSchema's. */
 export const materials: Readonly<Record<string, SharedMaterial>> = {
-  cream: shared(new MeshStandardMaterial({ color: palette.cream, roughness: 0.3 }), lit),
+  cream: shared(new MeshStandardMaterial({ color: palette.cream, roughness: 0.3 }), facadeLit),
   gold: shared(
     new MeshStandardMaterial({ color: palette.gold, metalness: 1, roughness: 0.28 }),
-    lit,
+    facadeLit,
   ),
   ground: shared(new MeshStandardMaterial({ color: palette.lawn, roughness: 0.95 }), lit),
   foliage: shared(
@@ -122,6 +128,12 @@ export function applyLook(
     ;(materials[batch]?.material as MeshStandardMaterial | undefined)?.color.set(hex)
   }
   bakedLight.uniforms.uNightSpill.value = look.night
+  moonRim.uniforms.uMoonRimColor.value.fromArray(look.moon.color)
+  moonRim.uniforms.uMoonRimStrength.value = look.moon.intensity
+  windowBands.uniforms.uWindowNight.value = look.night
+  windowBands.uniforms.uWindowColor.value.set(pal.sunGlow)
+  lightPoolUniforms.uPoolNight.value = look.night
+  lightPoolUniforms.uPoolColor.value.set(pal.tangerine)
   foliage.uniforms.uFoliageNight.value = look.night
   foliage.uniforms.uSpillColor.value.set(signatureColor(hood, pal))
   const neon = materials.neon?.material as MeshBasicMaterial

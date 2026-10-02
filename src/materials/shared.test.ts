@@ -5,6 +5,7 @@ import { lookAt } from '../time/look'
 import { bakedLight, foliage, group, reveal } from './features'
 import { REVEAL_PARKED_M } from './revealModel'
 import { applyLook, materials } from './shared'
+import { windowBands } from './windowBands'
 
 // applyLook mutates the shared singletons, so every test leaves the file
 // palette behind.
@@ -71,6 +72,28 @@ describe('applyLook', () => {
     expect(foliage.uniforms.uFoliageNight.value).toBe(day.night)
   })
 
+  it('drives the window bands from the night weight and palette sunGlow (fol-snu.3)', () => {
+    const night = lookAt(22)
+    expect(night.night).toBeGreaterThan(0)
+    applyLook(night, true, palette)
+    expect(windowBands.uniforms.uWindowNight.value).toBe(night.night)
+    const color = windowBands.uniforms.uWindowColor.value as Color
+    expect(color.getHexString()).toBe(new Color(palette.sunGlow).getHexString())
+    const day = lookAt(13)
+    applyLook(day, true, palette)
+    expect(windowBands.uniforms.uWindowNight.value).toBe(day.night)
+  })
+
+  it('bands facades only: cream and gold carry them, ground and foliage do not (fol-snu.3)', () => {
+    for (const name of ['cream', 'gold']) {
+      const keys = materials[name]?.features.map((f) => f.key) ?? []
+      expect(keys, `${name} has no window bands`).toContain('window-bands')
+    }
+    for (const name of ['ground', 'foliage', 'neon', 'neonGlow', 'water']) {
+      const keys = materials[name]?.features.map((f) => f.key) ?? []
+      expect(keys, `${name} should not band`).not.toContain('window-bands')
+    }
+  })
   it('composes foliage after the baked spill that declares its varying', () => {
     const keys = materials.foliage?.features.map((f) => f.key) ?? []
     expect(keys.indexOf(bakedLight.key)).toBeLessThan(keys.indexOf('foliage'))

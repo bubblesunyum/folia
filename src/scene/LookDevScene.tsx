@@ -8,6 +8,7 @@ import { WispLight } from '../panel/WispLight'
 import { StressDraws } from '../perf/StressDraws'
 import { Fragment } from './Fragment'
 import { HoverHighlight } from './HoverHighlight'
+import { LightPools } from './LightPools'
 import { Lights } from './Lights'
 import { MaterialLook } from './MaterialLook'
 import { SkyEnvironment } from './SkyEnvironment'
@@ -28,6 +29,7 @@ export function LookDevScene() {
       {renderConfig.reflection && <WaterReflection />}
       <Suspense fallback={null}>
         <Fragment />
+        <LightPools />
       </Suspense>
       <HoverHighlight />
       <PedestalNavigate />
