@@ -1,8 +1,9 @@
 // The town batch registry, framework-free (D-032): one BatchedMesh per shared
 // material for the whole town. Assets add their dequantized geometries and
 // remove them on unmount; LOD swaps ride `setGeometryAt` inside the
-// per-geometry reservation, so they never reallocate. Overflow doubles the
-// mesh and migrates, which also compacts the holes that deletes leave behind.
+// per-geometry reservation, so they never reallocate. Overflow compacts the
+// mesh and retries, doubling and migrating only when live content truly
+// exceeds capacity, so deletes never ratchet capacity upward.
 // The React provider in `scene/TownBatches.tsx` is a thin rig over this.
 
 import type { BatchedMesh, BufferGeometry } from 'three'
@@ -118,6 +119,7 @@ export class TownRegistry {
   }
 
   private addWithGrowth(batch: string, list: readonly BufferGeometry[]): MeshHandles[] {
+    let compacted = false
     for (;;) {
       const mesh = this.meshes.get(batch)
       if (!mesh) throw new Error(`no town batch "${batch}"`)
@@ -128,6 +130,14 @@ export class TownRegistry {
       } catch (error) {
         // Anything but overflow stays a throw, fail closed.
         if (!isCapacityError(error)) throw error
+        // Deletes leave holes the bump allocator cannot reuse: compact and
+        // retry so freed ranges are reused, and only double when live
+        // content truly exceeds capacity.
+        if (!compacted) {
+          compacted = true
+          mesh.optimize()
+          continue
+        }
         this.grow(batch)
       }
     }

@@ -105,6 +105,50 @@ describe('TownRegistry', () => {
     expect(registry.meshes.get('cream')?.instanceCount).toBe(0)
   })
 
+  it('compacts before growing, so deletes do not ratchet capacity upward', () => {
+    const onGrow = vi.fn()
+    // One box reserves 48 verts / 72 indices: this mesh holds exactly two.
+    const registry = new TownRegistry(
+      new Map([['cream', { maxInstances: 8, maxVertices: 96, maxIndices: 144 }]]),
+      factory,
+      onGrow,
+    )
+    const before = registry.meshes.get('cream')
+    registry.register('a', asset({ cream: [box(1), box(1)] }))
+    registry.unregister('a')
+    // Freed ranges are reused: the same two boxes fit without doubling.
+    registry.register('b', asset({ cream: [box(1), box(1)] }))
+    expect(registry.meshes.get('cream')).toBe(before)
+    expect(onGrow).not.toHaveBeenCalled()
+    expect(registry.meshes.get('cream')?.instanceCount).toBe(2)
+    // Repeated churn still never grows.
+    registry.unregister('b')
+    for (let i = 0; i < 5; i++) {
+      registry.register(`churn-${i}`, asset({ cream: [box(1), box(1)] }))
+      expect(registry.meshes.get('cream')).toBe(before)
+      registry.unregister(`churn-${i}`)
+    }
+    expect(onGrow).not.toHaveBeenCalled()
+  })
+
+  it('still grows when live content truly exceeds capacity', () => {
+    const onGrow = vi.fn()
+    const registry = new TownRegistry(
+      new Map([['cream', { maxInstances: 8, maxVertices: 96, maxIndices: 144 }]]),
+      factory,
+      onGrow,
+    )
+    registry.register('a', asset({ cream: [box(1), box(1)] }))
+    registry.unregister('a')
+    // Reuse the freed ranges first, then exceed them: the third live box
+    // needs a real double, not a compaction.
+    registry.register('b', asset({ cream: [box(1), box(1)] }))
+    expect(onGrow).not.toHaveBeenCalled()
+    registry.register('c', asset({ cream: [box(1)] }))
+    expect(onGrow).toHaveBeenCalledTimes(1)
+    expect(registry.meshes.get('cream')?.instanceCount).toBe(3)
+  })
+
   it('keeps whole-mesh bounds tracking content, so culling never goes stale', () => {
     const registry = new TownRegistry(caps(), factory)
     const near = box(1)
