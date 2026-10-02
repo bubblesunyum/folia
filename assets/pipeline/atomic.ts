@@ -11,6 +11,18 @@
 // in the same directory plus rename (atomic on POSIX, so readers see the old
 // or the new file, never half of one), and `withFileLock` serializes the
 // manifest read-modify-write across processes with a mkdir lock.
+//
+// Size note (fol-alg): weighed against proper-lockfile and a
+// heartbeat-free mkdir+rm scheme; kept hand-rolled. A dependency still
+// needs our own heartbeat wrapper to keep the slow-holder tests green,
+// so the net saving is small for a new dep plus lockfile churn. A
+// heartbeat-free scheme either stalls crash recovery on a generous
+// staleMs or risks evicting a slow pack — and plain check-then-rm lets a
+// fresh holder landing between the age check and the rm lose its lock
+// silently. Each mechanism maps to a test in atomic.test.ts: heartbeat →
+// slow/live-holder cases, rename-to-break → racing-waiters case, token +
+// owned release → foreign-lock case. Shrink any of them and a test names
+// what broke.
 
 import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises'
