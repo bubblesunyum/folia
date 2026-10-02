@@ -1,14 +1,20 @@
 /** The antialiasing modes spike 3 compares (D-042). */
 export type AaMode = 'none' | 'msaa' | 'smaa'
 
-/** The shadow frustum fits spike 5 compares (D-041). */
+/** The shadow frustum fits spike 5 compares (D-041), one per camera preset. */
 export type ShadowFit = 'town' | 'vantage'
 
 /** The shadow-map refresh policy: live every frame, or frozen (D-041). */
 export type ShadowPolicy = 'live' | 'static'
 
-/** Half-extent in metres of the square shadow ortho box, by fit. */
-export const SHADOW_FITS: Record<ShadowFit, number> = { town: 16, vantage: 8 }
+/**
+ * Half-extent in metres of the square shadow ortho box, per camera preset
+ * (breadth sizes each fit to its preset's subject, D-058). Town stays ±16 m;
+ * vantage is ±16 m so the box covers the 18 m ground disc (9 m radius)
+ * instead of clipping it at ±8 m. Powers of two throughout, so switching
+ * fits never lands between texels.
+ */
+export const SHADOW_FITS: Record<ShadowFit, number> = { town: 16, vantage: 16 }
 
 export interface RenderConfig {
   /** A fixed DPR, or R3F's [min, max] range when the canvas follows the display. */

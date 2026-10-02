@@ -12,6 +12,18 @@ import {
 } from './shadowFit'
 
 describe('shadow fits', () => {
+  it('pins the per-preset extents: town unchanged, vantage covers the disc', () => {
+    expect(SHADOW_FITS.town).toBe(16)
+    expect(SHADOW_FITS.vantage).toBe(16)
+  })
+
+  it('covers each preset view: no quantized frustum clips its subject', () => {
+    // The vantage ground disc is 18 m across (9 m radius); ±8 m clipped it.
+    expect(quantizeExtent(SHADOW_FITS.vantage)).toBeGreaterThanOrEqual(9)
+    expect(quantizeExtent(SHADOW_FITS.vantage)).toBe(16)
+    expect(quantizeExtent(SHADOW_FITS.town)).toBe(16)
+  })
+
   it('rounds extents up to a power of two', () => {
     expect(quantizeExtent(16)).toBe(16)
     expect(quantizeExtent(9)).toBe(16)
@@ -20,7 +32,7 @@ describe('shadow fits', () => {
 
   it('sizes texels from the fit at 2048', () => {
     expect(texelSize(SHADOW_FITS.town, SHADOW_MAP_SIZE)).toBeCloseTo(0.0156, 4)
-    expect(texelSize(SHADOW_FITS.vantage, SHADOW_MAP_SIZE)).toBeCloseTo(0.0078, 4)
+    expect(texelSize(SHADOW_FITS.vantage, SHADOW_MAP_SIZE)).toBeCloseTo(0.0156, 4)
   })
 })
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BASE_AIR, parseRenderConfig } from './renderConfig'
+import { BASE_AIR, parseRenderConfig, SHADOW_FITS } from './renderConfig'
 
 describe('parseRenderConfig', () => {
   it('follows the display with MSAA by default', () => {
@@ -61,6 +61,11 @@ describe('parseRenderConfig', () => {
       bloom: true,
       reflection: false,
     })
+  })
+
+  it('pins the per-preset shadow extents (D-058)', () => {
+    // Town unchanged; vantage covers the 18 m ground disc (9 m radius).
+    expect(SHADOW_FITS).toEqual({ town: 16, vantage: 16 })
   })
 
   it('reads the spike-5 shadow knobs, defaulting to still town-live', () => {

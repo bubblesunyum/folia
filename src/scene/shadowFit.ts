@@ -1,7 +1,9 @@
 // The shadow frustum math spike 5 uses (D-041): quantized extents and a
 // texel-snapped light. Sizes stay powers of two so zooming between fits
 // doesn't shimmer. The fit map itself lives with the URL config in
-// perf/renderConfig.ts; everything here takes plain metres.
+// perf/renderConfig.ts, sized per camera preset (D-058: vantage covers the
+// 18 m ground disc, town unchanged); everything here takes plain metres, so
+// the snap holds for every preset unchanged.
 
 import { type DirectionalLight, Vector3 } from 'three'
 import type { ShadowPolicy } from '../perf/renderConfig'
