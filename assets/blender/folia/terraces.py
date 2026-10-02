@@ -1,7 +1,8 @@
 """Shared terrace-cluster composables (fol-9fh taste review): stacked blob
-terraces with gold trim, a mint neon run in the groove under a lip, and
-foliage clumps spilling off the edges. `cortico/fragment` and
-`cortico/meadow` build the same kinds, so the next tweak lands once.
+terraces with gold trim, a mint neon run in the groove under a lip, foliage
+clumps spilling off the edges, and trailing growth draping over the lips
+(pillar 4). `cortico/fragment` and `cortico/meadow` build the same kinds, so
+the next tweak lands once.
 """
 
 import json
@@ -21,6 +22,16 @@ TAU = math.tau
 # `foliage.clump()` bakes from params, never from its fallback literals.
 _FOLIAGE_PARAMS = json.loads(
     (Path(__file__).resolve().parent / "foliage_params.json").read_text()
+)
+
+# Draping growth over the lips (fol-0w8): the single retune point for the
+# trailers `edge_planting` hangs off each edge clump. `trailers_per_clump`
+# trailers fan out along the lip tangent, sit just outside the slab face, and
+# hang below the lip top by `drop_scale` (a fraction of the parent clump's
+# vertical radius, like the sibling `radii_scale`/`leaf_size_scale` fractions)
+# so the crown reads as spilling over rather than sitting on top. 0 disables.
+_TRAILING_PARAMS = json.loads(
+    (Path(__file__).resolve().parent / "trailing_params.json").read_text()
 )
 
 
@@ -79,9 +90,16 @@ def groove_neon(p, outlines, levels, group, name="neon"):
 
 
 def edge_planting(p, outlines, levels, rng, group, prefix="clump"):
-    """Foliage clumps sitting on terrace edges, leaning out over them."""
+    """Foliage clumps sitting on terrace edges, leaning out over them, with
+    trailing growth draping over the lips below each one."""
     parts = []
     pl = p["planting"]
+    tp = _TRAILING_PARAMS
+    edge_r = p["terraces"]["edge_radius"]
+    sway = {
+        "sway_base_m": _FOLIAGE_PARAMS["sway_base_m"],
+        "sway_top_m": _FOLIAGE_PARAMS["sway_top_m"],
+    }
     for i, spot in enumerate(pl["clumps"]):
         outline = outlines[spot["level"]]
         point, out = _outline_point(outline, forms.outline_normals(outline), spot["at"])
@@ -93,10 +111,35 @@ def edge_planting(p, outlines, levels, rng, group, prefix="clump"):
             {
                 **pl,
                 "radii": radii,
-                "sway_base_m": _FOLIAGE_PARAMS["sway_base_m"],
-                "sway_top_m": _FOLIAGE_PARAMS["sway_top_m"],
+                **sway,
             },
             rng,
         )
         parts.append(Part(place(ob, x, y, z, rng.uniform(0, TAU)), "foliage", group))
+        parts.extend(_trailers(prefix, i, pl, tp, edge_r, point, out, radii,
+                               levels[spot["level"]]["top"], rng, group, sway))
+    return parts
+
+
+def _trailers(prefix, i, pl, tp, edge_r, point, out, radii, top, rng, group, sway):
+    """Smaller clumps hanging over the lip face below an edge clump, fanned
+    along the lip tangent so the planting spills over instead of sitting on."""
+    parts = []
+    n = int(tp["trailers_per_clump"])
+    tangent = np.array([-out[1], out[0]])
+    for k in range(n):
+        along = (k - (n - 1) / 2) * tp["tangent_spread_m"]
+        lx, ly = point + tangent * along + out * (edge_r + tp["outward_m"])
+        lz = top - tp["drop_scale"] * radii[2]
+        ob = foliage.clump(
+            f"{prefix}{i}t{k}",
+            {
+                **pl,
+                "radii": [r * s for r, s in zip(radii, tp["radii_scale"])],
+                "leaf_size": pl["leaf_size"] * tp["leaf_size_scale"],
+                **sway,
+            },
+            rng,
+        )
+        parts.append(Part(place(ob, lx, ly, lz, rng.uniform(0, TAU)), "foliage", group))
     return parts

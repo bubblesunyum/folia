@@ -1,0 +1,8 @@
+{
+  "trailers_per_clump": 2,
+  "tangent_spread_m": 0.55,
+  "outward_m": 0.12,
+  "drop_scale": 0.6,
+  "radii_scale": [0.45, 0.45, 0.85],
+  "leaf_size_scale": 0.8
+}

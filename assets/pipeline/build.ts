@@ -75,15 +75,19 @@ export function listAssets(): string[] {
  * reaches the bake. The slot limit lives in `src/groupSlots.ts`, which is
  * listed: shrinking it can invalidate packed `_ID`s, so a change must
  * re-validate (and fail closed in `allocateSlots`) rather than pass `--check`.
- * The shared sway retune point `folia/foliage_params.json` is listed
- * explicitly (it is not `*.py`, so the shared glob misses it): a retune must
- * change `hashAsset` and wake the dev watcher, not ship stale geometry.
+ * The shared `folia/*.json` retune points (sway's `foliage_params.json`,
+ * fol-0w8's `trailing_params.json`) ride the same glob as the shared `*.py`:
+ * a retune must change `hashAsset` and wake the dev watcher, not ship stale
+ * geometry — and the next params file lands with no pipeline edit.
  */
 export function assetSources(asset: string): string[] {
   const sharedPy = readdirSync(join(BLENDER_DIR, 'folia'))
     .filter((f) => f.endsWith('.py'))
     .map((f) => join(BLENDER_DIR, 'folia', f))
-  const shared = [...sharedPy, join(BLENDER_DIR, 'folia', 'foliage_params.json')]
+  const sharedJson = readdirSync(join(BLENDER_DIR, 'folia'))
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => join(BLENDER_DIR, 'folia', f))
+  const shared = [...sharedPy, ...sharedJson]
   // Placement lives next to the asset in its layout file (fol-bll): hash it
   // with the asset so a placement edit rebuilds instead of shipping stale
   // geometry. Generic: any asset with a sibling *-layout.json picks it up.
