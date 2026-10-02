@@ -94,12 +94,21 @@ foliage.uniforms.uNewGrowth.value.set(palette.lawn)
 /**
  * Moves every shared material to `look`. The base palette goes on first, so
  * the look-dev panel's draft recolors the scene live in one ordered pass
- * (D-034): base colors, then everything the look derives from them.
+ * (D-034): base colors, then everything the look derives from them. `hood`
+ * is the `:project` route's neighborhood: neon, hover glow and foliage
+ * spill all read its signature color (D-024, fol-5co), failing closed on an
+ * unmapped hood. The scene threads the route through; the default keeps
+ * Cortico until it does.
  */
-export function applyLook(look: Look, bloom: boolean, pal: PaletteColors = palette): void {
-  neonColor.set(signatureColor(DEFAULT_HOOD, pal))
-  group.uniforms.uGroupGlowColor.value.set(signatureColor(DEFAULT_HOOD, pal))
-  group.uniforms.uGroupTintColor.value.set(signatureColor(DEFAULT_HOOD, pal))
+export function applyLook(
+  look: Look,
+  bloom: boolean,
+  pal: PaletteColors = palette,
+  hood: string = DEFAULT_HOOD,
+): void {
+  neonColor.set(signatureColor(hood, pal))
+  group.uniforms.uGroupGlowColor.value.set(signatureColor(hood, pal))
+  group.uniforms.uGroupTintColor.value.set(signatureColor(hood, pal))
   reveal.uniforms.uRevealColor.value.set(pal.cream)
   foliage.uniforms.uNewGrowth.value.set(pal.lawn)
   const bases: ReadonlyArray<readonly [string, string]> = [
@@ -113,6 +122,8 @@ export function applyLook(look: Look, bloom: boolean, pal: PaletteColors = palet
     ;(materials[batch]?.material as MeshStandardMaterial | undefined)?.color.set(hex)
   }
   bakedLight.uniforms.uNightSpill.value = look.night
+  foliage.uniforms.uFoliageNight.value = look.night
+  foliage.uniforms.uSpillColor.value.set(signatureColor(hood, pal))
   const neon = materials.neon?.material as MeshBasicMaterial
   neon.color.copy(neonColor).multiplyScalar(look.emissive)
   const glow = materials.neonGlow?.material as MeshBasicMaterial

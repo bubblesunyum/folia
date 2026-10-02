@@ -3,10 +3,17 @@ import { Link } from 'react-router'
 import { loadProject, type ProjectDoc } from '../content/load'
 import { MarkdownView } from '../content/MarkdownView'
 import { signalFocusLift } from '../input/intent'
+import { neighborhoodSignature } from '../palette'
 import { usePedestalRouteSync } from '../panel/usePedestalRouteSync'
 
 export function loader({ params }: LoaderFunctionArgs): ProjectDoc {
   if (params.project === undefined) throw new Response('missing project', { status: 404 })
+  // The canvas throws on a hood with no signature entry (fail closed), so
+  // the boundary 404s it here instead: content without a signature never
+  // reaches the materials mid-render.
+  if (!(params.project in neighborhoodSignature)) {
+    throw new Response(`unknown project "${params.project}"`, { status: 404 })
+  }
   try {
     return loadProject(params.project)
   } catch {

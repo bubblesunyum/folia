@@ -31,12 +31,28 @@ export type PaletteColors = { readonly [K in PaletteColor]: string }
 
 /**
  * One signature glow color per neighborhood (D-024): Cortico reads mint.
- * Wave 2 adds the remaining hoods and threads the current one through
- * `applyLook`; until then everything reads Cortico's.
+ * Slugs follow the `:project` route: the eight spec-named hoods plus Cortico.
+ * Only Cortico is built, so only its entry renders today; the rest fail
+ * closed through `signatureColor` until their geometry lands.
  */
 export const neighborhoodSignature = {
   cortico: 'mint',
+  'early-work': 'butter',
+  'blackjack-genius': 'gold',
+  glyphite: 'lavender',
+  'purple-republic': 'hotPink',
+  'express-your-mess': 'tangerine',
+  'express-your-yes': 'sunGlow',
+  'iron-ox': 'moonlight',
 } as const satisfies Record<string, PaletteColor>
+
+/** The route project is the signature hood (fol-5co): the town root has no
+ * `:project`, so it reads Cortico. Pure and three-free, so anything in the
+ * SSR graph can map routes to hoods. Unknown projects pass through and fail
+ * closed inside `signatureColor` — or 404 earlier at the route loader. */
+export function hoodFromProject(project: string | undefined): string {
+  return project ?? 'cortico'
+}
 
 /** The palette hex behind a neighborhood's signature glow; throws on an unmapped hood. */
 export function signatureColor(hood: string, pal: PaletteColors = palette): string {

@@ -12,6 +12,7 @@ import { readReducedMotion } from '../input/intent'
 import { signatureColor } from '../palette'
 import { makeRadialGlowTexture } from '../scene/glowSprite'
 import { ambient } from '../time/ambient'
+import { useHood } from '../useHood'
 import { getCaseInView, onCaseInView } from './caseInView'
 import { type PedestalSlug, requireAnchor } from './pedestals'
 
@@ -28,6 +29,9 @@ const ARRIVE_M = 0.02
 const scratchHome = new THREE.Vector3()
 
 export function WispLight() {
+  // The wisp glows the current neighborhood's signature (fol-5co): Cortico
+  // on the town root, the route project everywhere else.
+  const hood = useHood()
   const invalidate = useThree((state) => state.invalidate)
   const group = useRef<THREE.Group>(null)
   const light = useRef<THREE.PointLight>(null)
@@ -87,17 +91,11 @@ export function WispLight() {
 
   return (
     <group ref={group} position={[0, -10, 0]}>
-      <pointLight
-        ref={light}
-        intensity={0}
-        distance={14}
-        decay={2}
-        color={signatureColor('cortico')}
-      />
+      <pointLight ref={light} intensity={0} distance={14} decay={2} color={signatureColor(hood)} />
       <sprite ref={sprite} scale={[0.9, 0.9, 1]} visible={false}>
         <spriteMaterial
           map={map}
-          color={signatureColor('cortico')}
+          color={signatureColor(hood)}
           transparent
           depthWrite={false}
           blending={THREE.AdditiveBlending}

@@ -2,7 +2,7 @@ import { Color, type MeshBasicMaterial, type MeshStandardMaterial } from 'three'
 import { afterEach, describe, expect, it } from 'vitest'
 import { palette, signatureColor } from '../palette'
 import { lookAt } from '../time/look'
-import { bakedLight, group, reveal } from './features'
+import { bakedLight, foliage, group, reveal } from './features'
 import { REVEAL_PARKED_M } from './revealModel'
 import { applyLook, materials } from './shared'
 
@@ -55,6 +55,50 @@ describe('applyLook', () => {
   })
 
   it('fails closed on an unmapped hood instead of falling back to mint', () => {
-    expect(() => signatureColor('glyphite', palette)).toThrow()
+    expect(() => signatureColor('nowhere', palette)).toThrow()
+    expect(() => applyLook(lookAt(18.5), true, palette, 'nowhere')).toThrow()
+  })
+
+  it('drives the foliage night spill from the night weight and the signature (fol-2rl)', () => {
+    const night = lookAt(22)
+    expect(night.night).toBeGreaterThan(0)
+    applyLook(night, true, palette)
+    expect(foliage.uniforms.uFoliageNight.value).toBe(night.night)
+    const spill = foliage.uniforms.uSpillColor.value as Color
+    expect(spill.getHexString()).toBe(new Color(signatureColor('cortico', palette)).getHexString())
+    const day = lookAt(13)
+    applyLook(day, true, palette)
+    expect(foliage.uniforms.uFoliageNight.value).toBe(day.night)
+  })
+
+  it('composes foliage after the baked spill that declares its varying', () => {
+    const keys = materials.foliage?.features.map((f) => f.key) ?? []
+    expect(keys.indexOf(bakedLight.key)).toBeLessThan(keys.indexOf('foliage'))
+  })
+
+  it('glows each hood its signature color across neon, hover and spill (fol-5co)', () => {
+    const look = lookAt(22)
+    for (const hood of ['cortico', 'glyphite', 'purple-republic', 'iron-ox']) {
+      applyLook(look, true, palette, hood)
+      const expected = new Color(signatureColor(hood, palette)).getHexString()
+      const neon = materials.neon?.material as MeshBasicMaterial
+      const glow = group.uniforms.uGroupGlowColor.value as Color
+      const tint = group.uniforms.uGroupTintColor.value as Color
+      const spill = foliage.uniforms.uSpillColor.value as Color
+      // Neon runs through the emissive multiplier; the rest read the hex.
+      expect(neon.color.getHexString()).toBe(
+        new Color(signatureColor(hood, palette)).multiplyScalar(look.emissive).getHexString(),
+      )
+      expect(glow.getHexString()).toBe(expected)
+      expect(tint.getHexString()).toBe(expected)
+      expect(spill.getHexString()).toBe(expected)
+    }
+  })
+
+  it('keeps Cortico mint when the scene passes no hood', () => {
+    applyLook(lookAt(18.5), true, palette)
+    const expected = new Color(signatureColor('cortico', palette)).getHexString()
+    const glow = group.uniforms.uGroupGlowColor.value as Color
+    expect(glow.getHexString()).toBe(expected)
   })
 })

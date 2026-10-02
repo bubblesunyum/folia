@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs, MetaFunction } from 'react-router'
 import { type CaseDoc, loadProject, type ProjectDoc } from '../content/load'
+import { neighborhoodSignature } from '../palette'
 import { PanelPresenter } from '../panel/PanelPresenter'
 
 interface CasePage extends CaseDoc {
@@ -9,6 +10,11 @@ interface CasePage extends CaseDoc {
 
 export function loader({ params }: LoaderFunctionArgs): CasePage {
   if (params.project === undefined) throw new Response('missing project', { status: 404 })
+  // Same boundary as the project loader: a hood with no signature entry
+  // 404s here rather than throwing inside the canvas mid-render.
+  if (!(params.project in neighborhoodSignature)) {
+    throw new Response(`unknown project "${params.project}"`, { status: 404 })
+  }
   let project: ProjectDoc
   try {
     project = loadProject(params.project)
