@@ -18,12 +18,14 @@ import {
 } from 'three'
 import { renderConfig } from '../debug'
 import { materials } from '../materials/shared'
-import { water } from '../materials/water'
+import { RIPPLE_CONSUMER_ID, rippleConsumer, water } from '../materials/water'
 import { createStreakBlur } from '../renderer/streakBlur'
+import { ambient, isAmbientReading } from '../time/ambient'
 import { useLook } from '../time/lookContext'
 import { useTownBatches } from './TownBatches'
 import {
   classifyWaterBatch,
+  DAY_REFLECTION_CUTOFF,
   NIGHT_REFLECTION_CUTOFF,
   pondTouchesFrustum,
   shouldSkipReflection,
@@ -36,22 +38,25 @@ const CLIP_BIAS = 0.003
 const BIAS = new Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1)
 
 /**
- * The water's quarter-res mirrored pass (D-039): the neon, and the opaque
- * batches as black occluders, drawn from the camera mirrored in the pool's
- * plane, with an oblique near plane cutting away everything under it, then
- * blurred into vertical streaks. The water program reads it through
- * `uReflectionMatrix`. Runs
+ * The water's quarter-res mirrored pass (D-039): at night the neon draws lit
+ * over black occluders; by day the opaque batches draw in one cheap lit color
+ * (fol-snu.2), so the pond mirrors warm architecture masses instead of flat
+ * teal. Drawn from the camera mirrored in the pool's plane, with an oblique
+ * near plane cutting away everything under it, then blurred into vertical
+ * streaks. The water program reads it through `uReflectionMatrix`. Runs
  * inside the frame, before the composer, so it costs nothing while idle (D-056).
  *
- * The pass sits frames out (fol-4zo): `?reflection=off`, `look.night` near
- * zero, no water batch in the registry, or every pond off-frustum. Skipped
- * frames do no GL work and ask for no invalidate, and the water falls back to
- * env and Fresnel via `uReflectionStrength` 0.
+ * The pass sits frames out (fol-4zo): `?reflection=off`, neither night nor
+ * day weight up, no water batch in the registry, or every pond off-frustum.
+ * Skipped frames do no GL work and ask for no invalidate, and the water falls
+ * back to env and Fresnel via `uReflectionStrength` 0.
  */
 export function WaterReflection() {
   const gl = useThree((state) => state.gl)
   const { meshes } = useTownBatches()
-  const night = useLook().look.night
+  const { look, sun, palette: pal } = useLook()
+  const night = look.night
+  const day = sun.daylight
   const pass = useMemo(() => {
     return {
       target: new WebGLRenderTarget(1, 1, { type: HalfFloatType }),
@@ -61,6 +66,9 @@ export function WaterReflection() {
       occluder: new MeshBasicMaterial({ color: BLACK }),
       size: new Vector2(),
       clearColor: new Color(),
+      // Scratch for the day occluder (fol-snu.2): the sun tint, so the
+      // per-draw multiply below allocates nothing.
+      daySun: new Color(),
       box: new Box3(),
       world: new Box3(),
       frustum: new Frustum(),
@@ -99,7 +107,11 @@ export function WaterReflection() {
     water.uniforms.uReflection.value = pass.streaks.texture
     // 0 until a mirrored draw lands: every skip path leaves env + Fresnel only.
     water.uniforms.uReflectionStrength.value = 0
+    // The ripple rides the same clock (fol-ixw): registering poses it from
+    // the shared time, and unregistering parks it back still.
+    ambient.register(RIPPLE_CONSUMER_ID, rippleConsumer())
     return () => {
+      ambient.unregister(RIPPLE_CONSUMER_ID)
       water.uniforms.uReflection.value = null
       water.uniforms.uReflectionStrength.value = 0
       pass.target.dispose()
@@ -110,10 +122,22 @@ export function WaterReflection() {
   }, [pass])
 
   useFrame(({ camera, scene }) => {
+    // Ripple first (fol-ixw, D-056): fold this frame into the shared ambient
+    // clock so the ripple poses from it, but never invalidate for it — the
+    // ripple moves inside frames other drivers cause and rests with them, so
+    // idle stays green. The return is deliberately unread: asking for another
+    // frame here would pin the scene at ~30 Hz.
+    ambient.tick(performance.now(), {
+      visible: document.visibilityState === 'visible',
+      reading: isAmbientReading(),
+    })
     // Cheap gates first: no discovery, no bounds, no GL when the pass is
-    // off by flag or by night. The frustum/discovery work below only runs
-    // when a mirrored draw is actually possible.
-    if (!renderConfig.reflection || !(night > NIGHT_REFLECTION_CUTOFF)) {
+    // off by flag or when neither weight is up. The frustum/discovery work
+    // below only runs when a mirrored draw is actually possible.
+    if (
+      !renderConfig.reflection ||
+      (!(night > NIGHT_REFLECTION_CUTOFF) && !(day > DAY_REFLECTION_CUTOFF))
+    ) {
       water.uniforms.uReflectionStrength.value = 0
       return
     }
@@ -144,6 +168,7 @@ export function WaterReflection() {
       shouldSkipReflection({
         enabled: renderConfig.reflection,
         night,
+        day,
         hasWater: pools > 0,
         pondInFrustum: inFrustum,
       })
@@ -204,9 +229,19 @@ export function WaterReflection() {
     e[10] = p.clip.z + 1 - CLIP_BIAS
     e[14] = p.clip.w
 
-    // Draw: neon lit, the rest black, no sky, no shadow-map refresh.
+    // Draw: neon lit, the rest occluding, no sky, no shadow-map refresh.
     // Emissive batches are deliberately untouched here: they draw with
-    // their own material so the neon stays lit in the mirror.
+    // their own material so the neon stays lit in the mirror. By day the
+    // occluders wear the cheap lit color (fol-snu.2) so the pond mirrors warm
+    // masses; at night they stay black around the neon streaks.
+    const nightPass = night > NIGHT_REFLECTION_CUTOFF
+    // The day occluders' cheap lit color (fol-snu.2): cream albedo under the
+    // sun's color, with no lights and no shadow — one flat warm the pond can
+    // mirror as architecture masses. Derived per-draw from the live palette,
+    // like every other palette uniform `applyLook` writes, so the look-dev
+    // draft recolors the mirror too; never frozen from the import-time palette.
+    if (nightPass) p.occluder.color.copy(BLACK)
+    else p.occluder.color.set(pal.cream).multiply(p.daySun.set(pal.sunlight))
     const background = scene.background
     const autoShadows = gl.shadowMap.autoUpdate
     const clearAlpha = gl.getClearAlpha()

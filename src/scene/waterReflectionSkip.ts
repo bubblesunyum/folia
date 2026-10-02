@@ -1,7 +1,8 @@
 // The water reflection's skip predicate and registry-driven batch discovery
 // (fol-4zo): pure core under `scene/WaterReflection.tsx`'s thin rig. The
-// mirrored pass exists to bounce neon off the pond at night; by day, off
-// screen, or with `?reflection=off` it buys nothing, so the rig sits those
+// mirrored pass exists to bounce neon off the pond at night, and warm
+// architecture masses off it by day (fol-snu.2); with `?reflection=off`, off
+// screen, or when neither weight is up it buys nothing, so the rig sits those
 // frames out (D-056) and the water falls back to env and Fresnel.
 
 import { Box3, type Frustum } from 'three'
@@ -9,11 +10,16 @@ import { Box3, type Frustum } from 'three'
 /** `look.night` at or under this: the neon bounce is invisible, skip the pass. */
 export const NIGHT_REFLECTION_CUTOFF = 0.02
 
+/** `sun.daylight` at or under this: the sun is down, skip the day pass. */
+export const DAY_REFLECTION_CUTOFF = 0.02
+
 export interface ReflectionSkipInput {
   /** The `?reflection=off` switch (D-039): false keeps env and Fresnel only. */
   enabled: boolean
   /** The current look's night weight. */
   night: number
+  /** The current sun's daylight weight (1 through most of the day, 0 at night). */
+  day: number
   /** At least one water batch discovered in the registry. */
   hasWater: boolean
   /** The ponds' world bounds touch the camera frustum. */
@@ -21,12 +27,13 @@ export interface ReflectionSkipInput {
 }
 
 /**
- * True when the mirrored pass should sit the frame out. Everything unknown
- * fails closed: a NaN night reads as night, so it skips.
+ * True when the mirrored pass should sit the frame out: neither the night
+ * neon nor the day architecture would read. Everything unknown fails closed:
+ * a NaN weight reads as down, so it skips.
  */
 export function shouldSkipReflection(input: ReflectionSkipInput): boolean {
   if (!input.enabled) return true
-  if (!(input.night > NIGHT_REFLECTION_CUTOFF)) return true
+  if (!(input.night > NIGHT_REFLECTION_CUTOFF) && !(input.day > DAY_REFLECTION_CUTOFF)) return true
   if (!input.hasWater) return true
   if (!input.pondInFrustum) return true
   return false

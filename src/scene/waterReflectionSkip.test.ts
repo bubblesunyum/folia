@@ -2,6 +2,7 @@ import { Box3, Frustum, Matrix4, PerspectiveCamera, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import {
   classifyWaterBatch,
+  DAY_REFLECTION_CUTOFF,
   discoverWaterBatches,
   NIGHT_REFLECTION_CUTOFF,
   pondTouchesFrustum,
@@ -22,12 +23,21 @@ describe('shouldSkipReflection', () => {
   const runnable = {
     enabled: true,
     night: 1,
+    day: 0,
     hasWater: true,
     pondInFrustum: true,
   }
 
   it('renders when the switch is on, night is up and the pond is visible', () => {
     expect(shouldSkipReflection(runnable)).toBe(false)
+  })
+
+  it('renders at golden hour: day up, night down (fol-snu.2)', () => {
+    expect(shouldSkipReflection({ ...runnable, night: 0, day: 1 })).toBe(false)
+  })
+
+  it('skips when neither weight is up', () => {
+    expect(shouldSkipReflection({ ...runnable, night: 0, day: 0 })).toBe(true)
   })
 
   it('skips on `?reflection=off`', () => {
@@ -40,6 +50,13 @@ describe('shouldSkipReflection', () => {
     expect(shouldSkipReflection({ ...runnable, night: NIGHT_REFLECTION_CUTOFF + 0.01 })).toBe(false)
   })
 
+  it('skips when the sun is down for the day pass', () => {
+    const golden = { ...runnable, night: 0, day: DAY_REFLECTION_CUTOFF + 0.01 }
+    expect(shouldSkipReflection({ ...golden, day: 0 })).toBe(true)
+    expect(shouldSkipReflection({ ...golden, day: DAY_REFLECTION_CUTOFF })).toBe(true)
+    expect(shouldSkipReflection(golden)).toBe(false)
+  })
+
   it('skips when no water batch was discovered', () => {
     expect(shouldSkipReflection({ ...runnable, hasWater: false })).toBe(true)
   })
@@ -48,8 +65,9 @@ describe('shouldSkipReflection', () => {
     expect(shouldSkipReflection({ ...runnable, pondInFrustum: false })).toBe(true)
   })
 
-  it('fails closed on a NaN night', () => {
+  it('fails closed on a NaN weight', () => {
     expect(shouldSkipReflection({ ...runnable, night: Number.NaN })).toBe(true)
+    expect(shouldSkipReflection({ ...runnable, night: 0, day: Number.NaN })).toBe(true)
   })
 })
 
@@ -90,6 +108,7 @@ describe('discoverWaterBatches', () => {
       shouldSkipReflection({
         enabled: true,
         night: 1,
+        day: 0,
         hasWater: found.pool.length > 0,
         pondInFrustum: true,
       }),
