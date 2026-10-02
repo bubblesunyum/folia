@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs, MetaFunction } from 'react-router'
-import { type CaseDoc, loadProject } from '../content/load'
+import { type CaseDoc, loadProject, type ProjectDoc } from '../content/load'
 import { PanelPresenter } from '../panel/PanelPresenter'
 
 interface CasePage extends CaseDoc {
@@ -8,7 +8,13 @@ interface CasePage extends CaseDoc {
 }
 
 export function loader({ params }: LoaderFunctionArgs): CasePage {
-  const project = loadProject()
+  if (params.project === undefined) throw new Response('missing project', { status: 404 })
+  let project: ProjectDoc
+  try {
+    project = loadProject(params.project)
+  } catch {
+    throw new Response(`unknown project "${params.project}"`, { status: 404 })
+  }
   const found = project.cases.find((c) => c.slug === params.slug)
   if (found === undefined) {
     throw new Response(`unknown case "${params.slug ?? ''}"`, { status: 404 })

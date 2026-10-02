@@ -84,8 +84,14 @@ export function assetSources(asset: string): string[] {
     .filter((f) => f.endsWith('.py'))
     .map((f) => join(BLENDER_DIR, 'folia', f))
   const shared = [...sharedPy, join(BLENDER_DIR, 'folia', 'foliage_params.json')]
+  // Placement lives next to the asset in its layout file (fol-bll): hash it
+  // with the asset so a placement edit rebuilds instead of shipping stale
+  // geometry. Generic: any asset with a sibling *-layout.json picks it up.
+  const layoutFile = join(BLENDER_DIR, `${asset}-layout.json`)
+  const layout = existsSync(layoutFile) ? [layoutFile] : []
   return [
     ...shared,
+    ...layout,
     join(BLENDER_DIR, 'build.py'),
     join(BLENDER_DIR, 'VERSION'),
     join(BLENDER_DIR, `${asset}.py`),

@@ -15,7 +15,7 @@ import { damp, expFactor } from '../motion/damp'
 import { setOrbitDistance } from '../motion/orbit'
 import { setCanvasHook } from '../testHooks'
 import { resolvePanelDolly } from './panelDolly'
-import { PEDESTAL_ANCHOR_BY_SLUG, type PedestalSlug, TOWN_ORBIT_TARGET } from './pedestals'
+import { type PedestalSlug, requireAnchor, TOWN_ORBIT_TARGET } from './pedestals'
 import { usePanelLayout } from './usePanelLayout'
 
 const FOCUS_RATE = 3
@@ -102,7 +102,7 @@ export function PanelCameraRig() {
     let busy = false
 
     // Orbit-target ease toward the open pedestal, home when it closes.
-    const anchor = r.slug === null ? TOWN_ORBIT_TARGET : PEDESTAL_ANCHOR_BY_SLUG[r.slug]
+    const anchor = r.slug === null ? TOWN_ORBIT_TARGET : requireAnchor(r.slug)
     scratchFocus.set(anchor[0], anchor[1], anchor[2])
     const target = controlsRef.current?.target
     if (target) {

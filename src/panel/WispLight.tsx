@@ -13,7 +13,7 @@ import { signatureColor } from '../palette'
 import { makeRadialGlowTexture } from '../scene/glowSprite'
 import { ambient } from '../time/ambient'
 import { getCaseInView, onCaseInView } from './caseInView'
-import { PEDESTAL_ANCHOR_BY_SLUG, type PedestalSlug } from './pedestals'
+import { type PedestalSlug, requireAnchor } from './pedestals'
 
 /** The perch floats this far above the pedestal anchor. */
 export const WISP_PERCH_HEIGHT_M = 1.15
@@ -60,7 +60,7 @@ export function WispLight() {
       }
       return
     }
-    const anchor = PEDESTAL_ANCHOR_BY_SLUG[slug]
+    const anchor = requireAnchor(slug)
     scratchHome.set(anchor[0], anchor[1] + WISP_PERCH_HEIGHT_M, anchor[2])
     // The travel ease is the only thing that spends frames: while the wisp
     // is still flying to its perch every frame invalidates, and once it is

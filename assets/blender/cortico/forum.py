@@ -9,12 +9,19 @@ D-009/D-024. No foliage or water: the fragment already wraps the forum in
 terraces, canopy and planting, so this asset stays lean.
 """
 
+import json
 import math
+from pathlib import Path
 
 import numpy as np
 
 from folia import forms
 from folia.mesh import Part
+
+# The forum placement is single-sourced in the sibling forum-layout.json
+# (fol-bll): the same centre/floor_top the TS rigs' anchors derive from, so
+# the two can never drift. forum.json carries only the build params.
+_LAYOUT = json.loads((Path(__file__).with_name("forum-layout.json")).read_text())
 
 TAU = math.tau
 
@@ -133,8 +140,8 @@ BUILDERS = {
 
 def assemble(params, rng):
     groups = params["groups"]
-    cx, cy = params["centre"]
-    floor = params["floor_top"]
+    cx, cy = _LAYOUT["centre"]
+    floor = _LAYOUT["floor_top"]
     parts = []
 
     # Sunk into the terrace top so the contact faces never z-fight.

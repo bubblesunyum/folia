@@ -1,12 +1,17 @@
-import type { MetaFunction } from 'react-router'
+import type { LoaderFunctionArgs, MetaFunction } from 'react-router'
 import { Link } from 'react-router'
 import { loadProject, type ProjectDoc } from '../content/load'
 import { MarkdownView } from '../content/MarkdownView'
 import { signalFocusLift } from '../input/intent'
 import { usePedestalRouteSync } from '../panel/usePedestalRouteSync'
 
-export function loader(): ProjectDoc {
-  return loadProject()
+export function loader({ params }: LoaderFunctionArgs): ProjectDoc {
+  if (params.project === undefined) throw new Response('missing project', { status: 404 })
+  try {
+    return loadProject(params.project)
+  } catch {
+    throw new Response(`unknown project "${params.project}"`, { status: 404 })
+  }
 }
 
 export const meta: MetaFunction<typeof loader> = ({ loaderData }) => [
@@ -37,7 +42,7 @@ export default function Cortico({ loaderData }: { loaderData: ProjectDoc }) {
 function CaseLink({ slug, title }: { slug: string; title: string }) {
   return (
     <Link
-      to={`/cortico/${slug}`}
+      to={slug}
       prefetch="intent"
       data-pedestal={slug}
       onFocus={() => signalFocusLift(slug)}

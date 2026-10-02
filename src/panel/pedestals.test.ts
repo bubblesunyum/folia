@@ -1,12 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import forumParams from '../../assets/blender/cortico/forum.json' with { type: 'json' }
+import forumLayout from '../../assets/blender/cortico/forum-layout.json' with { type: 'json' }
+import fragmentParams from '../../assets/blender/cortico/fragment.json' with { type: 'json' }
 import manifest from '../../assets/manifest.json' with { type: 'json' }
+import { listCases, listProjects } from '../content/load'
 import {
   FORUM_FLOOR_SLOT,
   isPedestalSlot,
   nextTapState,
   PEDESTAL_ANCHOR_BY_SLUG,
-  PEDESTAL_SLOT_BY_SLUG,
   pedestalOnlyForPath,
+  pedestalSlotBySlug,
   resolveCaseNav,
   shouldLiftSlot,
   slotForSlug,
@@ -25,31 +29,38 @@ function manifestSlot(name: string): number {
   return slot
 }
 
-const PLATFORM = PEDESTAL_SLOT_BY_SLUG.platform
-const RECORDER = PEDESTAL_SLOT_BY_SLUG.recorder
-const MEDLEY = PEDESTAL_SLOT_BY_SLUG.medley
+/** Every cortico case slug, sorted: the only project with pedestals (fol-ya7). */
+function corticoSlugs(): string[] {
+  return listCases('cortico').sort()
+}
+
+const PLATFORM = pedestalSlotBySlug().platform
+const RECORDER = pedestalSlotBySlug().recorder
+const MEDLEY = pedestalSlotBySlug().medley
+if (PLATFORM === undefined || RECORDER === undefined || MEDLEY === undefined) {
+  throw new Error('pedestals.test: content cases missing from the slot map')
+}
 
 /** A slot no pedestal or floor uses, whatever the allocator hands out. */
 const SPARE = Math.max(FORUM_FLOOR_SLOT, PLATFORM, RECORDER, MEDLEY) + 100
 
 describe('slug ↔ slot mapping', () => {
-  it('derives every pedestal slot from the manifest forum groups', () => {
-    expect(PEDESTAL_SLOT_BY_SLUG).toEqual({
-      platform: manifestSlot('platform'),
-      recorder: manifestSlot('recorder'),
-      medley: manifestSlot('medley'),
-    })
+  it('derives every pedestal slot from the cortico cases and the manifest forum groups', () => {
+    expect(Object.keys(pedestalSlotBySlug()).sort()).toEqual(corticoSlugs())
+    expect(pedestalSlotBySlug()).toEqual(
+      Object.fromEntries(corticoSlugs().map((slug) => [slug, manifestSlot(slug)])),
+    )
     expect(FORUM_FLOOR_SLOT).toBe(manifestSlot('forum'))
   })
 
   it('keeps every pedestal on its own slot, off the floor', () => {
-    const slots = Object.values(PEDESTAL_SLOT_BY_SLUG)
+    const slots = Object.values(pedestalSlotBySlug())
     expect(new Set(slots).size).toBe(slots.length)
     for (const slot of slots) expect(slot).not.toBe(FORUM_FLOOR_SLOT)
   })
 
-  it('round-trips every pedestal slug', () => {
-    for (const slug of ['platform', 'recorder', 'medley'] as const) {
+  it('round-trips every cortico slug', () => {
+    for (const slug of corticoSlugs()) {
       const slot = slotForSlug(slug)
       expect(slot).not.toBeNull()
       expect(slugForSlot(slot as number)).toBe(slug)
@@ -96,9 +107,17 @@ describe('pedestalOnlyForPath', () => {
     expect(pedestalOnlyForPath('/cortico/platform/')).toBe(true)
   })
 
+  it('restricts lift under every content project', () => {
+    for (const project of listProjects()) {
+      expect(pedestalOnlyForPath(`/${project}`)).toBe(true)
+      expect(pedestalOnlyForPath(`/${project}/platform`)).toBe(true)
+    }
+  })
+
   it('leaves town-level hover alone', () => {
     expect(pedestalOnlyForPath('/')).toBe(false)
     expect(pedestalOnlyForPath('/corticosteroid')).toBe(false)
+    expect(pedestalOnlyForPath('/unknown-project')).toBe(false)
   })
 })
 
@@ -137,8 +156,88 @@ describe('resolveCaseNav', () => {
     })
   })
 
-  it('pushes from anywhere else', () => {
-    expect(resolveCaseNav('/', 'platform')).toEqual({ to: '/cortico/platform', replace: false })
+  it('routes an explicit project even off-path', () => {
+    expect(resolveCaseNav('/', 'platform', 'cortico')).toEqual({
+      to: '/cortico/platform',
+      replace: false,
+    })
+  })
+
+  it('fails closed off-path with no project instead of guessing one', () => {
+    expect(() => resolveCaseNav('/', 'platform')).toThrowError(/no project/)
+  })
+})
+
+describe('second-project probe (fol-ya7)', () => {
+  it('a beta-shaped project without forum groups never breaks the import', async () => {
+    vi.resetModules()
+    vi.doMock('../content/load', () => ({
+      listProjects: () => ['beta', 'cortico'],
+      listCases: (project: string): string[] =>
+        project === 'cortico' ? ['medley', 'platform', 'recorder'] : ['alpha'],
+    }))
+    const probe = await import('./pedestals')
+    // Beta cases fail closed per route: no slot, no lift, but no throw.
+    expect(probe.slotForSlug('alpha')).toBeNull()
+    expect(probe.slotForSlug('platform')).not.toBeNull()
+    expect(probe.pedestalOnlyForPath('/beta')).toBe(true)
+    expect(probe.pedestalOnlyForPath('/beta/alpha')).toBe(true)
+    expect(probe.pedestalOnlyForPath('/gamma')).toBe(false)
+    // Beta routes still resolve when the caller passes the project.
+    expect(probe.resolveCaseNav('/beta', 'alpha', 'beta')).toEqual({
+      to: '/beta/alpha',
+      replace: false,
+    })
+    expect(probe.resolveCaseNav('/beta/alpha', 'alpha', 'beta')).toEqual({
+      to: '/beta/alpha',
+      replace: true,
+    })
+    vi.doUnmock('../content/load')
+  })
+})
+
+describe('forum layout single source (fol-bll)', () => {
+  it('forum.json carries no placement copy: the layout file owns it', () => {
+    expect('centre' in forumParams).toBe(false)
+    expect('floor_top' in forumParams).toBe(false)
+  })
+
+  it('layout placement matches the fragment top terrace it sits on', () => {
+    const levels = fragmentParams.terraces.levels
+    const top = levels.reduce((a, b) => (b.top > a.top ? b : a))
+    expect(top.centre).toEqual(forumLayout.centre)
+    // The medallion top sits 0.10 above the terrace; its 0.12 slab sinks
+    // 0.02 in so the contact faces never z-fight (forum.py).
+    expect(forumLayout.floor_top - top.top).toBeCloseTo(0.1, 9)
+  })
+
+  it('anchors match the Blender placement math (Blender XY → three XZ)', () => {
+    const [cx, cy] = forumLayout.centre
+    const { radius } = forumParams.pedestal
+    for (const spot of forumParams.pedestal.spots) {
+      const anchor = PEDESTAL_ANCHOR_BY_SLUG[spot.slug as keyof typeof PEDESTAL_ANCHOR_BY_SLUG]
+      const radians = (spot.at * Math.PI) / 180
+      const px = (cx as number) + radius * Math.cos(radians)
+      const py = (cy as number) + radius * Math.sin(radians)
+      expect(anchor[0]).toBeCloseTo(px, 9)
+      expect(anchor[2]).toBeCloseTo(-py, 9)
+      // Focus floats above the pedestal top, below the wisp sky.
+      expect(anchor[1]).toBeGreaterThan(forumLayout.floor_top)
+      expect(anchor[1]).toBeLessThan(forumLayout.floor_top + 2)
+    }
+  })
+
+  it('anchor, slot, spot, and content keys agree: drift fails here', () => {
+    const anchors = Object.keys(PEDESTAL_ANCHOR_BY_SLUG).sort()
+    const slots = Object.keys(pedestalSlotBySlug()).sort()
+    const spots = forumParams.pedestal.spots.map((s) => s.slug).sort()
+    const groups = Object.keys(forumGroups)
+      .filter((name) => name !== 'forum')
+      .sort()
+    expect(anchors).toEqual(slots)
+    expect(anchors).toEqual(spots)
+    expect(anchors).toEqual(groups)
+    expect(slots).toEqual(listCases('cortico').sort())
   })
 })
 

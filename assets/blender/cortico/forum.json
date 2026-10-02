@@ -7,8 +7,6 @@
     "platform": 2,
     "recorder": 3
   },
-  "centre": [-3.4, -2.6],
-  "floor_top": 2.35,
   "medallion": {
     "radius": 2.2,
     "harmonics": [0.04, 0.02],
