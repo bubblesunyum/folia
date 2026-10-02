@@ -46,7 +46,7 @@ try {
   process.exit(1)
 }
 
-const server = spawn('node_modules/.bin/vite', ['preview', '--outDir', 'build/client', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'], {
+const server = spawn(process.execPath, ['scripts/serve-static.mjs', '--dir', 'build/client', '--host', '127.0.0.1', '--port', String(PORT)], {
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 let browser
@@ -102,23 +102,23 @@ async function waitForServer(url) {
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 200))
   }
-  throw new Error(`vite preview never answered on ${url} — is port ${PORT} taken?`)
+  throw new Error(`static server never answered on ${url} — is port ${PORT} taken?`)
 }
 
 function waitForOwnServer(server) {
   return new Promise((resolve, reject) => {
     let output = ''
-    const timeout = setTimeout(() => reject(new Error(`vite preview startup timed out: ${output}`)), 10_000)
+    const timeout = setTimeout(() => reject(new Error(`static server startup timed out: ${output}`)), 10_000)
     const fail = (error) => {
       clearTimeout(timeout)
       reject(error)
     }
     server.on('error', fail)
-    server.on('exit', (code) => fail(new Error(`vite preview exited ${code}: ${output}`)))
+    server.on('exit', (code) => fail(new Error(`static server exited ${code}: ${output}`)))
     server.stderr.on('data', (chunk) => { output += chunk.toString() })
     server.stdout.on('data', (chunk) => {
       output += chunk.toString()
-      if (output.includes('Local:')) {
+      if (output.includes('serve-static: listening')) {
         clearTimeout(timeout)
         resolve()
       }

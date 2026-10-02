@@ -6,7 +6,8 @@ import { expectNoErrors, trackErrors, waitForTownDrawn } from './helpers'
 // The wisp's perch bob used to invalidate every frame, so the longest dwell
 // state rendered at display rate. Open the platform case, wait for every
 // arrival ease to land, then prove zero new WebGL draw calls over the rest
-// window. Uses /cortico/ with the trailing slash (preview rewrites it).
+// window. Direct slashless load: the static server resolves /x to
+// x/index.html like Vercel, so no trailing slash is needed.
 
 const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow'
 
@@ -27,7 +28,7 @@ test('the open panel rests: zero draw calls after arrival', async ({ page }) => 
       }
     }
   `)
-  await page.goto('/cortico/platform/?time=18:30')
+  await page.goto('/cortico/platform?time=18:30')
   await waitForTownDrawn(page, ASSETS)
   await expect(page.getByTestId('case-panel')).toBeVisible({ timeout: 15_000 })
 

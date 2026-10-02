@@ -47,7 +47,7 @@ test.describe('panel variant contract', () => {
   test('bottom sheet holds at night', async ({ page }) => {
     test.slow()
     const errors = trackErrors(page)
-    await page.goto('/cortico/?time=22:00')
+    await page.goto('/cortico?time=22:00')
     await waitForTownDrawn(page, ASSETS)
     await openPlatform(page)
     await expect(page.getByTestId('case-panel')).toHaveAttribute('data-variant', 'bottom')
@@ -65,7 +65,7 @@ test.describe('breakpoint agreement', () => {
   test('TS variant and CSS dock agree at 900px', async ({ page }) => {
     test.slow()
     const errors = trackErrors(page)
-    await page.goto('/cortico/?time=18:30')
+    await page.goto('/cortico?time=18:30')
     await waitForTownDrawn(page, ASSETS)
     await openPlatform(page)
     // 900 >= PANEL_NARROW_PX: side sheet, and the CSS query
@@ -85,7 +85,7 @@ test.describe('vantage dolly', () => {
   test('close mid-dolly restores the town distance', async ({ page }) => {
     test.slow()
     const errors = trackErrors(page)
-    await page.goto('/cortico/?time=18:30')
+    await page.goto('/cortico?time=18:30')
     await waitForTownDrawn(page, ASSETS)
     const canvas = page.locator('canvas')
     const zoomOf = (): Promise<number> =>

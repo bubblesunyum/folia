@@ -18,8 +18,10 @@ export default defineConfig({
     launchOptions: { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] },
   },
   webServer: {
-    // The production build, the same bundle Vercel serves. The gate builds first.
-    command: `node_modules/.bin/vite preview --outDir build/client --port ${port} --strictPort`,
+    // The production build served like Vercel does: slashless clean URLs
+    // resolve to .../index.html (fol-dnq). vite preview instead serves the
+    // SPA fallback for nested routes, which hydrates to React #418.
+    command: `node scripts/serve-static.mjs --dir build/client --port ${port}`,
     port,
     reuseExistingServer: false,
   },

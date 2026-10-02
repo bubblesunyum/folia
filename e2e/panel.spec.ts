@@ -69,7 +69,7 @@ async function openPlatform(page: Page): Promise<void> {
 test('pedestal hover lifts only that pedestal; focus lifts it too', async ({ page }) => {
   test.slow()
   const errors = trackErrors(page)
-  await page.goto('/cortico/?time=18:30')
+  await page.goto('/cortico?time=18:30')
   await waitForTownDrawn(page, ASSETS)
 
   // Keyboard focus on the case link drives the same lift as hover.
@@ -99,7 +99,7 @@ test('pedestal hover lifts only that pedestal; focus lifts it too', async ({ pag
 test('click opens the panel with the case content, offset and focus', async ({ page }) => {
   test.slow()
   const errors = trackErrors(page)
-  await page.goto('/cortico/?time=18:30')
+  await page.goto('/cortico?time=18:30')
   await waitForTownDrawn(page, ASSETS)
 
   await openPlatform(page)
@@ -128,7 +128,7 @@ test('click opens the panel with the case content, offset and focus', async ({ p
 test('Escape, Close and empty-click all close the panel', async ({ page }) => {
   test.slow()
   const errors = trackErrors(page)
-  await page.goto('/cortico/?time=18:30')
+  await page.goto('/cortico?time=18:30')
   await waitForTownDrawn(page, ASSETS)
   const panel = page.getByTestId('case-panel')
   const canvas = page.locator('canvas')
@@ -159,7 +159,7 @@ test('Escape, Close and empty-click all close the panel', async ({ page }) => {
 test('pedestal clicks swap the panel case-for-case without stacking history', async ({ page }) => {
   test.slow()
   const errors = trackErrors(page)
-  await page.goto('/cortico/?time=18:30')
+  await page.goto('/cortico?time=18:30')
   await waitForTownDrawn(page, ASSETS)
 
   await openPlatform(page)
@@ -189,7 +189,7 @@ test('pedestal clicks swap the panel case-for-case without stacking history', as
 test('the panel opens at night with the wisp lit', async ({ page }) => {
   test.slow()
   const errors = trackErrors(page)
-  await page.goto('/cortico/?time=22:00')
+  await page.goto('/cortico?time=22:00')
   await waitForTownDrawn(page, ASSETS)
 
   await openPlatform(page)
@@ -206,7 +206,7 @@ test('the panel docks to a bottom sheet on a narrow viewport', async ({ page }) 
   test.slow()
   const errors = trackErrors(page)
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/cortico/?time=18:30')
+  await page.goto('/cortico?time=18:30')
   await waitForTownDrawn(page, ASSETS)
 
   await openPlatform(page)
