@@ -2,6 +2,7 @@ import { addAfterEffect, addEffect, useThree } from '@react-three/fiber'
 import { useEffect } from 'react'
 import Stats from 'stats-gl'
 import { renderConfig } from '../debug'
+import { pickStats } from '../picking/pickStats'
 import { useContextRestores } from '../renderer/contextRestores'
 import { type BenchResult, runBurst } from './bench'
 import { markFrameSegments } from './frameSegments'
@@ -75,8 +76,12 @@ function FrameMeters() {
       lastReadout = now
       const { calls, triangles } = gl.info.render
       const counts = `calls ${calls} · sub-draws ${subDraws.count} · tris ${formatCount(triangles)}`
+      // Hover/click pick cost (fol-hft): the last volume-pick query's ms, read
+      // here on the existing 250 ms cadence so picking never schedules a
+      // frame of its own (D-056).
+      const picking = `pick ${pickStats.lastMs.toFixed(2)} ms · vol ${pickStats.volumes}`
       if (!timer || frames.length === 0) {
-        readout.textContent = counts
+        readout.textContent = `${counts}\n${picking}`
         return
       }
       const gpu = summarize(frames.map((frame) => frame.total))
@@ -84,13 +89,15 @@ function FrameMeters() {
         const { median } = summarize(frames.map((frame) => frame.segments[label] ?? 0))
         return `${label} ${median.toFixed(2)}`
       })
-      readout.textContent = `gpu estimate ${gpu.median.toFixed(2)} ms · p95 ${gpu.p95.toFixed(2)}\n${split.join(' · ')}\n${counts}`
+      readout.textContent = `gpu estimate ${gpu.median.toFixed(2)} ms · p95 ${gpu.p95.toFixed(2)}\n${split.join(' · ')}\n${counts}\n${picking}`
       readout.dataset.json = JSON.stringify({
         gpu,
         frames: frames.length,
         calls,
         subDraws: subDraws.count,
         triangles,
+        pickMs: pickStats.lastMs,
+        pickPicks: pickStats.picks,
       })
     })
 

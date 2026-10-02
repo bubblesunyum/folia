@@ -1,5 +1,6 @@
 // Hover highlight on the town-wide batches (D-032, fol-xo6): thin rig over
-// `picking/hover`. Pointer movement raycasts the registry's BatchedMeshes,
+// `picking/hover`. Pointer movement picks the registry's per-group hit
+// volumes (D-021, fol-hft),
 // the hit vertex's `groupId` is already the global group-state slot (pack
 // remapped it), and a per-slot spring eases lift+glow toward the hovered
 // target. Slots are written through `materials/groupState` (one texel upload
