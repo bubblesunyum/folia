@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { listCases, listPrerenderPaths, listProjects, loadProject, loadTown } from './load'
-import type { Block } from './markdown'
-
-/** The loader contract: only the frontmatter title may be a top-level heading. */
-function opensWithH1(blocks: Block[]): boolean {
-  const [first] = blocks
-  return first?.type === 'heading' && first.depth === 1
-}
 
 // The content directory through a test-side glob: whatever load.ts reports
 // must equal what the files say, so a new .mdx flows through with no edit.
@@ -36,11 +29,20 @@ function globCases(project: string): string[] {
   return slugs.sort()
 }
 
+/** Loader data crosses router serialization: it must hold no functions. */
+function expectSerializable(value: unknown): void {
+  expect(JSON.parse(JSON.stringify(value))).toEqual(value)
+}
+
 describe('loadTown', () => {
   it('loads the town overview', () => {
     const town = loadTown()
     expect(town.title).toBe('portfolio town')
-    expect(town.blocks.length).toBeGreaterThan(0)
+    expect(town.summary).toContain('cortico')
+  })
+
+  it('returns serializable loader data', () => {
+    expectSerializable(loadTown())
   })
 })
 
@@ -71,21 +73,19 @@ describe('loadProject', () => {
     expect(project.cases.map((c) => c.slug)).toEqual(['medley', 'platform', 'recorder'])
     for (const c of project.cases) {
       expect(c.kind).toBe('panel')
-      expect(c.blocks.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('returns serializable loader data, case pages included', () => {
+    const project = loadProject('cortico')
+    expectSerializable(project)
+    for (const c of project.cases) {
+      expectSerializable({ ...c, projectSlug: project.slug, projectTitle: project.title })
     }
   })
 
   it('fails closed on unknown projects', () => {
     expect(() => loadProject('cortico2')).toThrowError(/unknown project/)
     expect(() => loadProject('')).toThrow()
-  })
-
-  it('emits one page title: frontmatter owns it, bodies drop a leading h1', () => {
-    expect(opensWithH1(loadTown().blocks)).toBe(false)
-    const project = loadProject('cortico')
-    expect(opensWithH1(project.blocks)).toBe(false)
-    for (const c of project.cases) {
-      expect(opensWithH1(c.blocks)).toBe(false)
-    }
   })
 })

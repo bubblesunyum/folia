@@ -1,7 +1,8 @@
 import type { LoaderFunctionArgs, MetaFunction } from 'react-router'
 import { Link } from 'react-router'
+import { projectBody } from '../content/bodies'
 import { loadProject, type ProjectDoc } from '../content/load'
-import { MarkdownView } from '../content/MarkdownView'
+import { mdxComponents } from '../content/mdx-components'
 import { signalFocusLift } from '../input/intent'
 import { neighborhoodSignature } from '../palette'
 import { usePedestalRouteSync } from '../panel/usePedestalRouteSync'
@@ -30,10 +31,11 @@ export default function Cortico({ loaderData }: { loaderData: ProjectDoc }) {
   // Pedestal clicks land here from the canvas rig; case-link focus drives
   // the same 3D lift+glow as hover through the intent layer (spec keyboard).
   usePedestalRouteSync()
+  const Body = projectBody(loaderData.slug)
   return (
     <article className="route-content">
       <h1>{loaderData.title}</h1>
-      <MarkdownView blocks={loaderData.blocks} />
+      <Body components={mdxComponents} />
       <h2>case studies</h2>
       <ul>
         {loaderData.cases.map((c) => (

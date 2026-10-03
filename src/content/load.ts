@@ -1,15 +1,16 @@
 // Loads the MDX content files into validated, route-ready data (D-019).
-// The content directory is the single source of truth: one `?raw` eager glob
-// inlines the files as strings in both the client and the prerender/SSR
-// builds, so a new .mdx with valid frontmatter appears in routing and
-// prerender with no other edit. The glob runs inside a memoized getter, not
-// at module top level, so importing this module without a Vite transform
-// (Playwright) never touches `import.meta.glob` — first use throws
-// fail-closed there instead. Pure and three-free, so loaders can import
-// this in the SSR graph (D-047).
+// Serializable frontmatter only: bodies render through the build-time
+// compiled components in ./bodies, so loader data JSON-round-trips and never
+// carries component functions through router serialization. The content
+// directory is the single source of truth: one `?raw` eager glob inlines the
+// files as strings in both the client and the prerender/SSR builds, so a new
+// .mdx with valid frontmatter appears in routing and prerender with no other
+// edit. The glob runs inside a memoized getter, not at module top level, so
+// importing this module without a Vite transform (Playwright) never touches
+// `import.meta.glob` — first use throws fail-closed there instead. Pure and
+// three-free, so loaders can import this in the SSR graph (D-047).
 
 import { splitFrontmatter } from './frontmatter'
-import { type Block, parseMarkdown } from './markdown'
 import {
   assertTopLevelSlug,
   assertUniqueSlugs,
@@ -71,7 +72,6 @@ function readContent(key: string): string {
 export interface TownDoc {
   title: string
   summary: string
-  blocks: Block[]
 }
 
 export interface CaseDoc {
@@ -80,7 +80,6 @@ export interface CaseDoc {
   kind: CaseKind
   summary: string
   object: CaseObject
-  blocks: Block[]
 }
 
 export interface ProjectDoc {
@@ -88,7 +87,6 @@ export interface ProjectDoc {
   title: string
   summary: string
   neon: string
-  blocks: Block[]
   cases: CaseDoc[]
 }
 
@@ -125,26 +123,15 @@ export function listPrerenderPaths(): string[] {
 }
 
 export function loadTown(): TownDoc {
-  const { data, body } = splitFrontmatter(readContent(TOWN_FILE), 'content/index.mdx')
-  const frontmatter = townFrontmatterSchema.parse(data)
-  return { ...frontmatter, blocks: dropLeadingTitle(parseMarkdown(body)) }
+  const { data } = splitFrontmatter(readContent(TOWN_FILE), 'content/index.mdx')
+  return townFrontmatterSchema.parse(data)
 }
 
 function loadCase(project: string, slug: string, raw: string): CaseDoc {
   const file = `content/${project}/${slug}.mdx`
-  const { data, body } = splitFrontmatter(raw, file)
+  const { data } = splitFrontmatter(raw, file)
   const frontmatter = caseFrontmatterSchema.parse(data)
-  return { slug, ...frontmatter, blocks: dropLeadingTitle(parseMarkdown(body)) }
-}
-
-/**
- * A leading `# title` in the body would double the page heading: the
- * frontmatter title owns it (routes and the panel render it), so the loader
- * drops a depth-1 opener. Bodies that open on prose are untouched.
- */
-function dropLeadingTitle(blocks: Block[]): Block[] {
-  const [first, ...rest] = blocks
-  return first?.type === 'heading' && first.depth === 1 ? rest : blocks
+  return { slug, ...frontmatter }
 }
 
 /** The project page with its cases; throws on an unknown project (fail closed). */
@@ -152,12 +139,12 @@ export function loadProject(slug: string): ProjectDoc {
   assertTopLevelSlug(slug, `content/${slug}/index.mdx`)
   const indexKey = `${CONTENT_PREFIX}${slug}/index.mdx`
   if (contentRaw()[indexKey] === undefined) throw new Error(`unknown project "${slug}"`)
-  const { data, body } = splitFrontmatter(readContent(indexKey), `content/${slug}/index.mdx`)
+  const { data } = splitFrontmatter(readContent(indexKey), `content/${slug}/index.mdx`)
   const frontmatter = projectFrontmatterSchema.parse(data)
   const slugs = listCases(slug)
   assertUniqueSlugs(slugs, `content/${slug}`)
   const cases = slugs.map((caseSlug) =>
     loadCase(slug, caseSlug, readContent(`${CONTENT_PREFIX}${slug}/${caseSlug}.mdx`)),
   )
-  return { slug, ...frontmatter, blocks: dropLeadingTitle(parseMarkdown(body)), cases }
+  return { slug, ...frontmatter, cases }
 }
