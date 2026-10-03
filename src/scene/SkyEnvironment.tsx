@@ -1,25 +1,52 @@
 import { useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import {
-  Color,
+  BackSide,
   CubeCamera,
-  FogExp2,
   HalfFloatType,
   Mesh,
   PMREMGenerator,
   Scene,
+  ShaderMaterial,
   SphereGeometry,
   WebGLCubeRenderTarget,
   type WebGLRenderer,
   type WebGLRenderTarget,
 } from 'three'
+import { applySkyGradient, SKY_GRADIENT_GLSL, skyGradientUniforms } from '../materials/skyGradient'
 import { useContextRestores } from '../renderer/contextRestores'
 import { shouldRegenEnv, skyKey } from '../time/envTrigger'
 import { useLook } from '../time/lookContext'
-import { applySky, createSkyMaterial } from './skyMaterial'
 
 // 256 px, because r186 sizes the PMREM from its source cube (D-040).
 const CUBE_SIZE = 256
+
+/**
+ * The env-scene sky material: the SAME direction-to-color GLSL and the SAME
+ * uniform objects the height fog samples (D-046, fol-snu.4). One
+ * `applySkyGradient` write recolors both the baked background and the live
+ * fog; value writes only, never a recompile.
+ */
+function createSkyMaterial(): ShaderMaterial {
+  return new ShaderMaterial({
+    side: BackSide,
+    depthWrite: false,
+    uniforms: skyGradientUniforms,
+    vertexShader: /* glsl */ `
+      varying vec3 vDirection;
+      void main() {
+        vDirection = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      ${SKY_GRADIENT_GLSL}
+      varying vec3 vDirection;
+      void main() {
+        vec3 d = normalize(vDirection);
+        gl_FragColor = vec4(skyGradientColor(d), 1.0);
+      }`,
+  })
+}
 
 function createEnvironment(gl: WebGLRenderer) {
   const sky = createSkyMaterial()
@@ -51,8 +78,10 @@ function createEnvironment(gl: WebGLRenderer) {
  * The env map, the background and the distance fog, all from the one look
  * (D-040, D-046). The cube re-renders only when it would change — first
  * frame, context restore, the sun past ~1°, or a new sky — so grade, bloom
- * and fog tweaks never pay for a PMREM rebuild. No hemisphere light: the env
- * supplies both diffuse and specular ambient.
+ * and fog tweaks never pay for a PMREM rebuild. The sky uniforms are shared
+ * with the height fog and rewritten from the same look + sun on every change,
+ * so scrubbing recolors fog live while the baked cube waits for its regen.
+ * No hemisphere light: the env supplies both diffuse and specular ambient.
  */
 export function SkyEnvironment() {
   const gl = useThree((state) => state.gl)
@@ -84,9 +113,10 @@ export function SkyEnvironment() {
   useEffect(() => {
     const env = environment.current
     if (!env) return
+    // Shared with the fog: the same look + sun recolors both, live.
+    applySkyGradient(look, sun.direction)
     const key = skyKey(look)
     if (shouldRegenEnv(lastSun.current, sun.direction, lastSky.current, key)) {
-      applySky(env.sky, look, sun.direction)
       scene.environment = env.render()
       scene.background = env.background
       lastSun.current = [...sun.direction]
@@ -96,20 +126,10 @@ export function SkyEnvironment() {
     invalidate()
   }, [scene, look, sun, restores, invalidate])
 
-  // Distance fog from the look (D-046). Interim: FogExp2 carries the distance
-  // half; the height half lives in look.fog (interpolated, tested) but has no
-  // consumer until a composer height-fog injection exists. Constructed empty
-  // and filled from the look below, so no palette-external literal (D-024).
-  useEffect(() => {
-    const fog =
-      scene.fog instanceof FogExp2
-        ? scene.fog
-        : new FogExp2(new Color().fromArray(look.fog.color), look.fog.density)
-    if (scene.fog !== fog) scene.fog = fog
-    fog.color.fromArray(look.fog.color)
-    fog.density = look.fog.density
-    invalidate()
-  }, [scene, look, invalidate])
+  // Fog from the look (D-046, fol-snu.4): owned by the composer's height-fog
+  // feature and driven by `applyLook` (see `MaterialLook`), so this component
+  // keeps no `scene.fog` — a stock FogExp2 here would double-apply distance on
+  // any material with built-in fog left on. No palette-external literal (D-024).
 
   return null
 }

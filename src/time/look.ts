@@ -27,16 +27,16 @@ interface LookShape<Color> {
   emissive: number
   bloom: { intensity: number; threshold: number; smoothing: number }
   fog: {
+    /** Retained for keyframe compat; the fog tints via the shared sky gradient (D-046), not this flat color. */
     color: Color
-    /** Exponential distance density (three's FogExp2). */
+    /** Exponential distance density, carried with the height term by the composer's height-fog feature (D-046). */
     density: number
     /**
-     * Height falloff rate; larger hugs the ground. Interpolated and tested,
-     * but with no consumer yet: the height half needs a composer injection
-     * (D-046) that doesn't exist, so distance fog carries the look for now.
+     * Height falloff rate; larger hugs the ground. Consumed by the
+     * composer's height-fog feature (D-046, fol-snu.4).
      */
     heightFalloff: number
-    /** Height where the fog sits thickest. Same note as heightFalloff. */
+    /** Height where the fog sits thickest. Same consumer as heightFalloff. */
     baseHeight: number
   }
   grade: {
