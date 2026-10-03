@@ -252,12 +252,14 @@ Timebox each at 1–3 days, and log each result in [decisions.md](decisions.md).
 - [x] **7. Input.** Safari `GestureEvent`, Chromium `ctrl+wheel` and iPad pointers normalized into one zoom model with the resistance detent (D-048, D-060). On-device tuning on the Max and the iPad deferred to fol-j08.
 
 ### Phase 1: vertical slice
-- [ ] React Router v8 prerender with the persistent canvas; routes `/cortico` and `/cortico/<slug>`; the MDX + Zod content schema and kind registry
-- [ ] Shared material system with all features (group color, sway, lift/glow, `_AO`, `_NIGHT`, foliage, `revealHeight`) and `palette.ts`
-- [ ] Time-of-day gradient with **golden hour and night** art-directed, the env scene, grade, height fog, `?time=` and the dev scrubber
-- [ ] The Cortico **forum** with its **three pedestals** (laptop, phone, audio glyph) and mint neon, at hero LOD
-- [ ] Hover or first tap lifts and glows a pedestal; click or second tap goes to `/cortico/<slug>` and opens the right-side DOM panel with the wisp placeholder, `PanelPresenter` seam, view offset and "Close"
-- [ ] Beauty check against the boards at golden hour and night, then GPU ms against the calibrated budget
+- [x] React Router v8 prerender with the persistent canvas; routes `/cortico` and `/cortico/<slug>`; the MDX + Zod content schema and kind registry
+- [x] Shared material system with all features (group color, sway, lift/glow, `_AO`, `_NIGHT`, foliage, `revealHeight`) and `palette.ts`
+- [x] Time-of-day gradient with **golden hour and night** art-directed, the env scene, grade, height fog, `?time=` and the dev scrubber
+- [x] The Cortico **forum** with its **three pedestals** (laptop, phone, audio glyph) and mint neon, at hero LOD
+- [x] Hover or first tap lifts and glows a pedestal; click or second tap goes to `/cortico/<slug>` and opens the right-side DOM panel with the wisp placeholder, `PanelPresenter` seam, view offset and "Close"
+- [x] Beauty check against the boards at golden hour and night, then saturated frame throughput against the calibrated budget (D-063)
+
+Completed in fol-l1r, reconciled by fol-b41: real build-time MDX (D-019), sky-colored height + distance fog (D-046), and all six slice requirements are implemented. Golden hour and night pass the ≤2.5 ms/frame saturated budget; the remaining water-ripple redesign stays in polish (fol-ixw).
 
 ### Phase 2: breadth
 - [ ] The rest of **Cortico**: an interconnected solarpunk complex (housing, food growing, curated and wild greenery, leisure) around the forum, at mid and high LOD
