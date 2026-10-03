@@ -95,6 +95,54 @@ describe('buildHitVolumes', () => {
     const volumes = buildHitVolumes([tri])
     expect(volumes.get(5)?.triangles).toBe(1)
   })
+
+  it('buckets an offset index slice: the pick path clips to live geometry ranges', () => {
+    // One merged buffer, two tris; the source exposes only the second tri via
+    // an offset slice — the shape pickSlot builds per live instance, so a
+    // deleted-but-uncompacted range never reaches the soup.
+    const positions = [0, 0, 0, 1, 0, 0, 0, 1, 0, 10, 0, 0, 11, 0, 0, 10, 1, 0]
+    const order = [0, 1, 2, 3, 4, 5]
+    const slice: HitVolumeSource = {
+      batch: 'cream',
+      vertexCount: 6,
+      indexCount: 3,
+      positionAt: (v): Vec3 => [
+        positions[v * 3] ?? 0,
+        positions[v * 3 + 1] ?? 0,
+        positions[v * 3 + 2] ?? 0,
+      ],
+      groupAt: (v) => (v < 3 ? 5 : 6),
+      indexAt: (i) => order[3 + i] ?? 0,
+    }
+    const volumes = buildHitVolumes([slice])
+    expect([...volumes.keys()]).toEqual([6])
+    expect(volumes.get(6)?.triangles).toBe(1)
+    expect(pickHitVolume(volumes, [10.25, 0.25, 5], [0, 0, -1])).toBe(6)
+    expect(pickHitVolume(volumes, [0.25, 0.25, 5], [0, 0, -1])).toBeNull()
+  })
+
+  it('supports non-indexed offset ranges via an explicit index map', () => {
+    const corners: Vec3[] = [
+      [0, 0, 0],
+      [1, 0, 0],
+      [0, 1, 0],
+      [10, 0, 0],
+      [11, 0, 0],
+      [10, 1, 0],
+    ]
+    const start = 3
+    const range: HitVolumeSource = {
+      batch: 'gold',
+      vertexCount: 6,
+      indexCount: 3,
+      positionAt: (v): Vec3 => corners[v] ?? [0, 0, 0],
+      groupAt: (v) => (v < 3 ? 5 : 6),
+      indexAt: (i) => start + i,
+    }
+    const volumes = buildHitVolumes([range])
+    expect([...volumes.keys()]).toEqual([6])
+    expect(volumes.get(6)?.triangles).toBe(1)
+  })
 })
 
 describe('rayBoxEntry', () => {
