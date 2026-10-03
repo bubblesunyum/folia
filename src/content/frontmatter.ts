@@ -5,6 +5,28 @@
 
 const FRONTMATTER_KEY = /^[A-Za-z][A-Za-z0-9_-]*$/
 
+/** The closing fence line index; the single delimiter scan owning `---` parsing. */
+function closingFenceIndex(lines: string[], file: string): number {
+  if (lines[0]?.trim() !== '---') {
+    throw new Error(`${file}: missing opening --- frontmatter fence`)
+  }
+  for (let close = 1; close < lines.length; close += 1) {
+    if (lines[close]?.trim() === '---') return close
+  }
+  throw new Error(`${file}: missing closing --- frontmatter fence`)
+}
+
+/**
+ * The fenced frontmatter block of `raw`, body stripped, fences included so
+ * the runtime splitter sees the shape it validates. Shares the fence scan
+ * with splitFrontmatter below.
+ */
+export function extractFrontmatterSource(raw: string, file: string): string {
+  const lines = raw.split('\n')
+  const close = closingFenceIndex(lines, file)
+  return `${lines.slice(0, close + 1).join('\n')}\n`
+}
+
 export function splitFrontmatter(
   raw: string,
   file: string,
@@ -13,16 +35,11 @@ export function splitFrontmatter(
   body: string
 } {
   const lines = raw.split('\n')
-  const first = lines[0]
-  if (first === undefined || first.trim() !== '---') {
-    throw new Error(`${file}: missing opening --- frontmatter fence`)
-  }
+  const close = closingFenceIndex(lines, file)
   const data: Record<string, string> = {}
-  let i = 1
-  for (; i < lines.length; i += 1) {
+  for (let i = 1; i < close; i += 1) {
     const line = lines[i]
     if (line === undefined) break
-    if (line.trim() === '---') break
     const colon = line.indexOf(':')
     if (colon < 0) throw new Error(`${file}:${i + 1}: frontmatter wants "key: value"`)
     const key = line.slice(0, colon).trim()
@@ -32,11 +49,10 @@ export function splitFrontmatter(
     if (key in data) throw new Error(`${file}:${i + 1}: duplicate frontmatter key "${key}"`)
     data[key] = unquote(line.slice(colon + 1).trim(), file, i + 1)
   }
-  if (i >= lines.length) throw new Error(`${file}: missing closing --- frontmatter fence`)
   return {
     data,
     body: lines
-      .slice(i + 1)
+      .slice(close + 1)
       .join('\n')
       .trim(),
   }

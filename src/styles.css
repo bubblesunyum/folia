@@ -324,6 +324,11 @@ body,
 }
 
 @media (max-width: 899px) {
+  .zoom-buttons {
+    top: calc(16px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+  }
+
   .case-panel {
     top: auto;
     right: 0;

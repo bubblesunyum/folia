@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import { splitFrontmatter } from './frontmatter'
 import { listCases, listPrerenderPaths, listProjects, loadProject, loadTown } from './load'
 
-// The content directory through a test-side glob: whatever load.ts reports
-// must equal what the files say, so a new .mdx flows through with no edit.
+// The content directory through a test-side glob over the same
+// `?frontmatter` metadata path load.ts reads: whatever load.ts reports must
+// equal what the files say, so a new .mdx flows through with no edit. The
+// values carry no body copy — the strip is asserted below (fol-kes.9).
 const testGlob = import.meta.glob<string>('../../content/**/*.mdx', {
-  query: '?raw',
+  query: '?frontmatter',
   import: 'default',
   eager: true,
 })
@@ -62,6 +65,16 @@ describe('content glob (fol-ya7)', () => {
       for (const slug of globCases(project)) expected.push(`/${project}/${slug}`)
     }
     expect(listPrerenderPaths()).toEqual(expected)
+  })
+
+  it('ships metadata without body copy', () => {
+    for (const [key, raw] of Object.entries(testGlob)) {
+      const { body } = splitFrontmatter(raw, key)
+      expect(body).toBe('')
+    }
+    expect(testGlob['../../content/cortico/index.mdx']).not.toContain(
+      'three pedestals stand in the middle of the forum',
+    )
   })
 })
 

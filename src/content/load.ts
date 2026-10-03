@@ -1,14 +1,16 @@
 // Loads the MDX content files into validated, route-ready data (D-019).
-// Serializable frontmatter only: bodies render through the build-time
+// Serializable frontmatter only: bodies render through the lazily loaded
 // compiled components in ./bodies, so loader data JSON-round-trips and never
 // carries component functions through router serialization. The content
-// directory is the single source of truth: one `?raw` eager glob inlines the
-// files as strings in both the client and the prerender/SSR builds, so a new
-// .mdx with valid frontmatter appears in routing and prerender with no other
-// edit. The glob runs inside a memoized getter, not at module top level, so
-// importing this module without a Vite transform (Playwright) never touches
-// `import.meta.glob` — first use throws fail-closed there instead. Pure and
-// three-free, so loaders can import this in the SSR graph (D-047).
+// directory is the single source of truth: one `?frontmatter` eager glob
+// inlines the files' fenced metadata (body text stripped at build time by
+// foliaContentFrontmatter) in both the client and the prerender/SSR builds,
+// so a new .mdx with valid frontmatter appears in routing and prerender with
+// no other edit. The glob runs inside a memoized getter, not at module top
+// level, so importing this module without a Vite transform (Playwright)
+// never touches `import.meta.glob` — first use throws fail-closed there
+// instead. Pure and three-free, so loaders can import this in the SSR graph
+// (D-047).
 
 import { splitFrontmatter } from './frontmatter'
 import {
@@ -21,11 +23,11 @@ import {
   townFrontmatterSchema,
 } from './schema'
 
-/** Every content file, inlined as a string: the single source (fol-ya7). */
-let contentCache: Record<string, string> | null = null
+/** Every content file's frontmatter, body text stripped at build time (fol-kes.9). */
+let metaCache: Record<string, string> | null = null
 
 /**
- * Memoized content map. The `import.meta.glob` call lives here — not at
+ * Memoized metadata map. The `import.meta.glob` call lives here — not at
  * module top level — so importing this module under raw Node (Playwright,
  * no Vite transform) never executes the glob. Under Vite the call is
  * identical to the old eager top-level glob; without a Vite transform it
@@ -34,18 +36,18 @@ let contentCache: Record<string, string> | null = null
  * pattern: Vite statically replaces that exact form, and an aliased
  * reference breaks the transform.
  */
-function contentRaw(): Record<string, string> {
-  if (contentCache !== null) return contentCache
+function contentMeta(): Record<string, string> {
+  if (metaCache !== null) return metaCache
   try {
-    contentCache = import.meta.glob<string>('../../content/**/*.mdx', {
-      query: '?raw',
+    metaCache = import.meta.glob<string>('../../content/**/*.mdx', {
+      query: '?frontmatter',
       import: 'default',
       eager: true,
     })
   } catch {
     throw new Error('content: import.meta.glob is unavailable outside the Vite build')
   }
-  return contentCache
+  return metaCache
 }
 
 const CONTENT_PREFIX = '../../content/'
@@ -64,7 +66,7 @@ function parseContentKey(key: string): { project: string; slug: string } | null 
 }
 
 function readContent(key: string): string {
-  const raw = contentRaw()[key]
+  const raw = contentMeta()[key]
   if (raw === undefined) throw new Error(`missing content source "${key}"`)
   return raw
 }
@@ -93,7 +95,7 @@ export interface ProjectDoc {
 /** Every project with an index file, sorted: adding `content/<name>/index.mdx` adds a route. */
 export function listProjects(): string[] {
   const projects = new Set<string>()
-  for (const key of Object.keys(contentRaw())) {
+  for (const key of Object.keys(contentMeta())) {
     if (key === TOWN_FILE) continue
     if (!key.startsWith(CONTENT_PREFIX) || !key.endsWith('/index.mdx')) continue
     const rest = key.slice(CONTENT_PREFIX.length, -'/index.mdx'.length)
@@ -105,7 +107,7 @@ export function listProjects(): string[] {
 /** Every case slug in `project`, sorted: adding `content/<project>/<slug>.mdx` adds a route. */
 export function listCases(project: string): string[] {
   const slugs: string[] = []
-  for (const key of Object.keys(contentRaw())) {
+  for (const key of Object.keys(contentMeta())) {
     const parsed = parseContentKey(key)
     if (parsed !== null && parsed.project === project) slugs.push(parsed.slug)
   }
@@ -138,7 +140,7 @@ function loadCase(project: string, slug: string, raw: string): CaseDoc {
 export function loadProject(slug: string): ProjectDoc {
   assertTopLevelSlug(slug, `content/${slug}/index.mdx`)
   const indexKey = `${CONTENT_PREFIX}${slug}/index.mdx`
-  if (contentRaw()[indexKey] === undefined) throw new Error(`unknown project "${slug}"`)
+  if (contentMeta()[indexKey] === undefined) throw new Error(`unknown project "${slug}"`)
   const { data } = splitFrontmatter(readContent(indexKey), `content/${slug}/index.mdx`)
   const frontmatter = projectFrontmatterSchema.parse(data)
   const slugs = listCases(slug)

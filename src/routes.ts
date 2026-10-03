@@ -6,6 +6,6 @@ import { index, type RouteConfig, route } from '@react-router/dev/routes'
 // slugs from the content glob and 404s unknown ones (fol-ya7).
 export default [
   index('./routes/home.tsx'),
-  route(':project', './routes/cortico.tsx'),
-  route(':project/:slug', './routes/cortico-case.tsx'),
+  route(':project', './routes/project.tsx'),
+  route(':project/:slug', './routes/project-case.tsx'),
 ] satisfies RouteConfig

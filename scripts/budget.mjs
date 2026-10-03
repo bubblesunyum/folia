@@ -11,7 +11,7 @@ let failed = false;
 const bad = (m) => { failed = true; console.error(`budget: failed: ${m}`); };
 const say = (m) => console.log(`budget: ${m}`);
 
-// Per-neighborhood allowance: cortico ships 1.82 MB / 171,540 tris.
+// Per-neighborhood allowance: cortico ships 2.43 MB / 202,472 tris.
 const HOOD_BYTES = 2_500_000;
 const HOOD_TRIS = 225_000;
 // Shell/canvas JS gz caps: shell re-measured post-router (fol-3qa) — the `/`

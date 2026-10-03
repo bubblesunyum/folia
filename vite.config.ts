@@ -3,6 +3,7 @@ import { reactRouter } from '@react-router/dev/vite'
 import remarkFrontmatter from 'remark-frontmatter'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
+import { foliaContentFrontmatter } from './assets/pipeline/contentFrontmatter.ts'
 import { foliaAssets } from './assets/pipeline/vitePlugin.ts'
 
 /**
@@ -34,14 +35,14 @@ function remarkDropLeadingTitle() {
   }
 }
 
-/** Keep frontmatter string imports raw; MDX 3 exposes a function transform. */
+/** Keep frontmatter-string and raw-string imports uncompiled; MDX 3 exposes a function transform. */
 function skipRawIds(plugin: Plugin): Plugin {
   const transform = plugin.transform
   if (typeof transform !== 'function') throw new Error('MDX transform must be a function')
   return {
     ...plugin,
     transform(value, id) {
-      if (id.includes('?raw')) return null
+      if (id.includes('?raw') || id.includes('?frontmatter')) return null
       return transform.call(this, value, id)
     },
   }
@@ -54,11 +55,12 @@ const mdxPlugin = skipRawIds(
 export default defineConfig({
   // mdx() compiles .mdx to JS components at build time (before the router's
   // React transform); remark-frontmatter keeps the `---` fences out of the
-  // rendered body while the `?raw` frontmatter path in src/content/load.ts
-  // keeps owning the validated data. The `?raw` guard above keeps string
-  // imports raw (the plugin matches on the query-stripped path, and compiling
+  // rendered body while the `?frontmatter` metadata path in src/content/load.ts
+  // keeps owning the validated data, body text stripped at build time by
+  // foliaContentFrontmatter. The `?raw`/`?frontmatter` guard above keeps string
+  // imports uncompiled (the plugin matches on the query-stripped path, and compiling
   // those would destroy the raw source).
-  plugins: [mdxPlugin, reactRouter(), foliaAssets()],
+  plugins: [foliaContentFrontmatter(), mdxPlugin, reactRouter(), foliaAssets()],
   test: {
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'assets/pipeline/**/*.test.ts'],
   },

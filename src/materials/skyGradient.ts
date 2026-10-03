@@ -48,7 +48,7 @@ export const SKY_GRADIENT_GLSL = /* glsl */ `
     vec3 cloud = mix(uHorizon * 1.1, uGlow * 1.6, pow(toSun, 3.0));
     sky = mix(sky, cloud, uClouds * band * streaks);
 
-    vec3 ground = mix(uHorizon * 0.35, uGround, smoothstep(0.0, 0.12, -up));
+    vec3 ground;
     {
       vec2 flatView = d.xz / max(length(d.xz), 1e-4);
       vec2 flatSun = uSunDirection.xz / max(length(uSunDirection.xz), 1e-4);

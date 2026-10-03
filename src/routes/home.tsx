@@ -1,10 +1,15 @@
+import { Suspense } from 'react'
 import type { MetaFunction } from 'react-router'
 import { Link } from 'react-router'
-import { townBody } from '../content/bodies'
+import { townBody, warmTownBody } from '../content/bodies'
 import { loadTown, type TownDoc } from '../content/load'
 import { mdxComponents } from '../content/mdx-components'
 
-export function loader(): TownDoc {
+export async function loader(): Promise<TownDoc> {
+  // Warm the town body chunk while the router waits: the render below then
+  // resolves synchronously on prerender and navigation (fol-kes.9). Loader
+  // data stays serializable frontmatter — the component never crosses it.
+  await warmTownBody()
   return loadTown()
 }
 
@@ -21,7 +26,9 @@ export default function Home({ loaderData }: { loaderData: TownDoc }) {
   return (
     <article className="route-content">
       <h1>{loaderData.title}</h1>
-      <Body components={mdxComponents} />
+      <Suspense fallback={null}>
+        <Body components={mdxComponents} />
+      </Suspense>
       <p>
         <Link to="/cortico" prefetch="intent">
           cortico
