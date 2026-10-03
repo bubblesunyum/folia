@@ -259,7 +259,7 @@ Timebox each at 1–3 days, and log each result in [decisions.md](decisions.md).
 - [x] Hover or first tap lifts and glows a pedestal; click or second tap goes to `/cortico/<slug>` and opens the right-side DOM panel with the wisp placeholder, `PanelPresenter` seam, view offset and "Close"
 - [x] Beauty check against the boards at golden hour and night, then saturated frame throughput against the calibrated budget (D-063)
 
-Completed in fol-l1r, reconciled by fol-b41: real build-time MDX (D-019), sky-colored height + distance fog (D-046), and all six slice requirements are implemented. Golden hour and night pass the ≤2.5 ms/frame saturated budget; the remaining water-ripple redesign stays in polish (fol-ixw).
+Completed in fol-l1r, reconciled by fol-b41: real build-time MDX (D-019), sky-colored height + distance fog (D-046), and all six slice requirements are implemented. Golden hour and night pass the ≤2.5 ms/frame saturated budget; the remaining water-ripple redesign stays in polish (fol-ixw). Remaining breadth concern (2026-10-03 review, fol-cs8): the beauty density gap — current blob-tree planting vs the spilling-jungle references — is deferred into breadth, unresolved here.
 
 ### Phase 2: breadth
 - [ ] The rest of **Cortico**: an interconnected solarpunk complex (housing, food growing, curated and wild greenery, leisure) around the forum, at mid and high LOD
@@ -273,6 +273,7 @@ Completed in fol-l1r, reconciled by fol-b41: real build-time MDX (D-019), sky-co
 - [ ] Keyboard navigation through the HTML content layer; reduced motion
 - [ ] Quality tiers (D-036), context-loss handling
 - [ ] Hit the budgets: GPU ms on the `?perf=base` proxy, `render.calls` and sub-draws, and the per-route delivery budgets (120 Hz is checked on the Max in Chromium only)
+- [ ] Beauty density gap (fol-cs8, from the 2026-10-03 review): current blob-tree planting vs the spilling-jungle references, deferred from the Phase 1 beauty check
 
 Out of scope for now: Poppy herself (the wisp stands in), the real-time sun (the gradient system is in), dawn and midday art direction, mobile reflow, sound, galleries, particle panel materialize, portals, SSAO.
 

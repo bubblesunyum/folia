@@ -768,7 +768,7 @@ instead of per asset.
 ### D-063 Slice-exit perf budget: saturated throughput on the Max, scaled to the Air (fol-m10)
 **Decision:**
 - **Method: a scaling factor from the Max's saturated-frame proxy, not a reference device.** There is still no base Air and no cloud device service, so reference-device calibration stays deferred with D-051. Real Max→Air→Android→iPhone factors are measured before launch (Launch essentials) and replace the factor below.
-- **Metric (unchanged from D-055):** `scripts/bench.mjs` median of four 240-frame saturated bursts via `window.foliaBench`, on the M1 Max real GPU (headless Playwright, ANGLE Metal), default `?perf=base` (MSAA at DPR 1.5, 1920×1200 buffer), at golden hour and at night, from a `dist/` build after `verify`, with no other scene tabs open.
+- **Metric (unchanged from D-055):** `scripts/bench.mjs` median of four 240-frame saturated bursts via `window.foliaBench`, on the M1 Max real GPU (headless Playwright, ANGLE Metal), default `?perf=base` (MSAA at DPR 1.5, 1920×1200 buffer), at golden hour and at night, from a `build/client/` build after `verify`, with no other scene tabs open. (`dist/` is pre-router output and is never read; `scripts/budget.mjs` and `scripts/bench.mjs` both serve from `build/client`.)
 - **Budget: ≤ 2.5 wall ms/frame** (`SATURATED_BUDGET_MS` in `src/perf/renderConfig.ts`, read by `bench.mjs`, which prints PASS/FAIL and fails gated runs over it) at both keyframes. The look-dev fragment measures 1.90–1.92 (js ~1.07) on 2026-09-30, so the slice-exit scene (forum at hero LOD plus the time-of-day gradient, env, grade and fog) gets ~0.6 ms of headroom.
 - **Scaling rationale:** wall = CPU submission (~1.1 ms here, carries ~1:1 to the Air — same-class CPU cores per D-055) + GPU remainder (×4–6 on a base Air — bandwidth-heavy per D-035). At the budget line that is ~1.1 + ~1.4×5 ≈ 8.1 ms estimated Air frame (6.7 at 4×, 9.5 at 6×), comfortably under 16.6 ms and leaving room for breadth town growth to fill the frame.
 - **Scope:** the budget binds the shipped default only. DPR 2 modes (the fragment alone already costs ~2.8 ms MSAA at 2560×1600 per D-055), `stress=`, and `bloom/reflection=off` variants are comparison levers, not gated. `render.calls` < 100 and sub-draws ≤ 3000 stand alongside it.
@@ -776,6 +776,60 @@ instead of per asset.
 
 *Why:* fol-l1r.6 needs a number a session can actually run, and the only repeatable number on this Mac is saturated throughput.
 *Refines:* D-035 (budget restated as wall throughput), D-051 (reference-device step still deferred), D-055 (proxy promoted to gate).
+*Corrected by D-071 (fol-cs8):* the build path is `build/client/`, not `dist/` — corrected 2026-10-03 after the 2026-10-03 review noted the stale path.
+
+---
+
+## 2026-10-01..03: slice-exit span (fol-cs8)
+
+Source: [reviews/2026-10-03-code-review.md](reviews/2026-10-03-code-review.md). These entries record what the 2026-10-01..03 implementation span landed, reconciled against source and closed-bead evidence. Where the span diverged from the spec or left a call open, the entry records the implementation as fact and names the unresolved bead — it does not decide. The three needs-human calls (breadth budget fol-kes.1, hit volumes fol-kes.2, ambient motion fol-kes.3) stay open.
+
+### D-064 Height fog lands (fol-snu.4, fol-l1r.3)
+**Outcome:** the height half of D-046 is built: analytic composer fog consumes both height controls, world transforms are preserved, the directional sky color is shared with the background, and additive shells attenuate rather than fog over. `require fog in every keyframe` is enforced. Full gate and visual review passed.
+*Refines:* D-046 (the "height + distance fog" line is now implemented, not planned).
+
+### D-065 Group slots raised to 32 (fol-6if)
+**Outcome:** `MAX_GROUPS` goes 16 → 32 (`src/groupSlots.ts`), with the group-state texture width, shader keys and the pack-time allocator following; the stale uniform-array comment is rewritten. An 11-slot manifest motivated it: one more forum-sized asset would have thrown at pack. A 33rd group still throws. Group state already runs on D-032's tiny-texture strip (`src/materials/groupState.ts`: one RGBA float texel per slot); outgrowing 32 means raising that strip, fed by the same manifest registry — not a future migration to it.
+*Refines:* D-061.
+
+### D-066 Picking runs against derived hit volumes, spec conflict unresolved (fol-hft)
+**Outcome:** hover/click picking no longer raycasts every town triangle. `src/picking/hitVolumes.ts` buckets each batch's world-space triangles per group slot into invisible volumes (neon-glow shell excluded), and the pick tests entered volumes only (0.40 ms → 0.05 ms at 45k tris on the HUD). Same slot contract, rigs untouched.
+**Divergence recorded, not resolved:** the spec (D-021) puts authored hit volumes in `export_extras` — one invisible proxy per neighborhood. The implementation derives volumes from render triangles at runtime. Whether authored proxies or derived volumes win is @bubbles' call in **fol-kes.2** (needs-human). The known derived-volume limitation (deleted-but-uncompacted geometry lingers as ghost volumes until the next compact) is carried by fol-kes.5, gated on that decision.
+*Refines:* D-021, D-032.
+
+### D-067 The day pond mirrors warm architecture (fol-snu.2)
+**Outcome:** the quarter-res mirrored pass (D-057) draws occluders in a cheap lit color derived per-draw from the live palette by day — so the pond mirrors warm architecture masses instead of flat teal — and black at night, when only neon draws lit. Follows palette drafts with no frozen import-time color.
+**Latent scale note, not a decision:** the day pass redraws every opaque batch, so daytime geometry roughly triples and scales with the town. Scoping it (batches near the pond, or a cheap proxy) is fol-kes.8, after the breadth budget (fol-kes.1).
+*Refines:* D-039, D-057.
+
+### D-068 Night counterpoints: window bands and light pools (fol-snu.3, fol-0sj)
+**Outcome:** two warm counterpoints against the navy night, both adopted from parallel-session work and reviewed in-round:
+- **Window bands** (`src/materials/windowBands.ts`): emissive slit bands on cream/gold via `facadeLit`, driven by `look.night` in `sunGlow`.
+- **Light pools** (`src/materials/lightPool.ts`, `src/scene/LightPools.tsx`): merged-quad additive decals grounded on walk lines at load, night-gated, one draw call, day-inert.
+**Known defects carried, not fixed here:** pools also land on the canopy roof, lotus petals and open lawn (fol-kes.4: author pool spots at bake, drop the runtime raycast); window bands read local `position` as world, which repeats one pattern per copy under instancing (fol-kes.7: one shared world-position varying).
+*Follow-through (2026-10-03):* fol-kes.4 replaces load-time grounding with authored terrace spots and owner-asset readiness; fol-kes.7 gives these world-space effects one transformed varying. The defects above describe the historical span.
+*Refines:* D-038.
+
+### D-069 Vantage shadow fit widens to ±16 m (fol-zig)
+**Outcome:** the vantage fit goes ±8 m → ±16 m (`SHADOW_FITS = { town: 16, vantage: 16 }` in `src/perf/renderConfig.ts`), widening the clipped look-dev shadow footprint. The ground radius is 18 m (`assets/blender/cortico/fragment.json` `ground.radius`); the ±16 m fit alone does not establish complete disc coverage, since the fit is in light space. Powers of two throughout, so fit switches never land between texels. Cost: roughly half the hero shadow sharpness (2026-10-03 review P3). Breadth sizes each fit to its preset's subject.
+*Refines:* D-058, D-041.
+
+### D-070 Shell cap re-measured at 140 KB post-router (fol-3qa)
+**Outcome:** `SHELL_GZ` in `scripts/budget.mjs` moves 100 KB → 140 KB. The `/` initial-route chunk union re-measures at ~113 KB gz after the React Router v8 migration, so 140 KB holds ~20% headroom; canvas re-measures at ~365 KB gz against its 450 KB cap. The 2026-10-03 gate lane reads shell 114.2 KB gz, canvas 370.1 KB gz — both under cap.
+**Unresolved, not decided here:** D-059 still says 70 KB (pre-router shell), and breadth has no perf or delivery budget — Cortico sits at 2.43 MB / 202,472 tris against the 2.5 MB / 225k-allowance before the rest of Cortico exists. The breadth budget is @bubbles' call in **fol-kes.1** (needs-human).
+*Refines:* D-059, D-063.
+
+### D-071 Slice-exit bench: 2.09 / 2.01 ms against the 2.5 ms gate (fol-l1r.6, fol-cs8)
+**Outcome:** saturated-frame wall on the M1 Max, default `?perf=base` (D-063 method, `build/client/` build):
+
+| Keyframe | Slice exit (2026-09-30, fol-l1r.6) | Span exit (2026-10-03 review gate lane) | Gate |
+|---|---|---|---|
+| Golden hour | 1.79 / 1.80 | **2.09** | ≤ 2.5 |
+| Night | 1.96 / 1.97 | **2.01** | ≤ 2.5 |
+
+Each cell is the median-of-bursts figure the bench prints; slice-exit numbers are fol-l1r.6's close record, span-exit numbers the 2026-10-03 review's gate lane (which passed: budget ok). The 2.09 / 2.01 figures are those historical 2026-10-03 numbers, not a current reading. Golden hour moved 1.90 → 2.09 across the span, leaving ~0.4 ms of D-063 headroom for all of breadth — the pressure behind fol-kes.1.
+**Correction:** D-063's metric named a `dist/` build; the build served and measured is `build/client/` (React Router framework output; `dist/` is pre-router). D-063 is corrected above; method and budget are unchanged.
+*Refines:* D-063.
 
 ---
 
