@@ -2,9 +2,10 @@
 // fog, injected through the composer so both controls affect visible pixels.
 // Density at height y is `density * exp(-falloff * (y - baseHeight))`,
 // integrated analytically along the eye-to-fragment ray; at zero falloff it
-// recovers pure exponential distance fog. The world position rides the
-// deformed `transformed` through the batch/instance path (the foliage/water
-// precedent), so sway and group lift stay coherent.
+// recovers pure exponential distance fog. The world position is the shared
+// `worldPosition` feature's varying (fol-kes.7) — this feature declares
+// nothing and requires it — so sway and group lift stay coherent through the
+// one batch/instance path instead of a second copy.
 //
 // The mix lands on `outgoingLight` before `opaque_fragment`: three runs its
 // own fog after tonemapping + output conversion, but the composer terms live
@@ -67,29 +68,13 @@ const fogDensityHeader = /* glsl */ `
   uniform float uFogDensity;
   uniform float uFogHeightFalloff;
   uniform float uFogBaseHeight;
-  varying vec3 vFogWorld;`
-
-const fogWorldVertex = {
-  header: 'varying vec3 vFogWorld;',
-  chunks: {
-    worldpos_vertex: {
-      after: /* glsl */ `
-        vec4 fogWorld = vec4(transformed, 1.0);
-        #ifdef USE_BATCHING
-          fogWorld = batchingMatrix * fogWorld;
-        #endif
-        #ifdef USE_INSTANCING
-          fogWorld = instanceMatrix * fogWorld;
-        #endif
-        vFogWorld = (modelMatrix * fogWorld).xyz;`,
-    },
-  },
-} as const
+  // vSharedWorld is declared by the worldPosition feature's header: fog
+  // always composes after it, so the declaration precedes this use.`
 
 export const heightFog = {
   key: 'height-fog',
+  requires: ['world-position'],
   uniforms: { ...fogUniforms, ...skyGradientUniforms },
-  vertex: fogWorldVertex,
   fragment: {
     header: fogDensityHeader + SKY_GRADIENT_GLSL + fogFactorGLSL,
     chunks: {
@@ -97,8 +82,8 @@ export const heightFog = {
       // output conversion yet, exactly like the sky-gradient uniforms.
       opaque_fragment: {
         before: /* glsl */ `
-          vec3 fogRay = vFogWorld - cameraPosition;
-          float fogAmt = heightFogAmount(vFogWorld);
+          vec3 fogRay = vSharedWorld - cameraPosition;
+          float fogAmt = heightFogAmount(vSharedWorld);
           // Zero-length ray sits exactly on the eye: the factor is 0 there,
           // so the guarded direction never tints a pixel.
           outgoingLight = mix(
@@ -121,13 +106,13 @@ export const heightFog = {
  */
 export const heightFogAdditive = {
   key: 'height-fog-additive',
+  requires: ['world-position'],
   uniforms: fogUniforms,
-  vertex: fogWorldVertex,
   fragment: {
     header: fogDensityHeader + fogFactorGLSL,
     chunks: {
       opaque_fragment: {
-        before: 'outgoingLight *= 1.0 - heightFogAmount(vFogWorld);',
+        before: 'outgoingLight *= 1.0 - heightFogAmount(vSharedWorld);',
       },
       fog_fragment: { instead: '' },
     },

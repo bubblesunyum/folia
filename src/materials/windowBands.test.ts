@@ -5,6 +5,7 @@
 // mirror pins it.
 
 import { describe, expect, it } from 'vitest'
+import type { Feature } from './composer'
 import {
   WINDOW_BAND_F,
   WINDOW_LIT_AT,
@@ -74,5 +75,17 @@ describe('window bands (fol-snu.3)', () => {
     expect(emissive).toContain('inverseTransformDirection')
     // Inert by day: zero weight and a black color until applyLook claims them.
     expect(windowBands.uniforms?.uWindowNight?.value).toBe(0)
+  })
+
+  it('reads world height and plan position from the shared varying (fol-kes.7)', () => {
+    // No local-position varying of its own: instanced facades band at their
+    // own world height instead of repeating one pattern per copy.
+    expect((windowBands as Feature).vertex).toBeUndefined()
+    expect(windowBands.requires).toContain('world-position')
+    const emissive = windowBands.fragment?.chunks?.emissivemap_fragment?.after as string
+    expect(emissive).toContain('vSharedWorld.y')
+    expect(emissive).toContain('vSharedWorld.x + vSharedWorld.z')
+    expect(emissive).not.toContain('vWindowWorld')
+    expect(windowBands.fragment?.header).not.toContain('varying')
   })
 })

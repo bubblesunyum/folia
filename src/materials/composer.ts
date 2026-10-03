@@ -26,6 +26,13 @@ export interface Stage {
 export interface Feature {
   /** Part of the program cache key; two features with one key must emit the same code. */
   key: string
+  /**
+   * Keys that must be composed in the same program: a consumer that reads
+   * another feature's varying declares nothing itself (one declaration per
+   * program), so composing it alone would compile to an undeclared
+   * identifier. `install` throws on a missing requirement instead.
+   */
+  requires?: readonly string[]
   /** Shared by reference: every material with the feature reads the same objects. */
   uniforms?: Readonly<Record<string, IUniform>>
   vertex?: Stage
@@ -58,6 +65,12 @@ function install<M extends Material>(
   stageOf: (f: Feature) => { vertex?: Stage; fragment?: Stage },
 ): M {
   const key = features.map((f) => f.key).join('+')
+  const have = new Set(features.map((f) => f.key))
+  for (const feature of features) {
+    for (const need of feature.requires ?? []) {
+      if (!have.has(need)) throw new Error(`${feature.key} requires ${need} in the same program`)
+    }
+  }
   material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     for (const feature of features) {
       Object.assign(shader.uniforms, feature.uniforms)

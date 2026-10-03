@@ -39,6 +39,13 @@ describe('applyLook', () => {
     }
   })
 
+  it('composes the shared world position exactly once per program (fol-kes.7)', () => {
+    for (const [name, entry] of Object.entries(materials)) {
+      const count = entry.features.filter((f) => f.key === 'world-position').length
+      expect(count, `${name} composes world-position ${count}x`).toBe(1)
+    }
+  })
+
   it('parks the reveal below the town and paints it from the palette', () => {
     applyLook(lookAt(18.5), true, palette)
     expect(reveal.uniforms.uRevealHeight.value).toBe(REVEAL_PARKED_M)

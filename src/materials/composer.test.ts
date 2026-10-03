@@ -43,4 +43,18 @@ describe('composeMaterial', () => {
     expect(a.customProgramCacheKey()).toBe('baked+group')
     expect(b.customProgramCacheKey()).not.toBe(a.customProgramCacheKey())
   })
+
+  it('throws when a required feature is missing instead of emitting bad GLSL', () => {
+    expect(() =>
+      composeMaterial(new MeshStandardMaterial(), [
+        { key: 'world-position' },
+        { key: 'consumer', requires: ['world-position'] },
+      ]),
+    ).not.toThrow()
+    expect(() =>
+      composeMaterial(new MeshStandardMaterial(), [
+        { key: 'consumer', requires: ['world-position'] },
+      ]),
+    ).toThrow('consumer requires world-position in the same program')
+  })
 })

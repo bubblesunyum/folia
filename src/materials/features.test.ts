@@ -89,6 +89,33 @@ describe('feature injection against three shaders', () => {
       expect(band.depthVertex).toBeUndefined()
     }
   })
+
+  it('reads the reveal band off the shared world height (fol-kes.7)', () => {
+    for (const band of [reveal, revealBasic] as Feature[]) {
+      expect(band.vertex, `${band.key} keeps a vertex stage`).toBeUndefined()
+      expect(band.requires, `${band.key} has no requirement`).toContain('world-position')
+      expect(band.fragment?.header, `${band.key} declares a varying`).not.toContain('varying')
+      expect(band.fragment?.header, `${band.key} misses the dependency note`).toContain(
+        'vSharedWorld',
+      )
+    }
+    const color = reveal.fragment?.chunks?.color_fragment?.after as string
+    expect(color).toContain('revealMix(vSharedWorld.y)')
+    expect(color).not.toContain('vRevealY')
+    const roughness = reveal.fragment?.chunks?.roughnessmap_fragment?.after as string
+    expect(roughness).toContain('revealMix(vSharedWorld.y)')
+    // The basic variant shares the color band but never touches roughness.
+    expect(revealBasic.fragment?.chunks).not.toHaveProperty('roughnessmap_fragment')
+  })
+
+  it('reads foliage noise off the shared world position (fol-kes.7)', () => {
+    expect((foliage as Feature).vertex, 'foliage keeps a vertex stage').toBeUndefined()
+    expect(foliage.requires, 'foliage has no requirement').toContain('world-position')
+    expect(foliage.fragment?.header, 'foliage declares a varying').not.toContain('varying vec3')
+    const color = foliage.fragment?.chunks?.color_fragment?.after as string
+    expect(color).toContain('foliageNoise(vSharedWorld')
+    expect(color).not.toContain('vFoliageWorld')
+  })
 })
 
 describe('texture-path cutover', () => {

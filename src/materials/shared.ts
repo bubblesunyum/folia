@@ -22,6 +22,7 @@ import { neonGlow } from './neonGlow'
 import { applySkyGradient } from './skyGradient'
 import { water } from './water'
 import { windowBands } from './windowBands'
+import { worldPosition } from './worldPosition'
 
 export interface SharedMaterial {
   material: Material
@@ -47,7 +48,11 @@ function shared(
   }
 }
 
-const lit = [bakedLight, group, reveal, moonRim, heightFog]
+// The shared world position first: fog, windows, reveal and foliage all
+// read its varying and declare nothing themselves, so every program carries
+// exactly one declaration. Water keeps its own reflection varying (untouched)
+// but still gets the shared one once via the reveal band below.
+const lit = [worldPosition, bakedLight, group, reveal, moonRim, heightFog]
 // Facades (fol-snu.3): the lit set plus the warm window bands. Ground stays
 // on `lit`: terrain gets no windows.
 const facadeLit = [...lit, windowBands]
@@ -76,7 +81,7 @@ export const materials: Readonly<Record<string, SharedMaterial>> = {
   // Neon is its own unlit program (D-038) and casts no shadow (D-035).
   neon: shared(
     new MeshBasicMaterial({ color: neonColor.clone(), fog: false }),
-    [groupLift, revealBasic, heightFog],
+    [worldPosition, groupLift, revealBasic, heightFog],
     false,
   ),
   neonGlow: shared(
@@ -87,13 +92,13 @@ export const materials: Readonly<Record<string, SharedMaterial>> = {
       depthWrite: false,
       fog: false,
     }),
-    [groupLift, neonGlow, revealBasic, heightFogAdditive],
+    [worldPosition, groupLift, neonGlow, revealBasic, heightFogAdditive],
     false,
   ),
   // Water's own program (D-039): still, glossy, and too flat to shade anything.
   water: shared(
     new MeshStandardMaterial({ color: palette.poolTeal, roughness: 0.06, fog: false }),
-    [groupLift, water, reveal, heightFog],
+    [worldPosition, groupLift, water, reveal, heightFog],
     false,
   ),
 }

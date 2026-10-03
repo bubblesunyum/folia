@@ -100,7 +100,9 @@ describe('height-fog injection', () => {
       [ShaderLib.standard, 'standard'],
       [ShaderLib.basic, 'basic'],
     ] as const) {
-      expect(() => inject(program.vertexShader, heightFog.vertex, `${label} vertex`)).not.toThrow()
+      expect(() =>
+        inject(program.vertexShader, (heightFog as Feature).vertex, `${label} vertex`),
+      ).not.toThrow()
       expect(() =>
         inject(program.fragmentShader, heightFog.fragment, `${label} fragment`),
       ).not.toThrow()
@@ -114,7 +116,7 @@ describe('height-fog injection', () => {
     const before = heightFog.fragment?.chunks?.opaque_fragment?.before as string
     expect(before).toContain('outgoingLight')
     expect(before).toContain('skyGradientColor')
-    expect(before).toContain('vFogWorld - cameraPosition')
+    expect(before).toContain('vSharedWorld - cameraPosition')
     expect(before).toContain('heightFogAmount')
     // The stock distance fog must not run as well: replaced with nothing.
     expect(heightFog.fragment?.chunks?.fog_fragment?.instead).toBe('')
@@ -130,24 +132,26 @@ describe('height-fog injection', () => {
 
   it('attenuates additive shells toward black instead of tinting', () => {
     const before = heightFogAdditive.fragment?.chunks?.opaque_fragment?.before as string
-    expect(before).toContain('outgoingLight *= 1.0 - heightFogAmount(vFogWorld)')
+    expect(before).toContain('outgoingLight *= 1.0 - heightFogAmount(vSharedWorld)')
     expect(before).not.toContain('skyGradientColor')
     expect(heightFogAdditive.fragment?.header).not.toContain('skyGradientColor')
     expect(heightFogAdditive.fragment?.header).not.toContain('uFogColor')
     expect(heightFogAdditive.fragment?.chunks?.fog_fragment?.instead).toBe('')
   })
 
-  it('rides the deformed batch/instance world position and the eye position', () => {
-    const vertex = heightFog.vertex?.chunks?.worldpos_vertex?.after as string
-    expect(vertex).toContain('transformed')
-    expect(vertex).toContain('batchingMatrix')
-    expect(vertex).toContain('instanceMatrix')
-    expect(vertex).toContain('modelMatrix')
-    // Same world path for the additive shell, so lift and sway stay coherent.
-    const additiveVertex = heightFogAdditive.vertex?.chunks?.worldpos_vertex?.after as string
-    expect(additiveVertex).toContain('transformed')
-    expect(additiveVertex).toContain('batchingMatrix')
-    expect(additiveVertex).toContain('instanceMatrix')
+  it('reads the shared world position, owning no vertex path of its own', () => {
+    // The transform lives in the worldPosition feature (one declaration per
+    // program); fog only consumes the varying. See worldPosition.test.ts for
+    // the transformed/batch/instance/model order.
+    expect((heightFog as Feature).vertex).toBeUndefined()
+    expect((heightFogAdditive as Feature).vertex).toBeUndefined()
+    expect(heightFog.requires).toContain('world-position')
+    expect(heightFogAdditive.requires).toContain('world-position')
+    // Same shared varying for the additive shell, so lift and sway stay coherent.
+    const before = heightFog.fragment?.chunks?.opaque_fragment?.before as string
+    expect(before).toContain('heightFogAmount(vSharedWorld)')
+    const additiveBefore = heightFogAdditive.fragment?.chunks?.opaque_fragment?.before as string
+    expect(additiveBefore).toContain('heightFogAmount(vSharedWorld)')
     // The factor reads the eye height and the fragment height off the ray.
     expect(heightFog.fragment?.header).toContain('cameraPosition')
     expect(heightFog.fragment?.header).toContain('uFogHeightFalloff')

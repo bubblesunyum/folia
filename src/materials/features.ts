@@ -127,6 +127,10 @@ export function foliageThin(ndl: number): number {
  */
 export const foliage = {
   key: 'foliage',
+  // vSharedWorld (the shared world-position varying) and vBakedNight (the
+  // baked spill): both declaring features always compose before foliage, so
+  // their declarations precede these uses.
+  requires: ['world-position'],
   uniforms: {
     uWrap: { value: 0.5 },
     uTranslucency: { value: 1.2 },
@@ -143,19 +147,6 @@ export const foliage = {
     // written by `applyLook`. Black until claimed, for the same reason.
     uSpillColor: { value: new Color(0, 0, 0) },
   },
-  vertex: {
-    header: 'varying vec3 vFoliageWorld;',
-    chunks: {
-      worldpos_vertex: {
-        after: /* glsl */ `
-          #ifdef USE_BATCHING
-            vFoliageWorld = (modelMatrix * batchingMatrix * vec4(transformed, 1.0)).xyz;
-          #else
-            vFoliageWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
-          #endif`,
-      },
-    },
-  },
   fragment: {
     header: /* glsl */ `
       uniform float uWrap;
@@ -166,7 +157,8 @@ export const foliage = {
       uniform float uGrowth;
       uniform float uFoliageNight;
       uniform vec3 uSpillColor;
-      varying vec3 vFoliageWorld;
+      // vSharedWorld is declared by the worldPosition feature's header (see
+      // requires above).
       // vBakedNight is declared by the bakedLight feature's header: foliage
       // always composes after lit, so the declaration precedes this use.
       float foliageHash(vec3 p) {
@@ -190,8 +182,8 @@ export const foliage = {
       color_fragment: {
         after: /* glsl */ `
           // Lobe-scale value drift, and clump-scale patches of yellower new growth.
-          float jitter = foliageNoise(vFoliageWorld * 2.5);
-          float growth = smoothstep(0.45, 0.85, foliageNoise(vFoliageWorld * 0.7 + 17.0));
+          float jitter = foliageNoise(vSharedWorld * 2.5);
+          float growth = smoothstep(0.45, 0.85, foliageNoise(vSharedWorld * 0.7 + 17.0));
           diffuseColor.rgb = mix(diffuseColor.rgb, uNewGrowth, uGrowth * growth);
           diffuseColor.rgb *= 1.0 + uJitter * (jitter - 0.5) * 2.0;`,
       },
@@ -259,41 +251,34 @@ const revealUniforms = {
   uRevealGloss: { value: REVEAL_GLOSS },
 }
 
-const revealVertex = {
-  header: 'varying float vRevealY;',
-  chunks: {
-    // World-baked batches carry world height in local Y, so the band needs no
-    // batch/instance path and reads identically in every program.
-    begin_vertex: { after: 'vRevealY = position.y;' },
-  },
-}
-
 const revealHeader = /* glsl */ `
   uniform float uRevealHeight;
   uniform vec3 uRevealColor;
   uniform float uRevealBand;
   uniform float uRevealGloss;
-  varying float vRevealY;
+  // vSharedWorld is declared by the worldPosition feature's header: the
+  // band reads world height, so instanced copies reveal at their own height.
+  // Both reveal variants require it (see requires below).
   float revealMix(float y) {
     return 1.0 - smoothstep(uRevealHeight, uRevealHeight + uRevealBand, y);
   }`
 
 const revealColorChunk = {
   color_fragment: {
-    after: 'diffuseColor.rgb = mix(diffuseColor.rgb, uRevealColor, revealMix(vRevealY));',
+    after: 'diffuseColor.rgb = mix(diffuseColor.rgb, uRevealColor, revealMix(vSharedWorld.y));',
   },
 } as const
 
 export const reveal = {
   key: 'reveal',
+  requires: ['world-position'],
   uniforms: revealUniforms,
-  vertex: revealVertex,
   fragment: {
     header: revealHeader,
     chunks: {
       ...revealColorChunk,
       roughnessmap_fragment: {
-        after: 'roughnessFactor = mix(roughnessFactor, uRevealGloss, revealMix(vRevealY));',
+        after: 'roughnessFactor = mix(roughnessFactor, uRevealGloss, revealMix(vSharedWorld.y));',
       },
     },
   },
@@ -303,8 +288,8 @@ export const reveal = {
  * Shares `reveal`'s uniform objects, so one `applyLook` write drives both. */
 export const revealBasic = {
   key: 'reveal-basic',
+  requires: ['world-position'],
   uniforms: revealUniforms,
-  vertex: revealVertex,
   fragment: {
     header: revealHeader,
     chunks: { ...revealColorChunk },

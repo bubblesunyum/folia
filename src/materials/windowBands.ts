@@ -56,6 +56,11 @@ export function windowBrightness(cellU: number, row: number): number {
 
 export const windowBands = {
   key: 'window-bands',
+  // vSharedWorld (the shared world-position varying): the bands read world
+  // height and world-plan position, so instanced facades band at their own
+  // height instead of repeating one local pattern per copy. The declaring
+  // worldPosition feature always composes before this one.
+  requires: ['world-position'],
   uniforms: {
     // Night weight (fol-snu.3): driven by the look's night weight, so the
     // term is exactly zero by day. Zero until `applyLook` claims it: the
@@ -66,19 +71,12 @@ export const windowBands = {
     // Black until claimed, for the same reason.
     uWindowColor: { value: new Color(0, 0, 0) },
   },
-  vertex: {
-    // World-baked batches carry world position in local position (see the
-    // reveal feature), so the bands need no batch/instance path here.
-    header: 'varying vec3 vWindowWorld;',
-    chunks: {
-      begin_vertex: { after: 'vWindowWorld = position;' },
-    },
-  },
   fragment: {
     header: /* glsl */ `
       uniform float uWindowNight;
       uniform vec3 uWindowColor;
-      varying vec3 vWindowWorld;
+      // vSharedWorld is declared by the worldPosition feature's header (see
+      // requires above).
       float windowHash(vec2 cell) {
         return fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
       }`,
@@ -90,11 +88,11 @@ export const windowBands = {
           // view rotation recovers the world up component.
           vec3 windowWorldN = inverseTransformDirection(normal, viewMatrix);
           float windowVertical = smoothstep(0.35, 0.65, 1.0 - abs(windowWorldN.y));
-          float windowRow = vWindowWorld.y / ${WINDOW_SPACING_M.toFixed(2)};
+          float windowRow = vSharedWorld.y / ${WINDOW_SPACING_M.toFixed(2)};
           float windowRowF = fract(windowRow);
           float windowSlit = smoothstep(0.0, 0.08, windowRowF)
             * (1.0 - smoothstep(${(WINDOW_BAND_F - 0.08).toFixed(2)}, ${WINDOW_BAND_F.toFixed(2)}, windowRowF));
-          vec2 windowCell = vec2(floor((vWindowWorld.x + vWindowWorld.z) / ${WINDOW_CELL_M.toFixed(2)}), floor(windowRow));
+          vec2 windowCell = vec2(floor((vSharedWorld.x + vSharedWorld.z) / ${WINDOW_CELL_M.toFixed(2)}), floor(windowRow));
           float windowH = windowHash(windowCell);
           float windowOn = step(${WINDOW_LIT_AT.toFixed(2)}, windowH);
           float windowBright = 0.55 + 0.45 * windowHash(windowCell * 1.37 + 11.3);
