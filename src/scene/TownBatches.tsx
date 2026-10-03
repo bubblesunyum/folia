@@ -31,6 +31,8 @@ import { createTownMesh } from './townMesh'
 interface TownBatchesApi {
   registerAsset: (asset: string, geometries: TownGeometries) => void
   unregisterAsset: (asset: string) => void
+  /** Whether `asset` currently contributes geometries (fol-kes.4). */
+  hasAsset: (asset: string) => boolean
   /** The town-wide meshes by batch name, for passes that draw them directly. */
   meshes: ReadonlyMap<string, BatchedMesh>
 }
@@ -73,6 +75,7 @@ export function TownBatches({ children }: { children: ReactNode }) {
     },
     [invalidate, registry],
   )
+  const hasAsset = useCallback((asset: string) => registry.has(asset), [registry])
 
   // Retired meshes left the scene at commit; dispose them after.
   useEffect(() => {
@@ -80,8 +83,8 @@ export function TownBatches({ children }: { children: ReactNode }) {
   })
 
   const api = useMemo(
-    () => ({ registerAsset, unregisterAsset, meshes: registry.meshes }),
-    [registerAsset, unregisterAsset, registry],
+    () => ({ registerAsset, unregisterAsset, hasAsset, meshes: registry.meshes }),
+    [registerAsset, unregisterAsset, hasAsset, registry],
   )
 
   return (

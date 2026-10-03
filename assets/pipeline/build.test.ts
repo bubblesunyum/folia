@@ -2,7 +2,7 @@
 // shader or sky-color tweaks don't re-run Blender for every asset.
 import { describe, expect, it } from 'vitest'
 import { palette } from '../../src/palette'
-import { assetSources, bakePalette, hashAsset } from './build'
+import { assetSources, bakePalette, hashAsset, listAssets } from './build'
 
 describe('assetSources', () => {
   it('excludes the shader features: they never reach the bake', () => {
@@ -17,6 +17,23 @@ describe('assetSources', () => {
 
   it('lists the slot limit: shrinking it must re-validate packed _IDs', () => {
     expect(assetSources('cortico/fragment').some((f) => f.endsWith('src/groupSlots.ts'))).toBe(true)
+  })
+
+  it('hashes the forum files with the fragment, whose bake reads them', () => {
+    // hashAsset is a content hash over exactly assetSources, so listing here
+    // is what makes a forum edit invalidate the fragment (fol-kes.4).
+    const sources = assetSources('cortico/fragment')
+    expect(sources.some((f) => f.endsWith('cortico/forum.json'))).toBe(true)
+    expect(sources.some((f) => f.endsWith('cortico/forum-layout.json'))).toBe(true)
+  })
+
+  it('lets no unrelated asset rebuild on forum edits', () => {
+    for (const asset of listAssets()) {
+      if (asset === 'cortico/fragment' || asset === 'cortico/forum') continue
+      const sources = assetSources(asset)
+      expect(sources.some((f) => f.endsWith('cortico/forum.json'))).toBe(false)
+      expect(sources.some((f) => f.endsWith('cortico/forum-layout.json'))).toBe(false)
+    }
   })
 })
 

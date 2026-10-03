@@ -6,10 +6,10 @@ import { describe, expect, it } from 'vitest'
 import {
   buildLightPoolGeometry,
   createLightPoolMaterial,
+  lightPoolsReady,
   lightPoolUniforms,
-  POOL_SPACING_M,
-  ringWalkLine,
-  sampleWalkLine,
+  POOL_OWNER_ASSET,
+  parseLightPoolLayout,
 } from './lightPool'
 
 describe('light-pool geometry (fol-0sj)', () => {
@@ -41,53 +41,43 @@ describe('light-pool geometry (fol-0sj)', () => {
   })
 })
 
-describe('walk-line sampling (fol-0sj)', () => {
-  it('spaces pools along a straight path, keeping the start', () => {
-    const pts = sampleWalkLine(
-      [
-        [0, 0],
-        [10, 0],
-      ],
-      POOL_SPACING_M,
-    )
-    expect(pts[0]).toEqual([0, 0])
-    for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1]
-      const b = pts[i]
-      if (!a || !b) continue
-      expect(Math.hypot(b[0] - a[0], b[1] - a[1])).toBeCloseTo(POOL_SPACING_M, 8)
-    }
-    const last = pts[pts.length - 1]
-    expect(last?.[0]).toBeLessThanOrEqual(10)
+describe('authored layout parsing (fol-kes.4)', () => {
+  const valid = {
+    pools: [
+      { x: 1, y: 0.48, z: 2, r: 1.6, level: 0 },
+      { x: -3, y: 1.38, z: 1, r: 1.6 },
+    ],
+  }
+
+  it('passes authored spots through as pool quads', () => {
+    expect(parseLightPoolLayout(valid)).toEqual([
+      { x: 1, y: 0.48, z: 2, r: 1.6 },
+      { x: -3, y: 1.38, z: 1, r: 1.6 },
+    ])
   })
 
-  it('carries spacing across joints without duplicating them', () => {
-    const pts = sampleWalkLine(
-      [
-        [0, 0],
-        [3.2, 0],
-        [3.2, 3.2],
-      ],
-      POOL_SPACING_M,
+  it('fails closed on a missing, shapeless, or non-finite layout', () => {
+    expect(() => parseLightPoolLayout(null)).toThrow(/no "pools"/)
+    expect(() => parseLightPoolLayout({ pools: 'nope' })).toThrow(/not an array/)
+    expect(() => parseLightPoolLayout({ pools: [null] })).toThrow(/not an object/)
+    expect(() => parseLightPoolLayout({ pools: [{ x: 1, y: 2, z: 3 }] })).toThrow(/finite xyzr/)
+    expect(() => parseLightPoolLayout({ pools: [{ x: 1, y: NaN, z: 3, r: 1.6 }] })).toThrow(
+      /finite xyzr/,
     )
-    expect(pts).toHaveLength(3)
-  })
-
-  it('rings close within one spacing of the start', () => {
-    const pts = sampleWalkLine(ringWalkLine([0, 0], 5), POOL_SPACING_M)
-    expect(pts.length).toBeGreaterThan(6)
-    const first = pts[0]
-    const last = pts[pts.length - 1]
-    if (!first || !last) throw new Error('no walk samples')
-    expect(Math.hypot(last[0] - first[0], last[1] - first[1])).toBeLessThan(POOL_SPACING_M)
-    for (const [x, z] of pts) {
-      // On the polygon chords, so just inside the radius, never outside it.
-      expect(Math.hypot(x, z)).toBeGreaterThan(4.9)
-      expect(Math.hypot(x, z)).toBeLessThanOrEqual(5)
-    }
+    expect(() => parseLightPoolLayout({ pools: [{ x: 1, y: 2, z: 3, r: 0 }] })).toThrow(
+      /non-positive radius/,
+    )
   })
 })
 
+describe('registry readiness gate (fol-kes.4)', () => {
+  it('enables pools only once the owning fragment registers', () => {
+    expect(lightPoolsReady(() => false)).toBe(false)
+    // Meadow or forum arriving first share the batches but own no terraces.
+    expect(lightPoolsReady((asset) => asset === 'cortico/meadow')).toBe(false)
+    expect(lightPoolsReady((asset) => asset === POOL_OWNER_ASSET)).toBe(true)
+  })
+})
 describe('light-pool material (fol-0sj)', () => {
   it('is additive with no depth write, so decals layer over terraces', () => {
     const material = createLightPoolMaterial()

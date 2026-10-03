@@ -171,4 +171,18 @@ describe('TownRegistry', () => {
     registry.unregister('a')
     expect(registry.version).toBeGreaterThan(v1)
   })
+
+  it('reports asset membership, so gates read the owner and never batch names', () => {
+    const registry = new TownRegistry(caps(), factory)
+    expect(registry.has('cortico/fragment')).toBe(false)
+    // The neighbours arrive first and share batches, but the owner is absent.
+    registry.register('cortico/meadow', asset({ cream: [box(1)] }))
+    registry.register('cortico/forum', asset({ cream: [box(1)] }))
+    expect(registry.has('cortico/meadow')).toBe(true)
+    expect(registry.has('cortico/fragment')).toBe(false)
+    registry.register('cortico/fragment', asset({ cream: [box(1)] }))
+    expect(registry.has('cortico/fragment')).toBe(true)
+    registry.unregister('cortico/fragment')
+    expect(registry.has('cortico/fragment')).toBe(false)
+  })
 })

@@ -1,8 +1,11 @@
-// Additive light-pool decals (D-038, fol-0sj): warm pools of lantern light
-// drawn as flat decals along the terrace walk lines, where lanterns and paths
-// will go. No lantern geometry exists yet, so one merged quad mesh grounded by
-// raycast at runtime (see scene/LightPools.tsx) stands in for the future
-// lantern/planter spill until the fragment models them.
+// Additive light-pool decals (D-038, fol-0sj, fol-kes.4): warm pools of
+// lantern light drawn as flat decals on the terrace walk lines, where
+// lanterns and paths will go. The spots are authored at bake in
+// assets/blender/cortico/fragment.py on the live terrace outlines and read
+// from the sibling fragment-layout.json (the forum-layout.json anchor
+// precedent) — the runtime only builds the merged quad mesh, never grounds,
+// raycasts, or polls. No lantern geometry exists yet, so these baked spots
+// stand in for the future lantern/planter spill until the fragment models them.
 //
 // One draw call: every pool is a quad in a single BufferGeometry sharing one
 // ShaderMaterial. No new lights (D-038's fixed light count is untouched), no
@@ -16,6 +19,7 @@ import {
   Float32BufferAttribute,
   ShaderMaterial,
 } from 'three'
+import fragmentParams from '../../assets/blender/cortico/fragment.json' with { type: 'json' }
 
 /** A grounded pool spot: centre in metres, radius in metres. */
 export interface PoolSpot {
@@ -25,12 +29,12 @@ export interface PoolSpot {
   r: number
 }
 
-/** Default pool radius, in metres — a lantern's throw on the terrace. */
-export const POOL_RADIUS_M = 1.6
-/** How far above the hit surface a decal floats, in metres. */
-export const POOL_LIFT_M = 0.03
-/** Spacing of pools along a walk line, in metres. */
-export const POOL_SPACING_M = 3.2
+/** Pool radius, in metres — a lantern's throw on the terrace (fragment.json "pools"). */
+export const POOL_RADIUS_M: number = fragmentParams.pools.radius
+/** How far above the hit surface a decal floats, in metres (fragment.json "pools"). */
+export const POOL_LIFT_M: number = fragmentParams.pools.lift
+/** Spacing of pools along a walk line, in metres (fragment.json "pools"). */
+export const POOL_SPACING_M: number = fragmentParams.pools.spacing
 
 /** The shared uniforms: zero/black until `applyLook` claims them (inert by day). */
 export const lightPoolUniforms = {
@@ -96,49 +100,42 @@ export function buildLightPoolGeometry(pools: readonly PoolSpot[]): BufferGeomet
   return geometry
 }
 
-/** A walk line in plan view: the polyline the pools follow. */
-export type WalkLine = readonly (readonly [number, number])[]
-
 /**
- * Resamples a walk-line polyline at `spacingM`, returning plan-view pool
- * centres (start point included, no duplicate joints). Pure, pinned in vitest.
+ * The authored pool spots (fol-kes.4): parsed out of fragment-layout.json,
+ * the file the fragment bake writes. Fail closed on any drift — a missing or
+ * malformed entry throws instead of drawing a half-grounded ring.
  */
-export function sampleWalkLine(line: WalkLine, spacingM: number): [number, number][] {
-  const out: [number, number][] = []
-  if (line.length === 0) return out
-  const first = line[0]
-  if (!first) return out
-  out.push([first[0], first[1]])
-  let acc = 0
-  for (let i = 1; i < line.length; i++) {
-    const a = line[i - 1]
-    const b = line[i]
-    if (!a || !b) continue
-    const dx = b[0] - a[0]
-    const dz = b[1] - a[1]
-    const len = Math.hypot(dx, dz)
-    if (len === 0) continue
-    let travelled = spacingM - acc
-    while (travelled <= len) {
-      const t = travelled / len
-      out.push([a[0] + dx * t, a[1] + dz * t])
-      travelled += spacingM
-    }
-    acc = (acc + len) % spacingM
+export function parseLightPoolLayout(raw: unknown): PoolSpot[] {
+  if (typeof raw !== 'object' || raw === null || !('pools' in raw)) {
+    throw new Error('lightPool: layout file has no "pools" array')
   }
-  return out
+  const pools = (raw as { pools: unknown }).pools
+  if (!Array.isArray(pools)) throw new Error('lightPool: layout "pools" is not an array')
+  return pools.map((pool, i) => {
+    if (typeof pool !== 'object' || pool === null) {
+      throw new Error(`lightPool: pool ${i} is not an object`)
+    }
+    const { x, y, z, r } = pool as Record<string, unknown>
+    if (![x, y, z, r].every((n) => typeof n === 'number' && Number.isFinite(n))) {
+      throw new Error(`lightPool: pool ${i} is not a finite xyzr quad`)
+    }
+    if ((r as number) <= 0) throw new Error(`lightPool: pool ${i} has a non-positive radius`)
+    return { x: x as number, y: y as number, z: z as number, r: r as number }
+  })
 }
 
-/** A ring walk line around `center` at radius `r`, closed. */
-export function ringWalkLine(
-  center: readonly [number, number],
-  r: number,
-  segments = 24,
-): WalkLine {
-  const pts: [number, number][] = []
-  for (let i = 0; i <= segments; i++) {
-    const a = (i / segments) * Math.PI * 2
-    pts.push([center[0] + Math.cos(a) * r, center[1] + Math.sin(a) * r])
-  }
-  return pts
+/**
+ * The asset whose terraces the pools were authored on (fol-kes.4): the only
+ * registration that enables them.
+ */
+export const POOL_OWNER_ASSET = 'cortico/fragment'
+
+/**
+ * Whether the owning terraces are registered (fol-kes.4): reads asset
+ * membership, never batch names — meadow or forum arriving first share the
+ * cream/ground batches but must not enable floating pools. Read live (per
+ * frame, like the water pass) — never polled, never waited on.
+ */
+export function lightPoolsReady(hasAsset: (asset: string) => boolean): boolean {
+  return hasAsset(POOL_OWNER_ASSET)
 }

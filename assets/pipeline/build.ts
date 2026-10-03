@@ -93,9 +93,17 @@ export function assetSources(asset: string): string[] {
   // geometry. Generic: any asset with a sibling *-layout.json picks it up.
   const layoutFile = join(BLENDER_DIR, `${asset}-layout.json`)
   const layout = existsSync(layoutFile) ? [layoutFile] : []
+  // pool_layout() in cortico/fragment.py reads the forum placement and params
+  // (fol-kes.4): a forum edit must rebuild the fragment, so they hash with it
+  // — and only with it, so meadow and forum never rebuild on each other.
+  const poolDeps =
+    asset === 'cortico/fragment'
+      ? [join(BLENDER_DIR, 'cortico/forum.json'), join(BLENDER_DIR, 'cortico/forum-layout.json')]
+      : []
   return [
     ...shared,
     ...layout,
+    ...poolDeps,
     join(BLENDER_DIR, 'build.py'),
     join(BLENDER_DIR, 'VERSION'),
     join(BLENDER_DIR, `${asset}.py`),

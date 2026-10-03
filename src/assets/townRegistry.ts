@@ -113,6 +113,15 @@ export class TownRegistry {
     return dead
   }
 
+  /**
+   * Whether `asset` currently contributes geometries (fol-kes.4): gates that
+   * read one owner's presence, never batch names — a batch shared by several
+   * assets says nothing about which of them registered.
+   */
+  has(asset: string): boolean {
+    return this.sources.has(asset)
+  }
+
   dispose(): void {
     for (const mesh of this.meshes.values()) mesh.dispose()
     for (const mesh of this.drainRetired()) mesh.dispose()

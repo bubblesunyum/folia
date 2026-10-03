@@ -68,6 +68,11 @@
     ],
     "sides": 8
   },
+  "pools": {
+    "radius": 1.6,
+    "lift": 0.03,
+    "spacing": 3.2
+  },
   "water": {
     "seed": 11,
     "centre": [
