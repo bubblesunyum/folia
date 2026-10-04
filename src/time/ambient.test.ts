@@ -47,11 +47,14 @@ describe('ambient scheduler', () => {
     expect(scheduler.tick(0, LIVE)).toBe(true)
     expect(seen).toEqual([0])
     expect(scheduler.tick(10, LIVE)).toBe(false)
-    expect(scheduler.tick(AMBIENT_INTERVAL_MS - 1, LIVE)).toBe(false)
-    expect(scheduler.tick(AMBIENT_INTERVAL_MS, LIVE)).toBe(true)
+    // Accept within half interval (~16.6 ms tolerance) for early ticks
+    const earlyFire = AMBIENT_INTERVAL_MS - 1
+    expect(scheduler.tick(earlyFire, LIVE)).toBe(true)
     expect(seen).toHaveLength(2)
+    // Time advances on the interval grid, not by the jittered fire time
     expect(seen[1]).toBeCloseTo(AMBIENT_INTERVAL_MS / 1000, 6)
-    expect(scheduler.time).toBeCloseTo(AMBIENT_INTERVAL_MS / 1000, 6)
+    expect(scheduler.tick(2 * AMBIENT_INTERVAL_MS + 1, LIVE)).toBe(true)
+    expect(seen[2]).toBeCloseTo((2 * AMBIENT_INTERVAL_MS) / 1000, 6)
   })
 
   it('holds the cadence no matter which source drives the frames', () => {
@@ -75,7 +78,7 @@ describe('ambient scheduler', () => {
     expect(scheduler.time).toBe(before)
     const emitAt = 9000 + AMBIENT_INTERVAL_MS + 5
     expect(scheduler.tick(emitAt, LIVE)).toBe(true)
-    expect(scheduler.time - before).toBeCloseTo((emitAt - 9000) / 1000, 9)
+    expect(scheduler.time - before).toBeCloseTo(AMBIENT_INTERVAL_MS / 1000, 9)
     expect(seen.at(-1)).toBe(scheduler.time)
   })
 
@@ -98,7 +101,7 @@ describe('ambient scheduler', () => {
     expect(seen).toEqual([0])
     expect(scheduler.tick(2000, LIVE)).toBe(false)
     expect(scheduler.tick(2001 + AMBIENT_INTERVAL_MS, LIVE)).toBe(true)
-    expect(scheduler.time).toBeCloseTo((AMBIENT_INTERVAL_MS + 1) / 1000, 6)
+    expect(scheduler.time).toBeCloseTo(AMBIENT_INTERVAL_MS / 1000, 6)
   })
 
   it('emits about thirty ticks a second on integer-millisecond browser timers', () => {
@@ -107,6 +110,40 @@ describe('ambient scheduler', () => {
     const interval = Math.ceil(AMBIENT_INTERVAL_MS)
     for (let now = interval; now <= 1000; now += interval) scheduler.tick(now, LIVE)
     expect(seen).toHaveLength(30)
+  })
+
+  it('holds ~30 Hz with jittered fake clock (fires within half interval accepted)', () => {
+    const { scheduler, seen } = registered()
+    const CEIL_INTERVAL = Math.ceil(AMBIENT_INTERVAL_MS)
+    let now = 0
+
+    expect(scheduler.tick(now, LIVE)).toBe(true)
+    expect(seen).toHaveLength(1)
+
+    let fires = 0
+    const startTime = now
+    while (now < startTime + 1000) {
+      const jitter = fires % 3 === 0 ? -1 : fires % 3 === 1 ? 1 : 0
+      now += CEIL_INTERVAL + jitter
+      if (scheduler.tick(now, LIVE)) {
+        fires++
+      }
+    }
+
+    const effectiveHz = (seen.length - 1) * (1000 / (now - startTime))
+    expect(seen.length).toBeGreaterThanOrEqual(29)
+    expect(seen.length).toBeLessThanOrEqual(31)
+    expect(effectiveHz).toBeGreaterThan(28)
+  })
+
+  it('resyncs after a stall instead of bursting catch-up ticks', () => {
+    const { scheduler, seen } = registered()
+    scheduler.tick(0, LIVE)
+    expect(scheduler.tick(1000, LIVE)).toBe(true)
+    expect(scheduler.time).toBeCloseTo(1, 6)
+    expect(scheduler.tick(1001, LIVE)).toBe(false)
+    expect(scheduler.tick(1000 + AMBIENT_INTERVAL_MS, LIVE)).toBe(true)
+    expect(seen).toHaveLength(3)
   })
 
   it('starts a fresh deterministic phase after the last consumer leaves', () => {
@@ -155,7 +192,7 @@ describe('ambient scheduler', () => {
     expect(scheduler.time).toBe(0)
     const emitAt = 5000 + AMBIENT_INTERVAL_MS + 5
     expect(scheduler.tick(emitAt, LIVE)).toBe(true)
-    expect(scheduler.time).toBeCloseTo((emitAt - 5000) / 1000, 9)
+    expect(scheduler.time).toBeCloseTo(AMBIENT_INTERVAL_MS / 1000, 9)
   })
 })
 

@@ -16,6 +16,10 @@
 
 /** Rest cadence: ~30 Hz (D-056). */
 export const AMBIENT_INTERVAL_MS = 1000 / 30
+/** Beyond this many missed intervals the clock resyncs rather than replaying the gap on the grid. */
+const MAX_CATCH_UP_STEPS = 3
+/** Early fire tolerance as a fraction of the interval: fires within this margin count towards the next frame. */
+const EARLY_FIRE_FRACTION = 0.5
 
 /** A future animated thing: ripple, birds, clouds, and sway today. */
 export interface AmbientConsumer {
@@ -110,9 +114,14 @@ export class AmbientScheduler {
       this.lastTickMs = nowMs
       return false
     }
-    if (dtMs < this.intervalMs) return false
-    this.elapsedSeconds += dtMs / 1000
-    this.lastTickMs = nowMs
+    // A timer fire within half an interval of due counts, and the baseline
+    // advances on the interval grid so early and late fires cancel out. A
+    // stall longer than a few intervals resyncs to now instead of bursting.
+    if (dtMs < this.intervalMs * EARLY_FIRE_FRACTION) return false
+    const steps = Math.round(dtMs / this.intervalMs)
+    const advanceMs = steps <= MAX_CATCH_UP_STEPS ? steps * this.intervalMs : dtMs
+    this.elapsedSeconds += advanceMs / 1000
+    this.lastTickMs += advanceMs
     this.push()
     return true
   }
