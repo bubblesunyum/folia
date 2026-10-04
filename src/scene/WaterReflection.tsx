@@ -18,10 +18,14 @@ import {
 } from 'three'
 import { renderConfig } from '../debug'
 import { materials } from '../materials/shared'
-import { RIPPLE_CONSUMER_ID, rippleConsumer, water } from '../materials/water'
+import { water } from '../materials/water'
 import { createStreakBlur } from '../renderer/streakBlur'
-import { ambient, isAmbientReading } from '../time/ambient'
 import { useLook } from '../time/lookContext'
+import {
+  createReflectionScopeScratch,
+  forEachReflectionInstance,
+  withDayReflectionScope,
+} from './reflectionScope'
 import { useTownBatches } from './TownBatches'
 import {
   classifyWaterBatch,
@@ -70,7 +74,6 @@ export function WaterReflection() {
       // per-draw multiply below allocates nothing.
       daySun: new Color(),
       box: new Box3(),
-      world: new Box3(),
       frustum: new Frustum(),
       viewProj: new Matrix4(),
       plane: new Plane(),
@@ -84,6 +87,9 @@ export function WaterReflection() {
       viewPlane: new Plane(),
       mirrored: new Vector3(),
       swapped: new Map<BatchedMesh, { material: Material; visible: boolean }>(),
+      ponds: [] as Box3[],
+      pondCount: 0,
+      reflectionScope: createReflectionScopeScratch(),
     }
   }, [])
 
@@ -107,11 +113,7 @@ export function WaterReflection() {
     water.uniforms.uReflection.value = pass.streaks.texture
     // 0 until a mirrored draw lands: every skip path leaves env + Fresnel only.
     water.uniforms.uReflectionStrength.value = 0
-    // The ripple rides the same clock (fol-ixw): registering poses it from
-    // the shared time, and unregistering parks it back still.
-    ambient.register(RIPPLE_CONSUMER_ID, rippleConsumer())
     return () => {
-      ambient.unregister(RIPPLE_CONSUMER_ID)
       water.uniforms.uReflection.value = null
       water.uniforms.uReflectionStrength.value = 0
       pass.target.dispose()
@@ -122,15 +124,6 @@ export function WaterReflection() {
   }, [pass])
 
   useFrame(({ camera, scene }) => {
-    // Ripple first (fol-ixw, D-056): fold this frame into the shared ambient
-    // clock so the ripple poses from it, but never invalidate for it — the
-    // ripple moves inside frames other drivers cause and rests with them, so
-    // idle stays green. The return is deliberately unread: asking for another
-    // frame here would pin the scene at ~30 Hz.
-    ambient.tick(performance.now(), {
-      visible: document.visibilityState === 'visible',
-      reading: isAmbientReading(),
-    })
     // Cheap gates first: no discovery, no bounds, no GL when the pass is
     // off by flag or when neither weight is up. The frustum/discovery work
     // below only runs when a mirrored draw is actually possible.
@@ -143,25 +136,30 @@ export function WaterReflection() {
     }
     const p = pass
 
-    // Pass one: classify the town-wide batches in place (no arrays, no
-    // clones) and union every water batch's world bounds into the scratch
-    // box. Unknown bounds mirror nothing: fail closed into the skip below.
+    // Pass one derives each visible pond's live world bounds. A town-wide
+    // batch box cannot define a useful reflection neighborhood because it
+    // includes every instance in that batch.
     p.box.makeEmpty()
-    let pools = 0
+    p.pondCount = 0
     for (const batch of meshes.values()) {
       if (classifyWaterBatch(batch.material, roles) !== 'pool') continue
-      if (!batch.boundingBox) batch.computeBoundingBox()
-      const local = batch.boundingBox
-      if (!local) continue
-      pools += 1
-      p.world.copy(local).applyMatrix4(batch.matrixWorld)
-      p.box.union(p.world)
+      if (!batch.visible) continue
+      forEachReflectionInstance(batch, p.reflectionScope, (_id, visible, bounds) => {
+        if (!visible || !bounds) return
+        const index = p.pondCount
+        p.pondCount += 1
+        const pond = p.ponds[index]
+        if (pond) pond.copy(bounds)
+        else p.ponds.push(bounds.clone())
+        p.box.union(bounds)
+      })
     }
 
     p.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
     p.frustum.setFromProjectionMatrix(p.viewProj)
     // Empty bounds read as off-frustum; the predicate already skips those,
     // and the explicit check narrows for the mirror below.
+    const pools = p.pondCount
     const inFrustum = pools > 0 && pondTouchesFrustum(p.frustum, p.box)
     if (
       pools === 0 ||
@@ -245,38 +243,48 @@ export function WaterReflection() {
     const background = scene.background
     const autoShadows = gl.shadowMap.autoUpdate
     const clearAlpha = gl.getClearAlpha()
+    const previousTarget = gl.getRenderTarget()
     gl.getClearColor(p.clearColor)
+    water.uniforms.uReflectionStrength.value = 0
     const hide = (batch: BatchedMesh) => {
       p.swapped.set(batch, { material: batch.material, visible: batch.visible })
       batch.visible = false
     }
-    // Pass two, draw path only: swap materials by role, re-classifying in
-    // place rather than reusing arrays. Emissive batches stay untouched.
-    for (const batch of meshes.values()) {
-      const role = classifyWaterBatch(batch.material, roles)
-      if (role === 'emissive') continue
-      if (role === 'pool' || role === 'hidden') hide(batch)
-      else {
-        p.swapped.set(batch, { material: batch.material, visible: batch.visible })
-        batch.material = p.occluder
+    try {
+      // Pass two, draw path only: swap materials by role, re-classifying in
+      // place rather than reusing arrays. Emissive batches stay untouched.
+      for (const batch of meshes.values()) {
+        const role = classifyWaterBatch(batch.material, roles)
+        if (role === 'emissive') continue
+        if (role === 'pool' || role === 'hidden') hide(batch)
+        else {
+          p.swapped.set(batch, { material: batch.material, visible: batch.visible })
+          batch.material = p.occluder
+        }
       }
+      scene.background = null
+      gl.shadowMap.autoUpdate = false
+      gl.setClearColor(BLACK, 1)
+
+      const draw = () => {
+        gl.setRenderTarget(p.target)
+        gl.clear()
+        gl.render(scene, p.camera)
+        p.blur.render(gl, p.target, p.streaks)
+      }
+      if (nightPass) draw()
+      else withDayReflectionScope(meshes.values(), p.ponds, 6, p.reflectionScope, draw, p.pondCount)
+    } finally {
+      gl.setRenderTarget(previousTarget)
+      gl.setClearColor(p.clearColor, clearAlpha)
+      gl.shadowMap.autoUpdate = autoShadows
+      scene.background = background
+      for (const [batch, was] of p.swapped) {
+        batch.material = was.material
+        batch.visible = was.visible
+      }
+      p.swapped.clear()
     }
-    scene.background = null
-    gl.shadowMap.autoUpdate = false
-    gl.setClearColor(BLACK, 1)
-    gl.setRenderTarget(p.target)
-    gl.clear()
-    gl.render(scene, p.camera)
-    p.blur.render(gl, p.target, p.streaks)
-    gl.setRenderTarget(null)
-    gl.setClearColor(p.clearColor, clearAlpha)
-    gl.shadowMap.autoUpdate = autoShadows
-    scene.background = background
-    for (const [batch, was] of p.swapped) {
-      batch.material = was.material
-      batch.visible = was.visible
-    }
-    p.swapped.clear()
     water.uniforms.uReflectionStrength.value = 1
   })
 
