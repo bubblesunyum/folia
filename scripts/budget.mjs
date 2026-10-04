@@ -11,9 +11,11 @@ let failed = false;
 const bad = (m) => { failed = true; console.error(`budget: failed: ${m}`); };
 const say = (m) => console.log(`budget: ${m}`);
 
-// Per-neighborhood allowance: cortico ships 2.43 MB / 202,472 tris.
-const HOOD_BYTES = 2_500_000;
-const HOOD_TRIS = 225_000;
+// Breadth starting allowance (D-072): 1 MB / 75k tris of town mid-LOD,
+// plus 2 MB / 200k of route hero detail. Until separate LOD exports exist,
+// enforce their combined ceiling across every asset in the neighborhood.
+const HOOD_BYTES = 3_000_000;
+const HOOD_TRIS = 275_000;
 // Shell/canvas JS gz caps: shell re-measured post-router (fol-3qa) — the `/`
 // initial-route chunk union is ~113 KB gz, so the cap holds ~20% headroom.
 // Canvas re-measures at ~365 KB gz against its 450 KB cap.

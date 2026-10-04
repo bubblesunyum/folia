@@ -80,7 +80,7 @@ Depth follows content, not a fixed level count. Every move is a camera flight to
 
 - **Hover a neighborhood:** its buildings and objects lift off the ground and glow neon.
   - On touch, the first tap lifts and the second tap enters.
-  - Picking uses one invisible low-poly hit volume per neighborhood.
+  - Picking uses cached, invisible hit volumes derived from live render instances and their group slots (D-074); authored export proxies are not required.
   - Hover state is per group (`_ID`), so a hover is one uniform write (D-032).
 - **Click a neighborhood:** the camera flies to its predefined vantage point. High-LOD hero geometry swaps in mid-flight while motion masks it (D-050). You can then look around at the objects representing parts of the project.
 - **Case-study objects:** inside a neighborhood, only the case-study objects are interactive, e.g. Cortico's three forum pedestals. The rest is scenery. Clicking one opens its case study, and switching between case studies **replaces** history (D-021).
@@ -202,7 +202,7 @@ Performance is a first-class requirement: fast and beautiful, never one at the e
   - **Up:** MSAA, a 4096 shadow map, the water reflection pass, and later SSAO. Never DPR above 2.
   - 120 Hz only in Chromium and Firefox, and only while the camera moves.
   - Tiers are chosen by a frame-time probe, plus a stress probe for upgrades that runs after the reveal while idle. The result is cached per renderer and screen. `detect-gpu` is only a prior.
-  - Idle and panel-reading drop ambient motion to ~30 fps.
+  - Gentle ambient motion runs by default at about 30 fps while idle; it pauses while a panel is open or being read, when the tab is hidden, and for reduced motion (D-073).
 - **Asset compression and delivery (R-009, D-047):**
   - Meshopt for geometry. No KTX2 until textures justify its ~217 KB transcoder.
   - Vercel doesn't compress `.glb`, so spike 6 picks the workaround.
@@ -217,6 +217,7 @@ Performance is a first-class requirement: fast and beautiful, never one at the e
   - **Budget** (calibrated on the Max proxy; real-device factors before launch):
     - ≤ 2.5 ms saturated-frame wall on the M1 Max under default `?perf=base` (MSAA, 1920×1200), at golden hour and at night; `scripts/bench.mjs` prints the verdict (D-063). Timer-query GPU ms stays indicative only (D-055).
     - Under ~100 `render.calls`, plus sub-draws ≤ 3000.
+    - Breadth starts with a 3 MB / 275k-triangle local GLB ceiling per neighborhood: allocate 1 MB / 75k to town mid-LOD and 2 MB / 200k to additional route hero detail (D-072). Separate LOD exports arrive with breadth; the current gate enforces the combined ceiling. Shell/canvas JS caps are 140/450 KB gz.
     - Download and time-to-sky budgets per entry route and network profile, e.g. "`/` on Fast 4G: sky within 1.5 s" (D-047).
   - On phones, cap the pixel ratio at 1.5–2.
 

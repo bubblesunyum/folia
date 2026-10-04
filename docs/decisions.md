@@ -599,6 +599,7 @@ When ambient motion arrives, give it an explicit, visibility-aware schedule: tar
 
 *Why:* the static scene was spending a full 120 Hz render budget while nothing changed, making the Mac's fans spin up.
 *Refines:* D-036's idle power policy.
+*Static default superseded by D-073; hidden/reading pause policy retained.*
 
 ### D-057 Spike 4 result: night and water
 **Decision:**
@@ -653,7 +654,7 @@ When ambient motion arrives, give it an explicit, visibility-aware schedule: tar
 - **Sway:** a procedural composer feature on foliage (5 cm peak, phase from
   world position so clumps flutter), in the depth material too. `?sway=on`
   drives it from a clock that opts out of the idle rest; off by default so
-  D-056 holds (the e2e rest test proves it).
+  D-056 holds (the e2e rest test proves it). This opt-in default is superseded by D-073.
 - **Found:** at night the sun's shadow pass still renders at full cost (475k
   tris) with daylight at 0. Breadth skips shadow updates while the sun is down.
 - **Deferred:** a view-tracking frustum (the boxes are light-fitted and static,
@@ -782,7 +783,7 @@ instead of per asset.
 
 ## 2026-10-01..03: slice-exit span (fol-cs8)
 
-Source: [reviews/2026-10-03-code-review.md](reviews/2026-10-03-code-review.md). These entries record what the 2026-10-01..03 implementation span landed, reconciled against source and closed-bead evidence. Where the span diverged from the spec or left a call open, the entry records the implementation as fact and names the unresolved bead — it does not decide. The three needs-human calls (breadth budget fol-kes.1, hit volumes fol-kes.2, ambient motion fol-kes.3) stay open.
+Source: [reviews/2026-10-03-code-review.md](reviews/2026-10-03-code-review.md). These entries record what the 2026-10-01..03 implementation span landed, reconciled against source and closed-bead evidence. Where the span diverged from the spec or left a call open, the entry records the implementation as fact and names the unresolved bead — it does not decide. Those calls were pending at the review. Their subsequent resolutions are recorded in D-072–D-074.
 
 ### D-064 Height fog lands (fol-snu.4, fol-l1r.3)
 **Outcome:** the height half of D-046 is built: analytic composer fog consumes both height controls, world transforms are preserved, the directional sky color is shared with the background, and additive shells attenuate rather than fog over. `require fog in every keyframe` is enforced. Full gate and visual review passed.
@@ -796,6 +797,7 @@ Source: [reviews/2026-10-03-code-review.md](reviews/2026-10-03-code-review.md). 
 **Outcome:** hover/click picking no longer raycasts every town triangle. `src/picking/hitVolumes.ts` buckets each batch's world-space triangles per group slot into invisible volumes (neon-glow shell excluded), and the pick tests entered volumes only (0.40 ms → 0.05 ms at 45k tris on the HUD). Same slot contract, rigs untouched.
 **Divergence recorded, not resolved:** the spec (D-021) puts authored hit volumes in `export_extras` — one invisible proxy per neighborhood. The implementation derives volumes from render triangles at runtime. Whether authored proxies or derived volumes win is @bubbles' call in **fol-kes.2** (needs-human). The known derived-volume limitation (deleted-but-uncompacted geometry lingers as ghost volumes until the next compact) is carried by fol-kes.5, gated on that decision.
 *Refines:* D-021, D-032.
+*Unresolved policy superseded by D-074; derived volumes were approved on 2026-10-03.*
 
 ### D-067 The day pond mirrors warm architecture (fol-snu.2)
 **Outcome:** the quarter-res mirrored pass (D-057) draws occluders in a cheap lit color derived per-draw from the live palette by day — so the pond mirrors warm architecture masses instead of flat teal — and black at night, when only neon draws lit. Follows palette drafts with no frozen import-time color.
@@ -830,6 +832,32 @@ Source: [reviews/2026-10-03-code-review.md](reviews/2026-10-03-code-review.md). 
 Each cell is the median-of-bursts figure the bench prints; slice-exit numbers are fol-l1r.6's close record, span-exit numbers the 2026-10-03 review's gate lane (which passed: budget ok). The 2.09 / 2.01 figures are those historical 2026-10-03 numbers, not a current reading. Golden hour moved 1.90 → 2.09 across the span, leaving ~0.4 ms of D-063 headroom for all of breadth — the pressure behind fol-kes.1.
 **Correction:** D-063's metric named a `dist/` build; the build served and measured is `build/client/` (React Router framework output; `dist/` is pre-router). D-063 is corrected above; method and budget are unchanged.
 *Refines:* D-063.
+
+### D-072 Breadth starts with the existing speed target and bounded delivery headroom (fol-kes.1, fol-kes.8)
+**Decision (2026-10-03, @bubbles):** optimize distant detail and reflection work first; a modest limit increase may be considered when evidence calls for it.
+- Keep **≤2.5 ms saturated-frame wall** on the M1 Max under default `?perf=base`, golden hour and night. A delivery allowance increase does not raise this frame target.
+- Start each neighborhood at **3 MB local GLB / 275k triangles**, up from 2.5 MB / 225k (20% bytes, 22% triangles). Allocate **1 MB / 75k** to town mid-LOD, plus **2 MB / 200k** to additional streamed hero detail. These are starting ceilings, not measured network targets. The current exports have no separate LODs; the gate enforces their combined neighborhood ceiling. Actual mid/high exports and enforcing that split belong to fol-kes breadth.
+- Retain the **140 KB shell / 450 KB canvas gzip** caps. D-059's 70 KB shell measurement describes the pre-router build; D-070's post-router cap governs current delivery. Vercel transfer timing must be re-measured in fol-1ux after breadth, rather than inferred from local GLB bytes.
+- Bound the day pond mirror by live nearby instances, including within a shared town batch. Preserve night neon occlusion and restore temporary state even if drawing fails. Use each visible pond’s live world-space bounds expanded by **6 m in XZ**, with no height cutoff so tall local occluders remain. Nearby instances are selected individually; night keeps the full neon/occluder set.
+**Current round evidence** (2026-10-03, final default build, D-063 method):
+
+| Keyframe | Wall ms/frame | JS ms/frame | Ceiling |
+|---|---:|---:|---:|
+| Golden hour | 2.25 | 0.88 | 2.50 |
+| Night | 2.15 | 0.71 | 2.50 |
+
+Cortico remains 2.43 MB / 202,472 triangles; shell is 114.5 KB gz and canvas 375.0 KB gz. These frame results preserve the target; they do not claim a speedup over D-071’s historical 2.09/2.01 numbers. The spatial filter bounds how future remote instances add reflection work.
+
+*Refines:* D-042, D-059, D-063, D-067, D-070. The earlier aggregate delivery ceilings are superseded by this decision; the frame target is unchanged.
+
+### D-073 Try default gentle ambient motion, freeze while reading (fol-kes.3, fol-kes.6, fol-ixw)
+**Decision (2026-10-03, @bubbles):** try foliage and water motion by default on one roughly 30 Hz schedule at rest. Pause for an open content panel, look-dev reading, a hidden tab, or reduced motion. Keep `?sway=off` as a still comparison. Freeze shader time through pauses and resume from the same phase; reflection rendering does not own a separate clock. Assess the feel before expanding the effect.
+**Proof:** 506 unit tests and the affected 8 browser tests pass after the final clock simplification; the earlier full browser lane passed all 42. A one-second hardware-browser startup probe observed 21.9–25.9 clock updates/s against the ~30 Hz target, so this is a capped motion trial, not a claim of sustained 30 fps. Pond crops change at golden hour and night, including with reflection disabled.
+*Refines:* D-056, D-058. The static default is superseded; the quiet-reading and hidden-tab policy stays.
+
+### D-074 Runtime-derived hit volumes are the approved approach (fol-kes.2, fol-8n6)
+**Decision (2026-10-03, @bubbles):** option B from fol-kes.2 stands: cache invisible per-group volumes derived from live render instances. Authored hit proxies in `export_extras` are not required. Instance visibility, geometry liveness, transforms, group slots, and replacement mesh identity invalidate that cache; glow redraws do not create additional pick targets. fol-kes.5 fixed live-instance handling; fol-8n6 adds replacement identity coverage. This records the picking approach; town-level neighborhood hover composition remains breadth work under D-021.
+*Refines:* D-021, D-032, D-034, D-066. The authored-export proxy requirement and the unresolved conflict in D-066 are superseded.
 
 ---
 
