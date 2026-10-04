@@ -4,8 +4,8 @@ the levels, one mint neon line in the groove under a terrace lip, and a
 reflecting pool below it.
 
 Light-pool spots (fol-kes.4) are authored here at bake on the live terrace
-outlines and written to the sibling fragment-layout.json, which the
-LightPools rig reads — no runtime raycast. Every build rewrites the layout,
+outlines and written to the sibling fragment.pools.json, which the
+LightPools rig reads — no runtime raycast. Every build rewrites the pools file,
 so it can never drift from the geometry.
 """
 
@@ -20,7 +20,7 @@ from folia.mesh import Part
 
 TAU = math.tau
 
-LAYOUT_PATH = Path(__file__).with_name("fragment-layout.json")
+POOLS_PATH = Path(__file__).with_name("fragment.pools.json")
 
 # Light pools (fol-kes.4): lantern spill quads authored on walkable terrace.
 # Radius/lift/spacing come from the "pools" params in fragment.json (the same
@@ -94,9 +94,9 @@ def assemble(p, rng):
                      rim_neon["sides"])
     parts.append(Part(run, "neon", g["terrace"]))
 
-    # Authored light-pool spots (fol-kes.4): every build rewrites the layout
+    # Authored light-pool spots (fol-kes.4): every build rewrites the pools file
     # from these live outlines, so the TS rig can never drift from the mesh.
-    LAYOUT_PATH.write_text(json.dumps(pool_layout(p, outlines, levels), indent=2) + "\n")
+    POOLS_PATH.write_text(json.dumps(pool_layout(p, outlines, levels), indent=2) + "\n")
 
     return parts
 
@@ -154,7 +154,7 @@ def _dist_to_outline(x, y, outline):
 
 
 def pool_layout(p, outlines, levels):
-    """Light-pool spots on walkable terrace, plain data for fragment-layout.json.
+    """Light-pool spots on walkable terrace, plain data for fragment.pools.json.
 
     Samples the plan-view walk lines, keeps the highest terrace top under each
     sample, and drops whatever is not walkable: off-terrace (lawn), too close
@@ -175,8 +175,8 @@ def pool_layout(p, outlines, levels):
     w = p["water"]
     pond_at = w["centre"]
     pond_r = w["radius"] * (1 + sum(w["harmonics"])) + w["rim"]["radius"]
-    forum_layout = json.loads(LAYOUT_PATH.with_name("forum-layout.json").read_text())
-    forum_params = json.loads(LAYOUT_PATH.with_name("forum.json").read_text())
+    forum_layout = json.loads(POOLS_PATH.with_name("forum-layout.json").read_text())
+    forum_params = json.loads(POOLS_PATH.with_name("forum.json").read_text())
     forum_at, forum_r = forum_layout["centre"], forum_params["medallion"]["radius"]
 
     pools = []

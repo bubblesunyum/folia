@@ -2,7 +2,7 @@
 // lantern light drawn as flat decals on the terrace walk lines, where
 // lanterns and paths will go. The spots are authored at bake in
 // assets/blender/cortico/fragment.py on the live terrace outlines and read
-// from the sibling fragment-layout.json (the forum-layout.json anchor
+// from the sibling fragment.pools.json (the forum-layout.json anchor
 // precedent) — the runtime only builds the merged quad mesh, never grounds,
 // raycasts, or polls. No lantern geometry exists yet, so these baked spots
 // stand in for the future lantern/planter spill until the fragment models them.
@@ -101,7 +101,7 @@ export function buildLightPoolGeometry(pools: readonly PoolSpot[]): BufferGeomet
 }
 
 /**
- * The authored pool spots (fol-kes.4): parsed out of fragment-layout.json,
+ * The authored pool spots (fol-kes.4): parsed out of fragment.pools.json,
  * the file the fragment bake writes. Fail closed on any drift — a missing or
  * malformed entry throws instead of drawing a half-grounded ring.
  */

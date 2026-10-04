@@ -91,6 +91,7 @@ export function assetSources(asset: string): string[] {
   // Placement lives next to the asset in its layout file (fol-bll): hash it
   // with the asset so a placement edit rebuilds instead of shipping stale
   // geometry. Generic: any asset with a sibling *-layout.json picks it up.
+  // Bake outputs must never use the -layout.json suffix, since they'd be hashed as their own input.
   const layoutFile = join(BLENDER_DIR, `${asset}-layout.json`)
   const layout = existsSync(layoutFile) ? [layoutFile] : []
   // pool_layout() in cortico/fragment.py reads the forum placement and params

@@ -1,5 +1,5 @@
 // Authored light-pool placement (fol-kes.4): the checked-in
-// fragment-layout.json is the owning source, so this spec pins every pool to
+// fragment.pools.json is the owning source, so this spec pins every pool to
 // a walkable terrace top — the right level's height (never the canopy roof),
 // inside that level's baked outline (never lawn), clear of the trunk, petals,
 // pond and forum footprints, and separated from every other pool. Any params
@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import forumParams from '../../assets/blender/cortico/forum.json' with { type: 'json' }
 import forumLayout from '../../assets/blender/cortico/forum-layout.json' with { type: 'json' }
 import fragmentParams from '../../assets/blender/cortico/fragment.json' with { type: 'json' }
-import fragmentLayout from '../../assets/blender/cortico/fragment-layout.json' with { type: 'json' }
+import fragmentPools from '../../assets/blender/cortico/fragment.pools.json' with { type: 'json' }
 import {
   POOL_LIFT_M,
   POOL_RADIUS_M,
@@ -48,7 +48,7 @@ function distToOutline(x: number, z: number, outline: Outline): number {
   return best
 }
 
-const layout = fragmentLayout as unknown as {
+const layout = fragmentPools as unknown as {
   source: {
     seed: number
     harmonics: number[]
@@ -116,7 +116,7 @@ describe('light-pool layout source (fol-kes.4)', () => {
   })
 
   it('parses through the component path', () => {
-    expect(parseLightPoolLayout(fragmentLayout)).toHaveLength(layout.pools.length)
+    expect(parseLightPoolLayout(fragmentPools)).toHaveLength(layout.pools.length)
   })
 })
 
