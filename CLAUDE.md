@@ -24,13 +24,13 @@ Vite + React Router v8 (framework mode, `prerender`, fully static), R3F 9 + drei
 - **UI copy:** one-word labels, spacing instead of rules, no eyebrow kickers, in-world before flat chrome (spec: design rules).
 
 ## Patterns worth repeating
-These have paid off (reviews 2026-09-29 through 10-03), so new systems should follow them.
+These have paid off (reviews 2026-09-29 through 10-04), so new systems should follow them.
 - **Pure core, thin rig.** Logic lives in plain modules with Vitest (`zoomModel`, `townRegistry`, `panelDolly`, `intent`); the R3F component only wires events and uniforms. Shader terms get a plain TS mirror pinned in Vitest (`heightFog`, `moonRim`, `windowBands`, the foliage curve) instead of pixel tests.
-- **Identity over names, all or nothing.** Classify batches by material identity, never by name; a registration lands whole or rolls back, and replaced GPU objects are disposed after commit.
-- **Derive from one source, fail closed on drift.** Placement, slots, routes and budgets are read from the file that owns them (layout JSON, manifest, content dir, router manifest), never hand-copied, and anything that disagrees throws: the SSR-boundary step, pack's `_ID` remap, the manifest lock, the fresh-build check, inert shader defaults.
-- **Values, not programs.** Look and time changes write shared uniform objects (the sky and fog share one set); policies flip update flags. Nothing at runtime recompiles.
+- **Identity over names, all or nothing.** Classify batches by material identity and gate on owner registration, never names; a registration lands whole or rolls back, replaced GPU objects are disposed after commit, and a pass that borrows scene state restores it in `finally`.
+- **Derive from one source, fail closed on drift.** Placement, slots, routes and budgets are read from the file that owns them (layout JSON, manifest, content dir, router manifest), never hand-copied, and anything that disagrees throws: the SSR-boundary step, pack's `_ID` remap, the manifest lock, the fresh-build check, inert shader defaults. A bake's own output is never hashed as its input.
+- **Values, not programs.** Look and time changes write shared uniform objects (the sky and fog share one set); policies flip update flags. Nothing at runtime recompiles. A shader value is declared by one feature and consumers list it in `requires`, so the composer throws on a missing one.
 - **Every decision ends with numbers, in the log.** Spikes, slice exits and budget changes get a decision entry with a cost table from the `?perf=base` proxy, in the same span as the change.
-- **Render on demand (D-056).** Anything that animates goes through one scheduler and keeps the e2e idle-rest test green.
+- **Render on demand (D-056).** Anything that animates goes through the one ambient scheduler (on by default, D-073); `?sway=off` must rest at zero draws under an e2e guard (restored by fol-kes.11).
 - **URL switches are the tier ladder in waiting.** `?bloom=off`, `?reflection=off` and `?shadows=static` become D-036 tier inputs, not a second system.
 - **Tests run the way users arrive.** E2E waits on the `data-*` flags the app sets, never a timeout, and loads routes directly from a Vercel-like static server.
 
