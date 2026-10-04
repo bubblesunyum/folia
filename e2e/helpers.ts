@@ -25,3 +25,20 @@ export async function waitForTownDrawn(page: Page, assets: string): Promise<void
 export function expectNoErrors(errors: string[]): void {
   expect(errors).toEqual([])
 }
+
+/** Counts WebGL draw calls the page issues. */
+export const COUNT_DRAWS = `
+  window.foliaDrawCalls = 0
+  for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
+    const original = WebGL2RenderingContext.prototype[name]
+    WebGL2RenderingContext.prototype[name] = function (...args) {
+      window.foliaDrawCalls += 1
+      return original.apply(this, args)
+    }
+  }
+`
+
+/** Fetch the current WebGL draw call count. */
+export function drawCalls(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as { foliaDrawCalls: number }).foliaDrawCalls)
+}

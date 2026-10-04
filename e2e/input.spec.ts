@@ -1,6 +1,7 @@
 import { expect, type Page, test } from '@playwright/test'
 import { DETENT_GIVE_MAX } from '../src/input/zoomModel'
 import { type CanvasHookName, canvasHookSelector, RISE_COUNT_KEY } from '../src/testHooks'
+import { COUNT_DRAWS } from './helpers'
 
 // ZOOM_LIMITS in src/input/ZoomRig.tsx: the look-dev camera sits at 80 m.
 const FAR_LIMIT = 90
@@ -139,16 +140,7 @@ test('a trackpad gesture still zooms once the fingers are gone', async ({ page }
 })
 
 test('ctrl+wheel paints a frame through the demand loop', async ({ page }) => {
-  await page.addInitScript(`
-    window.foliaDrawCalls = 0
-    for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
-      const original = WebGL2RenderingContext.prototype[name]
-      WebGL2RenderingContext.prototype[name] = function (...args) {
-        window.foliaDrawCalls += 1
-        return original.apply(this, args)
-      }
-    }
-  `)
+  await page.addInitScript(COUNT_DRAWS)
   await page.reload()
   await expect(page.locator(canvasHookSelector('assets', 'drawn'))).toBeVisible({ timeout: 60_000 })
   const calls = () =>

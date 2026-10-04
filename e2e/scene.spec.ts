@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { COUNT_DRAWS } from './helpers'
 
 // Captures land in /tmp/fol-*.png, where scripts/review.sh hands them to the design reviewer.
 const keyframes = [
@@ -42,16 +43,7 @@ test('?perf=base renders at the base Air size and benches a burst', async ({ pag
 })
 
 test('the scene redraws when the camera moves', async ({ page }) => {
-  await page.addInitScript(`
-    window.foliaDrawCalls = 0
-    for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
-      const original = WebGL2RenderingContext.prototype[name]
-      WebGL2RenderingContext.prototype[name] = function (...args) {
-        window.foliaDrawCalls += 1
-        return original.apply(this, args)
-      }
-    }
-  `)
+  await page.addInitScript(COUNT_DRAWS)
   await page.goto('/?time=18:30')
   const canvas = page.locator('canvas[data-assets="drawn"]')
   await expect(canvas).toBeVisible({ timeout: 60_000 })

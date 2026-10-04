@@ -1,6 +1,6 @@
-import { expect, type Page, test } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import { canvasHookAttribute } from '../src/testHooks'
-import { expectNoErrors, trackErrors, waitForTownDrawn } from './helpers'
+import { COUNT_DRAWS, drawCalls, expectNoErrors, trackErrors, waitForTownDrawn } from './helpers'
 
 // fol-p8k: the open panel must rest like the look-dev scene does (D-056).
 // The wisp's perch bob used to invalidate every frame, so the longest dwell
@@ -11,23 +11,10 @@ import { expectNoErrors, trackErrors, waitForTownDrawn } from './helpers'
 
 const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow'
 
-function drawCalls(page: Page): Promise<number> {
-  return page.evaluate(() => (window as unknown as { foliaDrawCalls: number }).foliaDrawCalls)
-}
-
 test('the open panel rests: zero draw calls after arrival', async ({ page }) => {
   test.slow()
   const errors = trackErrors(page)
-  await page.addInitScript(`
-    window.foliaDrawCalls = 0
-    for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
-      const original = WebGL2RenderingContext.prototype[name]
-      WebGL2RenderingContext.prototype[name] = function (...args) {
-        window.foliaDrawCalls += 1
-        return original.apply(this, args)
-      }
-    }
-  `)
+  await page.addInitScript(COUNT_DRAWS)
   await page.goto('/cortico/platform?time=18:30')
   await waitForTownDrawn(page, ASSETS)
   await expect(page.getByTestId('case-panel')).toBeVisible({ timeout: 15_000 })
