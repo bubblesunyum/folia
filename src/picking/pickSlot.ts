@@ -43,6 +43,10 @@ interface VolumeCache {
 
 let cache: VolumeCache | null = null
 
+/** Stable identity token: a replaced batch can have identical versions and sizes. */
+let meshIdentities = new WeakMap<object, number>()
+let nextMeshIdentity = 1
+
 /** Highest live slot seen + 1, per batch mesh: freed ids reuse low, appends grow. Reset with the cache. */
 let scanBounds = new WeakMap<object, number>()
 
@@ -50,6 +54,17 @@ let scanBounds = new WeakMap<object, number>()
 export function clearPickCache(): void {
   cache = null
   scanBounds = new WeakMap()
+  meshIdentities = new WeakMap()
+  nextMeshIdentity = 1
+}
+
+function identityOf(mesh: object): number {
+  let identity = meshIdentities.get(mesh)
+  if (identity === undefined) {
+    identity = nextMeshIdentity++
+    meshIdentities.set(mesh, identity)
+  }
+  return identity
 }
 
 /** Duck-typed `Matrix4` target: `getMatrixAt` only ever calls `fromArray`. */
@@ -259,6 +274,7 @@ function fingerprint(meshes: ReadonlyMap<string, BatchedMesh>): string {
     parts.push(
       [
         name,
+        identityOf(mesh),
         pickMesh.instanceCount,
         pickMesh.maxInstanceCount,
         position?.count ?? -1,

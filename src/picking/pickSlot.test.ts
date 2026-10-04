@@ -182,6 +182,26 @@ describe('pickSlotFromHit', () => {
     expect(pick(meshes, raycaster, pointer)).toBe(4)
   })
 
+  it('rebuilds when a same-named mesh is replaced with matching attribute metadata', () => {
+    const { pointer, raycaster } = rig([0.25, 0.25, 5], [0, 0, -1])
+    const meshes = new Map([['cream', triMesh('cream', 9, 0)]])
+    expect(pick(meshes, raycaster, pointer)).toBe(9)
+    // New BufferAttributes can have the same sizes and versions while their
+    // positions or group IDs differ; their mesh object identity must move the key.
+    meshes.set(
+      'cream',
+      batchMesh('cream', {
+        positions: [10, 0, 0, 11, 0, 0, 10, 1, 0],
+        groups: [4, 4, 4],
+        index: [0, 1, 2],
+      }),
+    )
+    const overOld = rig([0.25, 0.25, 5], [0, 0, -1])
+    const overNew = rig([10.25, 0.25, 5], [0, 0, -1])
+    expect(pick(meshes, overOld.raycaster, pointer)).toBeNull()
+    expect(pick(meshes, overNew.raycaster, pointer)).toBe(4)
+  })
+
   it('records the pick query milliseconds for the HUD', () => {
     const { pointer, raycaster } = rig([0.25, 0.25, 5], [0, 0, -1])
     const meshes = new Map([['cream', triMesh('cream', 9)]])
