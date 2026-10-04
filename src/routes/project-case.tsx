@@ -1,4 +1,4 @@
-import type { LoaderFunctionArgs, MetaFunction } from 'react-router'
+import type { ClientLoaderFunctionArgs, LoaderFunctionArgs, MetaFunction } from 'react-router'
 import { warmCaseBody } from '../content/bodies'
 import { type CaseDoc, loadProject, type ProjectDoc } from '../content/load'
 import { neighborhoodSignature } from '../palette'
@@ -26,12 +26,19 @@ export async function loader({ params }: LoaderFunctionArgs): Promise<CasePage> 
   if (found === undefined) {
     throw new Response(`unknown case "${params.slug ?? ''}"`, { status: 404 })
   }
-  // Warm the case body chunk while the router waits, after the slug proves
-  // known: the panel then renders it synchronously on prerender and
-  // navigation (fol-kes.9). The warmed component never crosses the loader
-  // boundary — loader data stays serializable frontmatter.
+  // Prerender only (client navigation warms in `clientLoader`), after the slug
+  // proves known: the panel renders the real body into the static HTML
+  // (fol-kes.9). The warmed component never crosses the loader boundary.
   await warmCaseBody(params.project, found.slug)
   return { ...found, projectSlug: project.slug, projectTitle: project.title }
+}
+
+// Client navigation never runs `loader` (static build: .data payload only),
+// so warm the body chunk before the route commits (fol-kes.12).
+export async function clientLoader({ serverLoader }: ClientLoaderFunctionArgs): Promise<CasePage> {
+  const data = await serverLoader<CasePage>()
+  await warmCaseBody(data.projectSlug, data.slug)
+  return data
 }
 
 export const meta: MetaFunction<typeof loader> = ({ loaderData }) => [

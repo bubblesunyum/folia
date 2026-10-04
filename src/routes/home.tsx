@@ -1,16 +1,23 @@
 import { Suspense } from 'react'
-import type { MetaFunction } from 'react-router'
+import type { ClientLoaderFunctionArgs, MetaFunction } from 'react-router'
 import { Link } from 'react-router'
 import { townBody, warmTownBody } from '../content/bodies'
 import { loadTown, type TownDoc } from '../content/load'
 import { mdxComponents } from '../content/mdx-components'
 
 export async function loader(): Promise<TownDoc> {
-  // Warm the town body chunk while the router waits: the render below then
-  // resolves synchronously on prerender and navigation (fol-kes.9). Loader
-  // data stays serializable frontmatter — the component never crosses it.
+  // Prerender only: warms the body so the static HTML carries the real copy.
+  // Loader data stays serializable frontmatter — the component never crosses.
   await warmTownBody()
   return loadTown()
+}
+
+// Client navigation never runs `loader` (fully static: it gets the .data
+// payload), so warm the body chunk here before the route commits (fol-kes.12).
+// Not `hydrate`: first load renders behind the Suspense boundary instead.
+export async function clientLoader({ serverLoader }: ClientLoaderFunctionArgs): Promise<TownDoc> {
+  const [data] = await Promise.all([serverLoader<TownDoc>(), warmTownBody()])
+  return data
 }
 
 export const meta: MetaFunction<typeof loader> = ({ loaderData }) => [

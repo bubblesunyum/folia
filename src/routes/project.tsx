@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import type { LoaderFunctionArgs, MetaFunction } from 'react-router'
+import type { ClientLoaderFunctionArgs, LoaderFunctionArgs, MetaFunction } from 'react-router'
 import { Link } from 'react-router'
 import { projectBody, warmProjectBody } from '../content/bodies'
 import { loadProject, type ProjectDoc } from '../content/load'
@@ -22,10 +22,20 @@ export async function loader({ params }: LoaderFunctionArgs): Promise<ProjectDoc
   } catch {
     throw new Response(`unknown project "${params.project}"`, { status: 404 })
   }
-  // Warm the project body chunk while the router waits, after the slug proves
+  // Prerender only (client navigation warms in `clientLoader`), after the slug proves
   // known: chunk failure propagates instead of mapping to 404 (fol-kes.9).
   await warmProjectBody(params.project)
   return project
+}
+
+// Client navigation never runs `loader` (static build: .data payload only),
+// so warm the body chunk before the route commits (fol-kes.12).
+export async function clientLoader({
+  serverLoader,
+}: ClientLoaderFunctionArgs): Promise<ProjectDoc> {
+  const data = await serverLoader<ProjectDoc>()
+  await warmProjectBody(data.slug)
+  return data
 }
 
 export const meta: MetaFunction<typeof loader> = ({ loaderData }) => [

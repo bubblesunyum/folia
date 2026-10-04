@@ -4,12 +4,12 @@
 // chunk. Frontmatter stays in the `?frontmatter` path in load.ts — this
 // module only resolves renderable bodies by slug.
 //
-// Two reads share one cache. Route loaders `await` the warm function first
-// (serializable frontmatter still owns the loader data; the warmed component
-// never crosses it), so prerender and client navigation render the real
-// component synchronously and the static HTML is unchanged. Client hydration
-// never re-runs loaders, so the sync read falls back to a cached `lazy`
-// wrapper behind the route's Suspense boundary instead. The glob runs inside
+// Two reads share one cache. Server loaders `await` the warm function at
+// prerender, and each route's `clientLoader` awaits it on client navigation
+// (a static build runs no server loader client-side; fol-kes.12), so both
+// render the real component synchronously and the static HTML is unchanged.
+// Client hydration runs neither, so the sync read falls back to a cached
+// `lazy` wrapper behind the route's Suspense boundary instead. The glob runs inside
 // a memoized getter, not at module top level, so importing this module
 // without a Vite transform (Playwright) never touches `import.meta.glob` —
 // first use throws fail-closed there instead. The glob call must reference
@@ -53,9 +53,9 @@ function loaderFor(key: string): BodyLoader {
 }
 
 /**
- * Await this in the route loader before rendering: the chunk loads while the
- * router waits, so the component below resolves synchronously. Returns the
- * warmed component for tests.
+ * Await this in the route loader (prerender) and clientLoader (navigation):
+ * the chunk loads while the router waits, so the component below resolves
+ * synchronously. Returns the warmed component for tests.
  */
 export async function warmBody(key: string): Promise<MdxBody> {
   const hit = warmed.get(key)
@@ -67,10 +67,10 @@ export async function warmBody(key: string): Promise<MdxBody> {
 
 /**
  * The body for a content file: the warmed component when its route loader
- * ran (prerender, client navigation, warmed tests), else a cached `lazy`
- * wrapper that resolves to the same component — render behind Suspense.
- * Throws fail-closed on unknown keys and on renders no loader warmed and
- * no chunk provides (never a silent empty article).
+ * ran (prerender, client navigation via clientLoader, warmed tests), else a
+ * cached `lazy` wrapper that resolves to the same component — render behind
+ * Suspense. Throws fail-closed on unknown keys and on renders no loader
+ * warmed and no chunk provides (never a silent empty article).
  */
 function bodyForKey(key: string): MdxBody {
   const hit = warmed.get(key)
