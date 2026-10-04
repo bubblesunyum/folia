@@ -67,8 +67,10 @@ test('the open panel rests: zero draw calls after arrival', async ({ page }) => 
 
   // The D-056 rest window: zero new draws while the panel stays open.
   const resting = await drawCalls(page)
+  const ambientTime = await canvas.getAttribute('data-ambient-time')
   await page.waitForTimeout(500)
   expect(await drawCalls(page)).toBe(resting)
+  expect(await canvas.getAttribute('data-ambient-time')).toBe(ambientTime)
 
   expectNoErrors(errors)
 })

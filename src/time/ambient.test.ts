@@ -89,6 +89,38 @@ describe('ambient scheduler', () => {
     expect(seen).toHaveLength(2)
   })
 
+  it('freezes for an open panel or reduced motion and resumes from the same phase', () => {
+    const { scheduler, seen } = registered()
+    scheduler.tick(0, LIVE)
+    scheduler.tick(1000, { ...LIVE, panelOpen: true })
+    scheduler.tick(2000, { ...LIVE, reducedMotion: true })
+    expect(scheduler.time).toBe(0)
+    expect(seen).toEqual([0])
+    expect(scheduler.tick(2000, LIVE)).toBe(false)
+    expect(scheduler.tick(2001 + AMBIENT_INTERVAL_MS, LIVE)).toBe(true)
+    expect(scheduler.time).toBeCloseTo((AMBIENT_INTERVAL_MS + 1) / 1000, 6)
+  })
+
+  it('emits about thirty ticks a second on integer-millisecond browser timers', () => {
+    const { scheduler, seen } = registered()
+    scheduler.tick(0, LIVE)
+    const interval = Math.ceil(AMBIENT_INTERVAL_MS)
+    for (let now = interval; now <= 1000; now += interval) scheduler.tick(now, LIVE)
+    expect(seen).toHaveLength(30)
+  })
+
+  it('starts a fresh deterministic phase after the last consumer leaves', () => {
+    const { scheduler, seen } = registered()
+    scheduler.tick(0, LIVE)
+    scheduler.tick(1000, LIVE)
+    expect(scheduler.time).toBe(1)
+    scheduler.unregister('sway')
+    scheduler.register('sway', { update: (time) => seen.push(time) })
+    expect(scheduler.time).toBe(0)
+    scheduler.tick(50_000, LIVE)
+    expect(seen.at(-1)).toBe(0)
+  })
+
   it('never ticks with zero consumers, so idle scenes rest', () => {
     const scheduler = new AmbientScheduler()
     expect(scheduler.tick(0, LIVE)).toBe(false)

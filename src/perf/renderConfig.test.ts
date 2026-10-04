@@ -12,7 +12,7 @@ describe('parseRenderConfig', () => {
       stress: 0,
       bloom: true,
       reflection: true,
-      sway: false,
+      sway: true,
       shadowFit: 'town',
       shadowPolicy: 'live',
     })
@@ -28,7 +28,7 @@ describe('parseRenderConfig', () => {
       stress: 0,
       bloom: true,
       reflection: true,
-      sway: false,
+      sway: true,
       shadowFit: 'town',
       shadowPolicy: 'live',
     })
@@ -74,7 +74,7 @@ describe('parseRenderConfig', () => {
       shadowFit: 'vantage',
       shadowPolicy: 'static',
     })
-    expect(parseRenderConfig('?sway=yes&fit=wide&shadows=off')).toMatchObject({
+    expect(parseRenderConfig('?sway=off&fit=wide&shadows=off')).toMatchObject({
       sway: false,
       shadowFit: 'town',
       shadowPolicy: 'live',

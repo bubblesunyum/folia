@@ -1,18 +1,17 @@
 /**
- * The ambient-motion scheduler (D-056, fol-s6f): the one clock that owns the
- * shader time uniforms. Sway used to invalidate every frame at display rate;
- * ripple, birds and clouds are next, so consumers register here instead of
- * each running their own loop.
+ * The ambient-motion scheduler (D-056): the one clock that owns shader time
+ * uniforms. Consumers register here instead of running their own loops.
  *
- * Cadence: about 30 Hz at rest, higher only during interaction (frames caused
- * by anything else also tick the clock, so motion stays smooth while
- * orbiting). Paused while the tab is hidden or a panel is being read, and
- * idle with zero consumers it never ticks, so the e2e rest test still sees
- * zero draw calls. Time freezes while paused rather than jumping on resume.
+ * Cadence: about 30 Hz, owned by one interval. Interaction can render more
+ * often while consuming the latest shared time. Paused while the tab is
+ * hidden, a panel is open or being read,
+ * or reduced motion is requested. With zero consumers it never ticks. Time
+ * freezes while paused rather than jumping on resume, and a fresh mount starts
+ * at t = 0.
  *
  * Pure core: this module takes an explicit `nowMs` and explicit signals, so
- * tests drive it with fake clocks. The R3F component (`scene/Sway`) only
- * wires `performance.now`, `document.visibilityState` and `invalidate`.
+ * tests drive it with fake clocks. The R3F component only wires browser
+ * signals and `invalidate`.
  */
 
 /** Rest cadence: ~30 Hz (D-056). */
@@ -33,6 +32,10 @@ export interface AmbientSignals {
   visible: boolean
   /** A look-dev panel is being read; set via `setAmbientReading`. */
   reading: boolean
+  /** Any portfolio content panel is open. */
+  panelOpen?: boolean
+  /** `prefers-reduced-motion: reduce`. */
+  reducedMotion?: boolean
 }
 
 export class AmbientScheduler {
@@ -54,6 +57,10 @@ export class AmbientScheduler {
 
   register(id: string, consumer: AmbientConsumer): void {
     if (this.consumers.has(id)) throw new Error(`ambient consumer "${id}" is already registered`)
+    if (this.consumers.size === 0) {
+      this.elapsedSeconds = 0
+      this.primed = false
+    }
     this.consumers.set(id, consumer)
     consumer.claim?.()
   }
@@ -63,6 +70,11 @@ export class AmbientScheduler {
     if (!consumer) return
     this.consumers.delete(id)
     consumer.release?.()
+    if (this.consumers.size === 0) {
+      this.elapsedSeconds = 0
+      this.lastTickMs = 0
+      this.primed = false
+    }
   }
 
   /** Re-baselines the cadence without advancing time; the wiring calls this on resume. */
@@ -75,7 +87,13 @@ export class AmbientScheduler {
    * Returns true when uniforms were written, i.e. the caller must invalidate.
    */
   tick(nowMs: number, signals: AmbientSignals): boolean {
-    if (this.consumers.size === 0 || !signals.visible || signals.reading) {
+    if (
+      this.consumers.size === 0 ||
+      !signals.visible ||
+      signals.reading ||
+      signals.panelOpen ||
+      signals.reducedMotion
+    ) {
       // Frozen, not stopped: keep the baseline fresh so resume continues the
       // phase instead of jumping by the paused duration.
       this.lastTickMs = nowMs

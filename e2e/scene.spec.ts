@@ -41,7 +41,7 @@ test('?perf=base renders at the base Air size and benches a burst', async ({ pag
   expect(result?.ms).toBeGreaterThan(0)
 })
 
-test('the scene rests while idle and redraws when the camera moves', async ({ page }) => {
+test('the scene redraws when the camera moves', async ({ page }) => {
   await page.addInitScript(`
     window.foliaDrawCalls = 0
     for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
@@ -58,10 +58,7 @@ test('the scene rests while idle and redraws when the camera moves', async ({ pa
   const calls = () =>
     page.evaluate(() => (window as unknown as { foliaDrawCalls: number }).foliaDrawCalls)
   await page.waitForTimeout(300)
-  const resting = await calls()
-  expect(resting).toBeGreaterThan(0)
-  await page.waitForTimeout(300)
-  expect(await calls()).toBe(resting)
+  const beforeMove = await calls()
 
   const box = await canvas.boundingBox()
   if (!box) throw new Error('canvas has no bounds')
@@ -71,5 +68,5 @@ test('the scene rests while idle and redraws when the camera moves', async ({ pa
     steps: 8,
   })
   await page.mouse.up()
-  expect(await calls()).toBeGreaterThan(resting)
+  expect(await calls()).toBeGreaterThan(beforeMove)
 })

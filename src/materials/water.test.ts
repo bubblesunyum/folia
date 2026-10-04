@@ -6,7 +6,7 @@ import { ShaderLib } from 'three'
 import { describe, expect, it } from 'vitest'
 import { AMBIENT_INTERVAL_MS, AmbientScheduler } from '../time/ambient'
 import { inject } from './composer'
-import { RIPPLE_CONSUMER_ID, rippleConsumer, water } from './water'
+import { RIPPLE_CONSUMER_ID, rippleConsumer, water, waterTintAt } from './water'
 
 describe('ripple uniforms', () => {
   it('parks the time at 0: still renders sit on the authored pose', () => {
@@ -17,6 +17,14 @@ describe('ripple uniforms', () => {
     expect(water.uniforms.uDistort.value).toBe(0.008)
     expect(water.uniforms.uRipple.value).toBe(0.14)
     expect(water.uniforms.uRippleScale.value).toBe(0.9)
+  })
+
+  it('moves visible pool-teal ridges across the surface as ambient time advances', () => {
+    const points = Array.from({ length: 64 }, (_, i) => [i * 0.19, (i % 9) * 0.31] as const)
+    const still = points.map(([x, z]) => waterTintAt(x, z, 0))
+    const moved = points.map(([x, z]) => waterTintAt(x, z, 2))
+    const changed = still.filter((value, i) => Math.abs(value - (moved[i] ?? value)) > 0.08).length
+    expect(changed).toBeGreaterThan(8)
   })
 })
 
@@ -63,8 +71,14 @@ describe('ripple chunks', () => {
   })
 
   it('advects the octaves against each other, not as one sliding sheet', () => {
-    expect(header).toContain('+ vec2(0.06, 0.035) * t')
-    expect(header).toContain('- vec2(0.045, 0.075) * t')
+    expect(header).toContain('+ vec2(0.32, 0.18) * t')
+    expect(header).toContain('- vec2(0.24, 0.36) * t')
+  })
+
+  it('uses the animated ripple as a restrained visible pool color cue', () => {
+    const color = water.fragment?.chunks?.color_fragment?.after as string
+    expect(color).toContain('waterHeight(vWaterWorld.xz, uRippleTime)')
+    expect(color).toContain('diffuseColor.rgb *= 0.84 + rippleTint * 0.24')
   })
 
   it('still injects into the real standard program', () => {

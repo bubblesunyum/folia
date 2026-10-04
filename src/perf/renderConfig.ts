@@ -32,7 +32,7 @@ export interface RenderConfig {
   bloom: boolean
   /** The water's mirrored neon pass; `?reflection=off` keeps env and Fresnel only (D-039). */
   reflection: boolean
-  /** Foliage sway; on it opts out of the idle rest (D-056), so it defaults off. */
+  /** Ambient foliage and pond motion; `?sway=off` keeps the scene still. */
   sway: boolean
   /** Shadow frustum fit: the wide town box or the tight vantage box (spike 5, D-041). */
   shadowFit: ShadowFit
@@ -76,7 +76,7 @@ export function parseRenderConfig(search: string): RenderConfig {
     : 0
   const bloom = params.get('bloom') !== 'off'
   const reflection = params.get('reflection') !== 'off'
-  const sway = params.get('sway') === 'on'
+  const sway = params.get('sway') !== 'off'
   const shadowFit: ShadowFit = params.get('fit') === 'vantage' ? 'vantage' : 'town'
   const shadowPolicy: ShadowPolicy = params.get('shadows') === 'static' ? 'static' : 'live'
   if (params.get('perf') !== 'base') {

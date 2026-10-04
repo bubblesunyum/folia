@@ -6,13 +6,13 @@ import { PanelCameraRig } from '../panel/PanelCameraRig'
 import { PedestalNavigate } from '../panel/PedestalNavigate'
 import { WispLight } from '../panel/WispLight'
 import { StressDraws } from '../perf/StressDraws'
+import { AmbientMotion } from './AmbientMotion'
 import { Fragment } from './Fragment'
 import { HoverHighlight } from './HoverHighlight'
 import { LightPools } from './LightPools'
 import { Lights } from './Lights'
 import { MaterialLook } from './MaterialLook'
 import { SkyEnvironment } from './SkyEnvironment'
-import { Sway } from './Sway'
 import { WaterReflection } from './WaterReflection'
 
 /** The look-dev scene: the Cortico fragment under the real env, lights, time of day and water. */
@@ -25,7 +25,7 @@ export function LookDevScene() {
       <Lights />
       <WispLight />
       <MaterialLook />
-      {renderConfig.sway && <Sway />}
+      {renderConfig.sway && <AmbientMotion />}
       {renderConfig.reflection && <WaterReflection />}
       <Suspense fallback={null}>
         <Fragment />

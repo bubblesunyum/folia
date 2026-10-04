@@ -60,15 +60,22 @@ export const water = {
                    mix(waterHash(i + vec2(0.0, 1.0)), waterHash(i + vec2(1.0, 1.0)), f.x), f.y);
       }
       // Two octaves, stretched along x so the ripples run across the pool,
-      // advected in opposite directions by the ambient clock so the motion
-      // reads as water rather than a sliding sheet. At t = 0 the offsets are
-      // exactly zero, so still renders sit on the old pose.
+      // advected in opposite directions by the ambient clock. The color
+      // modulation below makes those moving ridges readable at this framing.
       float waterHeight(vec2 p, float t) {
         vec2 rippleBase = p * uRippleScale * vec2(0.6, 1.4);
-        return waterNoise(rippleBase + vec2(0.06, 0.035) * t)
-          + 0.5 * waterNoise(rippleBase * 2.3 + 7.1 - vec2(0.045, 0.075) * t);
+        return waterNoise(rippleBase + vec2(0.32, 0.18) * t)
+          + 0.5 * waterNoise(rippleBase * 2.3 + 7.1 - vec2(0.24, 0.36) * t);
       }`,
     chunks: {
+      // Normal-only ripples were invisible from the town camera. A restrained
+      // pool-teal value shift makes the same moving ridges visible without
+      // introducing colors outside the shared material palette.
+      color_fragment: {
+        after: /* glsl */ `
+          float rippleTint = smoothstep(0.72, 1.12, waterHeight(vWaterWorld.xz, uRippleTime));
+          diffuseColor.rgb *= 0.84 + rippleTint * 0.24;`,
+      },
       // The pool is flat and faces up, so the ripple replaces the normal outright.
       // Both chunks land in main() and this one runs first, so the emissive chunk
       // below reads its rippleWorld rather than recomputing the slope.
@@ -97,10 +104,9 @@ export const RIPPLE_CONSUMER_ID = 'ripple'
 
 /**
  * The ripple as an ambient consumer (pure core; the rig lives in
- * `scene/WaterReflection.tsx`): the shared clock owns `uRippleTime`, so the
- * ripple moves inside frames other drivers cause and rests with them — the
- * rig ticks but never invalidates for it, keeping idle-rest green. Release
- * parks the time back at 0, the still pose.
+ * `scene/AmbientMotion.tsx`): one scheduled clock owns `uRippleTime`,
+ * independently of the reflection pass. Reading, hidden tabs and reduced
+ * motion freeze that clock. Release parks the time back at 0.
  */
 export function rippleConsumer(): AmbientConsumer {
   return {
@@ -111,4 +117,39 @@ export function rippleConsumer(): AmbientConsumer {
       water.uniforms.uRippleTime.value = 0
     },
   }
+}
+
+/** CPU mirror of the water's moving tint, for regression checks on visible motion. */
+export function waterTintAt(x: number, z: number, timeSeconds: number): number {
+  const rippleBaseX = x * 0.9 * 0.6
+  const rippleBaseZ = z * 0.9 * 1.4
+  const height =
+    noise(rippleBaseX + 0.32 * timeSeconds, rippleBaseZ + 0.18 * timeSeconds) +
+    0.5 *
+      noise(
+        rippleBaseX * 2.3 + 7.1 - 0.24 * timeSeconds,
+        rippleBaseZ * 2.3 + 7.1 - 0.36 * timeSeconds,
+      )
+  const t = Math.max(0, Math.min(1, (height - 0.72) / (1.12 - 0.72)))
+  const ridge = t * t * (3 - 2 * t)
+  return 0.84 + ridge * 0.24
+}
+
+function noise(x: number, y: number): number {
+  const ix = Math.floor(x)
+  const iy = Math.floor(y)
+  const fx0 = x - ix
+  const fy0 = y - iy
+  const fx = fx0 * fx0 * (3 - 2 * fx0)
+  const fy = fy0 * fy0 * (3 - 2 * fy0)
+  const a = hash(ix, iy)
+  const b = hash(ix + 1, iy)
+  const c = hash(ix, iy + 1)
+  const d = hash(ix + 1, iy + 1)
+  return (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy
+}
+
+function hash(x: number, y: number): number {
+  const value = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
+  return value - Math.floor(value)
 }

@@ -29,6 +29,8 @@ export type CanvasHookName =
   | 'panel'
   | 'viewOffset'
   | 'focus'
+  | 'ambientTime'
+  | 'ambientFrames'
 
 /** Anything with a `dataset` we write hooks onto (a real canvas, or a fake). */
 export interface DatasetHost {
