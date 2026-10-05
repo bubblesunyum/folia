@@ -66,3 +66,5 @@
 # - github.token    → use GITHUB_TOKEN env var instead
 
 sync.remote: "https://github.com/bubblesunyum/folia.git"
+export:
+    auto: false
