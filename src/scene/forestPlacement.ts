@@ -238,3 +238,37 @@ export function forestRing(
   if (pts.length < count) throw new Error(`forest: ring placed ${pts.length}/${count}`)
   return pts
 }
+
+/**
+ * The town skeleton asset whose bake carries the static forest layers
+ * (fol-l7d.15): `town.py::build_forest` emits mid cards + far skirt into its
+ * `cards`/`skirt` groups. The single source the runtime yields to is this
+ * owner's registry presence — never batch names (fol-kes.4), never the bake's
+ * output hashed as input.
+ */
+export const BAKED_FOREST_ASSET = 'town/skeleton'
+
+/**
+ * True when the baked skeleton carries mid/skirt, so the runtime retires its
+ * own copies and every load draws them once. Near trees stay
+ * runtime-exclusive (D-032), so they never consult this. Read during render
+ * (the TownBatches subtree re-renders on register/unregister) — never
+ * polled, never waited on.
+ */
+export function bakedForestPresent(hasAsset: (asset: string) => boolean): boolean {
+  return hasAsset(BAKED_FOREST_ASSET)
+}
+
+/** Per-layer `visible` for the runtime forest: near always on, mid + skirt
+ * retire while the bake owns them. The exact derivation `ForestEdge` passes
+ * as `visible` props, pinned below without a renderer. */
+export interface ForestLayerVisibility {
+  near: boolean
+  mid: boolean
+  skirt: boolean
+}
+
+export function forestLayerVisibility(hasAsset: (asset: string) => boolean): ForestLayerVisibility {
+  const baked = bakedForestPresent(hasAsset)
+  return { near: true, mid: !baked, skirt: !baked }
+}

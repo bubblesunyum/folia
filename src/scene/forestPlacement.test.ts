@@ -6,9 +6,12 @@ import { describe, expect, it } from 'vitest'
 import forestParams from '../../assets/blender/folia/foliage_params.json' with { type: 'json' }
 import art from '../../content/town/art.json' with { type: 'json' }
 import {
+  BAKED_FOREST_ASSET,
+  bakedForestPresent,
   chaikin,
   distToCourse,
   type ForestConfig,
+  forestLayerVisibility,
   forestRing,
   mulberry32,
   parseForestConfig,
@@ -296,6 +299,31 @@ describe('parseRingInputs', () => {
         ],
       }),
     ).toThrow(/river width/)
+  })
+})
+
+describe('retirement gate (fol-l7d.15)', () => {
+  // Pins the exact derivation `ForestEdge` passes as `visible` props — the
+  // pure half of the gate. The live-fire half (registering the real baked
+  // skeleton flips the rendered layers) waits on the town/skeleton producer,
+  // bead fol-p6f, which ships the asset this gate yields to.
+  it('names the single owner it yields to', () => {
+    expect(BAKED_FOREST_ASSET).toBe('town/skeleton')
+  })
+
+  it('reads the owner presence, never batch names', () => {
+    expect(bakedForestPresent(() => false)).toBe(false)
+    expect(bakedForestPresent((asset) => asset === 'town/skeleton')).toBe(true)
+    expect(bakedForestPresent((asset) => asset === 'town/skeleton.high')).toBe(false)
+  })
+
+  it('hides mid/skirt while the bake owns them, near stays on', () => {
+    expect(forestLayerVisibility(() => false)).toEqual({ near: true, mid: true, skirt: true })
+    expect(forestLayerVisibility((asset) => asset === BAKED_FOREST_ASSET)).toEqual({
+      near: true,
+      mid: false,
+      skirt: false,
+    })
   })
 })
 

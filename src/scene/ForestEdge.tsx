@@ -17,16 +17,22 @@
 //
 // Placement is single-sourced in `content/town/` (hood pads, river course —
 // the same files `town.py` bakes from) plus the `forest` section of
-// `foliage_params.json` (the same retune point the bake reads). The baked
-// town skeleton carries mid cards + skirt with real group slots; this runtime
-// layer carries all three until that asset lands, kept apart from the bake
-// by radii, never by identity. Forest takes no hover: every vertex carries
+// `foliage_params.json` (the same retune point the bake reads). The town
+// skeleton bakes the static layers (mid cards + skirt) into its own groups;
+// this runtime layer builds all three and retires its mid/skirt copies while
+// that asset is registered (`bakedForestPresent` over the TownRegistry
+// presence of `town/skeleton` — one owner's membership, never batch names),
+// so bake + runtime never double-draw. Near trees stay runtime-exclusive
+// (D-032). Forest takes no hover: every vertex carries
 // the top group slot, which the append-only pack allocator (D-061) only
 // reaches when the town fills the strip — breadth relocates the forest slot
 // if that ever happens.
 //
-// Static once mounted: no `useFrame`, no per-frame invalidation, so
-// `?sway=off` rests at zero draws and the shadow pass never sees it
+// The retirement gate is declarative: TownBatches re-renders this subtree on
+// register/unregister (generation bump plus the demand-loop invalidate), so
+// the `bakedForestPresent` read below stays live without polling and never
+// invalidates on its own, so `?sway=off` still rests at zero draws. Static
+// otherwise: no per-frame invalidation, so the shadow pass never sees it
 // (`castShadow` stays off — the ±16 m fits end long before the first tree).
 
 import { useThree } from '@react-three/fiber'
@@ -45,6 +51,7 @@ import { MAX_GROUPS } from '../groupSlots'
 import { materials } from '../materials/shared'
 import { swayWeight } from '../materials/swayModel'
 import {
+  forestLayerVisibility,
   forestRing,
   mulberry32,
   readForestConfig,
@@ -52,6 +59,7 @@ import {
   TAU,
   type XZ,
 } from './forestPlacement'
+import { useTownBatches } from './TownBatches'
 
 /** Inert group slot: never pickable (this layer never registers volumes),
  * so its lift/glow state stays zero. See the module note on relocation. */
@@ -124,6 +132,10 @@ function setInstances(mesh: InstancedMesh, place: (index: number) => void): void
 
 export function ForestEdge() {
   const invalidate = useThree((state) => state.invalidate)
+  const { hasAsset } = useTownBatches()
+  // Declarative retirement gate (fol-l7d.15): TownBatches re-renders this
+  // subtree on register/unregister, so this read stays live with no polling.
+  const visibility = forestLayerVisibility(hasAsset)
 
   const layers = useMemo(() => {
     const config = readForestConfig()
@@ -212,6 +224,13 @@ export function ForestEdge() {
     invalidate()
   }, [invalidate])
 
+  // Retirement gate (fol-l7d.15): the bake owns the static layers once the
+  // town skeleton registers — mid cards + far skirt hide, near stays. Hidden
+  // layers draw nothing, so baked-present is near only with no double-draw;
+  // baked-absent is all three. Unregistering restores the full runtime fallback,
+  // fail closed. Declarative `visible` props, never a per-frame write, so the
+  // gate adds no frames of its own.
+
   useEffect(
     () => () => {
       layers.near.geometry.dispose()
@@ -225,9 +244,9 @@ export function ForestEdge() {
 
   return (
     <>
-      <primitive object={layers.near} />
-      <primitive object={layers.cards} />
-      <mesh geometry={layers.skirt} material={layers.skirtMaterial} />
+      <primitive object={layers.near} visible={visibility.near} />
+      <primitive object={layers.cards} visible={visibility.mid} />
+      <mesh geometry={layers.skirt} material={layers.skirtMaterial} visible={visibility.skirt} />
     </>
   )
 }

@@ -347,13 +347,15 @@ def build_art_platform(p, rng, art, pad_top, g_pad, g_scaffold):
     return parts
 
 
-# --- forest edge (fol-l7d.5): baked mid cards + horizon skirt --------------------
+# --- forest edge (fol-l7d.5, retired runtime half in fol-l7d.15) -----------------
 # Near trees stay runtime-instanced forever (D-032), so the bake carries only
 # the static layers: single-view mid cards (R-010) and the far skirt (D-050).
 # The ring definition (annulus + keep-clear over content/town/ + the
 # foliage_params.json `forest` section) is the same input the runtime
-# ForestEdge places its instanced near layer from; baked and instanced rings
-# are kept apart by radii, never by stream identity, so neither double-draws.
+# ForestEdge builds its fallback layers from. Baked and runtime mid/skirt
+# overlap by design; the double-draw is retired by registry identity, not by
+# radii — `bakedForestPresent` hides the runtime copies while `town/skeleton`
+# is registered, so exactly one side draws the cards and the band.
 
 def forest_ring(rng, fp, course, river, pads, count, r0, r1):
     """Area-uniform points in the annulus, clear of the river and plot pads."""
@@ -471,13 +473,15 @@ def assemble(p, rng):
         else:
             parts.extend(build_plot(p, rng, hood, top, g["pad"], g["scaffold"], g["planting"]))
 
-    # Forest (fol-l7d.5): NOT baked here. `build_forest()` below emits the
-    # same mid cards + skirt the runtime `ForestEdge` layer draws, so calling
-    # it from `assemble()` would double-draw until the skeleton lands forest.
-    # One-source rule: the runtime owns all three layers until bead fol-l7d.15
-    # retires the runtime mid/skirt layers when the skeleton lands them. The
-    # helpers and the foliage_params.json `forest` section stay as the shared
-    # ring definition both sides read.
+    # Forest (fol-l7d.15): the bake owns the static layers — mid cards facing
+    # the town centre plus the horizon skirt — and the runtime `ForestEdge`
+    # retires its own mid/skirt copies whenever this asset (`town/skeleton`)
+    # is registered (`bakedForestPresent` over the TownRegistry presence, one
+    # owner's membership never batch names). Near trees stay
+    # runtime-instanced forever (D-032). Bake + runtime never double-draw:
+    # exactly one side draws the cards and the band on every load.
+    parts.extend(build_forest(p, rng, course, river, pads, g["cards"], g["skirt"],
+                              ground_height))
 
     # The river's baked look, rewritten every build from the same course.
     write_shore_texture(shore_texture(course, river, p["terrain"]["size"],
