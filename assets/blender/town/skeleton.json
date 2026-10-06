@@ -1,0 +1,80 @@
+{
+  "seed": 4,
+  "lod": "mid",
+  "groups": {
+    "ground": 0,
+    "pad": 1,
+    "scaffold": 2,
+    "planting": 3,
+    "river": 4,
+    "cards": 5,
+    "skirt": 6
+  },
+  "terrain": {
+    "size": 240,
+    "steps": 110,
+    "undulation": 0.4,
+    "cortico_floor": -0.05,
+    "cortico_radius": 19,
+    "cortico_feather": 5
+  },
+  "water": {
+    "level": -0.5,
+    "ribbon_step": 2.0,
+    "tuck": 0.92
+  },
+  "paths": {
+    "walk_offset": 6.5,
+    "width": 1.6,
+    "lift": 0.03,
+    "spur_width": 1.4
+  },
+  "plots": {
+    "pad_lift": 0.12,
+    "pad_thickness": 0.3,
+    "pad_rings": 4,
+    "pad_samples": 48,
+    "post_height": 3.0,
+    "post_size": 0.14,
+    "crane_height": 7.0,
+    "crane_jib": 6.0
+  },
+  "garden": {
+    "overhang": 0.2,
+    "leaf_size": 0.15,
+    "leaf_aspect": 0.5,
+    "fold": 0.35,
+    "scatter": 0.45,
+    "depth": 0.3,
+    "floor": 0.35,
+    "density": 40,
+    "curl": 0.1,
+    "lobes": 3,
+    "lobe_spread": 0.75,
+    "lobe_size": [0.4, 0.6],
+    "lobe_rise": [0.5, -0.15],
+    "sharpness": 4,
+    "leaf_normal": 0.3,
+    "buried": 0.85,
+    "spray": 7,
+    "spray_radius": 0.2,
+    "leaf_scatter": 0.3,
+    "spray_depth": 0.25,
+    "fan_scatter": 0.35,
+    "lattice_jitter": 0.3,
+    "clumps_per_plot": 2,
+    "radii": [0.7, 0.6, 0.5]
+  },
+  "shore": {
+    "resolution": 512,
+    "foam_width": 2.5
+  },
+  "bake": {
+    "ao_distance": 2.5,
+    "ao_samples": 64,
+    "night_samples": 64,
+    "neon_strength": 12,
+    "neon_materials": [],
+    "smooth": 3
+  }
+}
