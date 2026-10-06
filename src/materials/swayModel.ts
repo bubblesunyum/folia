@@ -6,6 +6,15 @@
 // foliage vertex by this curve and exports it as `_SWAY`); the shader reads
 // the attribute and holds no literals, so a test below asserts the chunk reads
 // `_sway` and ramps on no world height.
+//
+// Two runtime configurations share this curve (fol-l7d.9). Runtime-instanced
+// trees (the forest-near layer) pair template geometry with per-instance
+// matrices, so the anchor carries the instance origin. World-baked town
+// batches pair world-space geometry with identity batch instances, so the
+// anchor is the world position and per-clump phase rides placement — no extra
+// attribute, and town trees sway through the same uniforms. The absolute-metre
+// ramp under-drives small town growth by design (meadow clumps peak ~0.4
+// weight, trailers ~0.16): town motion stays gentle, pinned below.
 
 import foliageParams from '../../assets/blender/folia/foliage_params.json' with { type: 'json' }
 import type { Vec3 } from './vec'
@@ -80,7 +89,9 @@ export function translationBatch(x: number, y: number, z: number): Mat4Elements 
 /**
  * Mirrors the shader's anchor: the vertex carried through the batch then the
  * instance matrix, so the per-instance origin rides along in the phase. Each
- * matrix may be null when its `USE_` flag is off.
+ * matrix may be null when its `USE_` flag is off. Town batches are world-baked
+ * under identity batch instances, so the anchor is the world position there
+ * and neighboring clumps diverge by placement, never by an extra attribute.
  */
 export function swayAnchor(
   position: Vec3,

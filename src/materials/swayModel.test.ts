@@ -4,7 +4,8 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import foliageParams from '../../assets/blender/folia/foliage_params.json' with { type: 'json' }
-import { sway } from './features'
+import { SWAY_STRENGTH, sway } from './features'
+import { materials } from './shared'
 import {
   IDENTITY_BATCH,
   type Mat4Elements,
@@ -118,6 +119,47 @@ describe('sway bake curve pin (fol-6di)', () => {
     expect(terraces).toContain('foliage_params.json')
     expect(terraces).toContain('sway_base_m')
     expect(terraces).toContain('sway_top_m')
+  })
+})
+
+describe('town sway contract (fol-l7d.9)', () => {
+  it('rides the town foliage batch: dropping sway there stills every town tree', () => {
+    expect(materials.foliage?.features ?? []).toContain(sway)
+  })
+
+  it('keeps small town growth gentle but nonzero (meadow ~0.4, trailers ~0.16)', () => {
+    // Pinned curve values, not just monotonicity: retuning the ramp edges
+    // re-decides town amplitude, so it must break loudly here.
+    expect(swayWeight(1.0)).toBeCloseTo(0.15625, 10)
+    expect(swayWeight(1.5)).toBe(0.5)
+    const trailer = swayWeight(1.0)
+    const meadow = swayWeight(1.34)
+    expect(trailer).toBeGreaterThan(0)
+    expect(trailer).toBeLessThan(meadow)
+    expect(meadow).toBeGreaterThan(0.3)
+    expect(meadow).toBeLessThan(0.5)
+  })
+
+  it('anchors town vertices on world position: batches are baked, instances identity', () => {
+    const world: Vec3 = [12.5, 3.1, -7.25]
+    expect(swayAnchor(world, IDENTITY_BATCH, null)).toEqual(world)
+  })
+
+  it('gives neighboring town clumps their own phase, deterministically', () => {
+    const a = swayPhase(12.5, -7.25, 10)
+    const b = swayPhase(17.5, -7.25, 10)
+    expect(b).not.toBe(a)
+    expect(swayPhase(12.5, -7.25, 10)).toBe(a)
+  })
+
+  it('bounds driven town motion by strength times weight', () => {
+    for (const weight of [swayWeight(1.0), swayWeight(1.34), 1]) {
+      for (const phase of [0, 1.2, 4.4]) {
+        const off = swayOffset(phase, SWAY_STRENGTH, weight)
+        expect(Math.abs(off.x)).toBeLessThanOrEqual(SWAY_STRENGTH * weight)
+        expect(Math.abs(off.z)).toBeLessThanOrEqual(SWAY_STRENGTH * weight)
+      }
+    }
   })
 })
 
