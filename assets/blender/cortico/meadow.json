@@ -41,14 +41,14 @@
     "sides": 8
   },
   "planting": {
-    "overhang": 0.35,
+    "overhang": 0.55,
     "leaf_size": 0.15,
     "leaf_aspect": 0.5,
     "fold": 0.35,
     "scatter": 0.45,
     "depth": 0.3,
     "floor": 0.35,
-    "density": 90,
+    "density": 100,
     "curl": 0.1,
     "lobes": 4,
     "lobe_spread": 0.75,

@@ -57,7 +57,7 @@
   "trim": {
     "radius": 0.09,
     "drop": 0.3,
-    "sides": 10
+    "sides": 8
   },
   "neon": {
     "level": 1,
@@ -167,14 +167,14 @@
     ]
   },
   "planting": {
-    "overhang": 0.35,
+    "overhang": 0.5,
     "leaf_size": 0.17,
     "leaf_aspect": 0.5,
     "fold": 0.35,
     "scatter": 0.45,
     "depth": 0.3,
     "floor": 0.35,
-    "density": 150,
+    "density": 170,
     "curl": 0.1,
     "lobes": 4,
     "lobe_spread": 0.75,
@@ -316,7 +316,7 @@
       "scatter": 0.45,
       "depth": 0.3,
       "floor": 0.35,
-      "density": 40,
+      "density": 50,
       "curl": 0.1,
       "lobes": 4,
       "lobe_spread": 0.75,
@@ -348,7 +348,7 @@
     "scatter": 0.45,
     "depth": 0.3,
     "floor": 0.35,
-    "density": 50,
+    "density": 70,
     "curl": 0.1,
     "lobes": 4,
     "lobe_spread": 0.75,
@@ -364,7 +364,7 @@
     "fan_scatter": 0.35,
     "lattice_jitter": 0.3,
     "radii": [1.0, 0.85, 0.65],
-    "spots": [[2.0, 6.5], [-5.5, 4.8]]
+    "spots": [[2.0, 6.5], [-5.5, 4.8], [-6.4, 0.2]]
   },
   "beds": {
     "seed": 74,
@@ -384,7 +384,7 @@
       "scatter": 0.45,
       "depth": 0.3,
       "floor": 0.35,
-      "density": 30,
+      "density": 40,
       "curl": 0.1,
       "lobes": 4,
       "lobe_spread": 0.75,
@@ -405,7 +405,7 @@
   },
   "court": {
     "seed": 75,
-    "at": [9.5, 1.0],
+    "at": [12.0, -4.0],
     "radius": 1.6,
     "lift": 0.02,
     "rings": 6,
