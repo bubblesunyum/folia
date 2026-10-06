@@ -8,8 +8,12 @@ import {
   casePresetForSlug,
   limitsForPath,
   parseCameraPreset,
+  pathForPlace,
+  placeFlightKey,
   placeForPath,
+  poseForPath,
   presetForPath,
+  presetForRestore,
   TOWN_PRESET,
   yawStatusForOffset,
 } from './cameraPresets'
@@ -84,6 +88,55 @@ describe('placeForPath / presetForPath', () => {
     expect(yawStatusForOffset(townOffset, '/', YAW_SNAP_RAD).outOfRange).toBe(false)
     const far = yawStatusForOffset([0, 0, 80], '/cortico/platform', YAW_SNAP_RAD)
     expect(far.outOfRange).toBe(true)
+  })
+})
+
+describe('poseForPath / pathForPlace / placeFlightKey', () => {
+  it('hands the flight its art-directed pose, as tuples', () => {
+    expect(poseForPath('/')).toEqual({
+      position: TOWN_PRESET.position,
+      target: TOWN_PRESET.target,
+      fov: TOWN_PRESET.fov,
+    })
+    expect(poseForPath('/cortico/platform').target).toEqual(casePresetForSlug('platform')?.target)
+    expect(poseForPath('/cortico/unknown')).toEqual({
+      position: CORTICO_PRESET.position,
+      target: CORTICO_PRESET.target,
+      fov: CORTICO_PRESET.fov,
+    })
+  })
+
+  it('routes places back to URLs, failing closed on a case with no slug', () => {
+    expect(pathForPlace('town')).toBe('/')
+    expect(pathForPlace('cortico')).toBe('/cortico')
+    expect(pathForPlace('case', 'platform')).toBe('/cortico/platform')
+    expect(() => pathForPlace('case')).toThrow(/needs its slug/)
+    expect(() => pathForPlace('case', '')).toThrow(/needs its slug/)
+  })
+
+  it('keys flights on the vantage, blind to query and hash (back/forward safe)', () => {
+    expect(placeFlightKey('/')).toBe('/')
+    expect(placeFlightKey('/?time=18:30')).toBe('/')
+    expect(placeFlightKey('/cortico')).toBe('/cortico')
+    expect(placeFlightKey('/cortico/')).toBe('/cortico')
+    expect(placeFlightKey('/cortico/platform')).toBe('/cortico/platform')
+    expect(placeFlightKey('/cortico/platform?time=18:30')).toBe('/cortico/platform')
+    expect(placeFlightKey('/cortico/unknown')).toBe('/cortico')
+    expect(placeFlightKey('/resume')).toBe('/')
+  })
+})
+
+describe('presetForRestore', () => {
+  it('hands back the place preset, resolving cases through their slug', () => {
+    expect(presetForRestore('town')).toEqual(TOWN_PRESET)
+    expect(presetForRestore('cortico')).toEqual(CORTICO_PRESET)
+    expect(presetForRestore('case', 'platform')).toEqual(casePresetForSlug('platform'))
+  })
+
+  it('throws fail-closed on a case with no known slug', () => {
+    expect(() => presetForRestore('case')).toThrow(/no vantage/)
+    expect(() => presetForRestore('case', '')).toThrow(/no vantage/)
+    expect(() => presetForRestore('case', 'nope')).toThrow(/no vantage/)
   })
 })
 

@@ -10,15 +10,20 @@
 // fol-l1r.5: under /cortico only the three pedestal slots lift (D-021) — the
 // floor (slot 7) and the rest of town report through `data-hover` but never
 // take lift, so one rig proves "only that pedestal" with no second system.
-// Keyboard focus on the case links drives the same lift through the intent
-// layer's FOCUS_LIFT_EVENT (spec: keyboard), mapped slug → slot here.
+// At town level (`/`) the composition flips (D-021, D-074, fol-l7d.8): the
+// pick still resolves one slot against the derived hit volumes, and the lift
+// expands to the whole cortico hood, so the neighborhood lifts and glows as
+// one. Keyboard focus on the case links (and the town's cortico link, which
+// names the hood) drives the same lift through the intent layer's
+// FOCUS_LIFT_EVENT (spec: keyboard), mapped slug-or-hood → slots here.
 
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { Raycaster, Vector2, Vector3 } from 'three'
 import { FOCUS_LIFT_EVENT, type FocusLiftDetail } from '../input/intent'
 import { clearGroupSlot, setGroupSlot } from '../materials/groupState'
-import { shouldLiftSlot, slotForSlug } from '../panel/pedestals'
+import { pedestalOnlyForPath, shouldLiftSlot, slotForSlug } from '../panel/pedestals'
+import { focusSlotsForTarget, hoverSlotsForSlot } from '../picking/hoods'
 import { glowForNight, HOVER_LIFT, springTowards } from '../picking/hover'
 import { pickSlotFromHit } from '../picking/pickSlot'
 import { clearProjector, setCanvasHook, setProjector } from '../testHooks'
@@ -74,8 +79,9 @@ export function HoverHighlight() {
     dirty: false,
     hovered: null as number | null,
     // Keyboard focus on a case link lifts that pedestal like a hover (spec:
-    // keyboard). Pointer hover and focus compose: both lift while held.
-    focusSlot: null as number | null,
+    // keyboard); focusing the town's cortico link lifts the whole hood, like
+    // hovering it. Pointer hover and focus compose: both lift while held.
+    focusSlots: [] as readonly number[],
     // Slot → current lift/glow easing toward (targeted ? on : off).
     springs: new Map<number, SpringState>(),
     // Scratch lifting set + cached `lifted` hook string, reused across
@@ -131,9 +137,12 @@ export function HoverHighlight() {
     })
     const onFocusLift = (event: Event) => {
       const targetId = (event as CustomEvent<FocusLiftDetail>).detail?.targetId ?? ''
-      const slot = targetId === '' ? null : slotForSlug(targetId)
-      if (slot === rig.current.focusSlot) return
-      rig.current.focusSlot = slot
+      // Pedestal slugs lift one slot, hood ids the whole hood: focus reads
+      // the same lift as hover (spec keyboard, D-021).
+      const slots = focusSlotsForTarget(targetId, slotForSlug)
+      const current = rig.current.focusSlots
+      if (slots.length === current.length && slots.every((slot, i) => slot === current[i])) return
+      rig.current.focusSlots = slots
       setCanvasHook(canvas, 'hoverSettled', '')
       invalidate()
     }
@@ -172,22 +181,26 @@ export function HoverHighlight() {
       }
     }
     const glowTarget = glowForNight(night)
-    // Under /cortico only pedestals take lift (D-021); the raw hovered slot
-    // still reports through data-hover, so the filter itself is observable.
+    // Under /cortico only pedestals take lift (D-021); at town level the
+    // picked slot lifts its whole hood (D-074). The raw hovered slot still
+    // reports through data-hover, so the filter itself is observable.
     // Read live: the canvas persists across route changes, so a captured
     // pathname would go stale. The scratch set is cleared and reused — no
     // per-frame Set allocation — and hover/focus compose with no candidate
     // collection at all.
     const pathname = window.location.pathname
+    const townLevel = !pedestalOnlyForPath(pathname)
     const lifting = r.lifting
     lifting.clear()
-    if (r.hovered !== null && shouldLiftSlot(r.hovered, pathname)) lifting.add(r.hovered)
-    if (
-      r.focusSlot !== null &&
-      r.focusSlot !== r.hovered &&
-      shouldLiftSlot(r.focusSlot, pathname)
-    ) {
-      lifting.add(r.focusSlot)
+    if (r.hovered !== null && shouldLiftSlot(r.hovered, pathname)) {
+      for (const slot of hoverSlotsForSlot(r.hovered, townLevel)) lifting.add(slot)
+    }
+    // Focus composes through the same expansion and filter, so focus==hover
+    // on every route (spec keyboard). Hood ids arrive pre-expanded and the
+    // expansion is idempotent, so no branch is needed here.
+    for (const slot of r.focusSlots) {
+      if (lifting.has(slot) || !shouldLiftSlot(slot, pathname)) continue
+      for (const expanded of hoverSlotsForSlot(slot, townLevel)) lifting.add(expanded)
     }
     // Allowed slots ease toward on; easing-out slots stay in the map until
     // they delete themselves at rest. Two passes over live collections, no

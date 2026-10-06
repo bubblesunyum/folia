@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   azimuthOf,
   clampAzimuth,
+  confineOffsetToWindow,
   rotateOffsetY,
   wheelPanScale,
+  windowForPreset,
   YAW_SNAP_RAD,
   yawClampStatus,
   yawWindow,
@@ -22,6 +24,18 @@ describe('yawWindow', () => {
     const window = yawWindow(45, 35)
     expect(window.min).toBeCloseTo(((45 - 35) * Math.PI) / 180, 10)
     expect(window.max).toBeCloseTo(((45 + 35) * Math.PI) / 180, 10)
+  })
+})
+
+describe('windowForPreset', () => {
+  it('derives the yawWindow from a preset range, symmetric about the base', () => {
+    expect(windowForPreset({ yawRangeDeg: [-35, 35] }, 45)).toEqual(yawWindow(45, 35))
+    expect(windowForPreset({ yawRangeDeg: [0, 0] }, 45)).toEqual(yawWindow(45, 0))
+  })
+
+  it('pins a fixed-yaw preset to a point window', () => {
+    const window = windowForPreset({ yawRangeDeg: [0, 0] }, 45)
+    expect(window.min).toBeCloseTo(window.max, 10)
   })
 })
 
@@ -79,5 +93,25 @@ describe('wheelPanScale', () => {
     expect(wheelPanScale(Number.NaN, 800, 18)).toBe(0)
     expect(wheelPanScale(80, 800, 0)).toBe(0)
     expect(wheelPanScale(80, 800, Number.NaN)).toBe(0)
+  })
+})
+
+describe('confineOffsetToWindow', () => {
+  it('leaves an inside offset alone and keeps radius and height on clamp', () => {
+    const window = yawWindow(45, 35)
+    const inside = rotateOffsetY([0, 5, 80], (45 * Math.PI) / 180)
+    expect(confineOffsetToWindow(inside, window)).toBe(inside)
+    const far = rotateOffsetY([0, 5, 80], Math.PI)
+    const confined = confineOffsetToWindow(far, window)
+    expect(azimuthOf(confined)).toBeCloseTo(window.max, 10)
+    expect(Math.hypot(confined[0], confined[2])).toBeCloseTo(Math.hypot(far[0], far[2]), 10)
+    expect(confined[1]).toBe(far[1])
+  })
+
+  it('holds a zero-radius offset and never crashes on NaN', () => {
+    const window = yawWindow(45, 0)
+    expect(confineOffsetToWindow([0, 5, 0], window)).toEqual([0, 5, 0])
+    const nanOffset: [number, number, number] = [Number.NaN, 0, 0]
+    expect(confineOffsetToWindow(nanOffset, window)[0]).toBeNaN()
   })
 })

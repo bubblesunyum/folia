@@ -33,6 +33,24 @@ export function yawWindow(
 }
 
 /**
+ * Shared preset → window derivation (D-008): the one place a preset's yaw
+ * range becomes an azimuth window, so the frame spring
+ * (cameraPresets.yawStatusForOffset) and the back/forward restore
+ * (cameraFlight.poseForPlaceCamera) can never disagree on it. Structural
+ * preset shape keeps this three-free with no import back up to cameraPresets.
+ */
+export function windowForPreset(
+  preset: { yawRangeDeg: readonly [number, number] },
+  baseDeg: number,
+): {
+  min: number
+  max: number
+} {
+  const halfRange = (preset.yawRangeDeg[1] - preset.yawRangeDeg[0]) / 2
+  return yawWindow(baseDeg, halfRange)
+}
+
+/**
  * Where an azimuth sits against its window: the clamped value, and whether
  * it is out past `snapRad` (settled steps don't restart the spring).
  */
@@ -50,6 +68,20 @@ export function rotateOffsetY(offset: Vec3, deltaAz: number): Vec3 {
   const cos = Math.cos(deltaAz)
   const sin = Math.sin(deltaAz)
   return [offset[0] * cos + offset[2] * sin, offset[1], -offset[0] * sin + offset[2] * cos]
+}
+
+/**
+ * Confine an orbit offset to its yaw window (D-008): clamps the azimuth and
+ * rotates the offset there, keeping the radius and the height. Flights land
+ * inside the window by construction; restores go through here so they can
+ * never park outside it. A zero-radius offset reads azimuth 0 and stays put;
+ * a NaN offset passes through untouched (no crash, no snap).
+ */
+export function confineOffsetToWindow(offset: Vec3, window: { min: number; max: number }): Vec3 {
+  const azimuth = azimuthOf(offset)
+  const { clamped, outOfRange } = yawClampStatus(azimuth, window, 0)
+  if (!outOfRange) return offset
+  return rotateOffsetY(offset, clamped - azimuth)
 }
 
 /**

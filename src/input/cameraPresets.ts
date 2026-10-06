@@ -14,7 +14,7 @@
 // (forum-layout.json, via pedestals) at ~18 m. Gains are starting points for
 // fol-j08's on-device tune, like D-060's input gains.
 
-import { azimuthOf, yawClampStatus, yawWindow } from '../motion/orbitLimits'
+import { azimuthOf, windowForPreset, yawClampStatus } from '../motion/orbitLimits'
 import { PEDESTAL_ANCHOR_BY_SLUG } from '../panel/pedestals'
 
 /** A place's art-directed camera: where it sits, what it frames, how far it roams. */
@@ -80,6 +80,22 @@ export function casePresetForSlug(slug: string): CameraPreset | null {
 
 export type CameraPlace = 'town' | 'cortico' | 'case'
 
+/**
+ * Restore-time preset lookup for serializable {place, offset} state: the
+ * place's preset, with case vantages resolving through their slug. A case
+ * needs a known slug — without one it throws instead of aiming nowhere
+ * (fail closed, like pathForPlace).
+ */
+export function presetForRestore(place: CameraPlace, slug?: string): CameraPreset {
+  if (place === 'town') return TOWN_PRESET
+  if (place === 'cortico') return CORTICO_PRESET
+  const preset = slug === undefined ? null : casePresetForSlug(slug)
+  if (preset === null) {
+    throw new Error(`cameraPresets: no vantage for case "${slug ?? ''}" — it cannot restore`)
+  }
+  return preset
+}
+
 /** Path segments below the query and hash: the one parse both place routing and presets share. */
 function routeSegments(pathname: string): string[] {
   const clean = pathname.split('?')[0]?.split('#')[0] ?? '/'
@@ -133,9 +149,53 @@ export function yawStatusForOffset(
   snapRad: number,
 ): { clamped: number; outOfRange: boolean } {
   const preset = presetForPath(pathname)
-  const halfRange = (preset.yawRangeDeg[1] - preset.yawRangeDeg[0]) / 2
-  const window = yawWindow(baseAzimuthDeg(preset), halfRange)
+  const window = windowForPreset(preset, baseAzimuthDeg(preset))
   return yawClampStatus(azimuthOf(offset), window, snapRad)
+}
+
+/**
+ * A serializable camera pose: tuples only, no three, so it crosses the SSR
+ * boundary (D-047) and the place flight can plan from it without a camera.
+ */
+export interface CameraPose {
+  position: readonly [number, number, number]
+  target: readonly [number, number, number]
+  fov: number
+}
+
+/** The art-directed pose for a path: its preset, as tuples. */
+export function poseForPath(pathname: string): CameraPose {
+  const preset = presetForPath(pathname)
+  return { position: preset.position, target: preset.target, fov: preset.fov }
+}
+
+/**
+ * The route for a place (URL/camera sync): town is `/`, a neighborhood its
+ * `/<hood>` vantage, a case its panel route. A case needs its slug — without
+ * one it throws instead of guessing (fail closed).
+ */
+export function pathForPlace(place: CameraPlace, slug?: string): string {
+  if (place === 'town') return '/'
+  if (place === 'cortico') return '/cortico'
+  if (slug === undefined || slug === '') {
+    throw new Error('cameraPresets: a case place needs its slug to route')
+  }
+  return `/cortico/${slug}`
+}
+
+/**
+ * Vantage identity for a path: what the place flight keys on, so a route
+ * change — push, replace or back/forward — reflys instead of stranding the
+ * camera. Mirrors placeForPath/presetForPath above, so the three can never
+ * disagree on which vantage a path sits in.
+ */
+export function placeFlightKey(pathname: string): string {
+  const parts = routeSegments(pathname)
+  if (parts[0] !== 'cortico') return '/'
+  if (parts[1] !== undefined && casePresetForSlug(parts[1]) !== null) {
+    return `/cortico/${parts[1]}`
+  }
+  return '/cortico'
 }
 
 // Frontmatter staging (fail closed): the optional camera keys the content

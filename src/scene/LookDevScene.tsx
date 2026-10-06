@@ -1,6 +1,7 @@
 import { OrbitControls } from '@react-three/drei'
 import { Suspense } from 'react'
 import { renderConfig } from '../debug'
+import { PlaceFlightRig } from '../input/PlaceFlightRig'
 import { ZoomRig } from '../input/ZoomRig'
 import { PanelCameraRig } from '../panel/PanelCameraRig'
 import { PedestalNavigate } from '../panel/PedestalNavigate'
@@ -36,6 +37,7 @@ export function LookDevScene() {
       <HoverHighlight />
       <PedestalNavigate />
       <PanelCameraRig />
+      <PlaceFlightRig />
       {renderConfig.stress > 0 && <StressDraws count={renderConfig.stress} />}
     </>
   )
