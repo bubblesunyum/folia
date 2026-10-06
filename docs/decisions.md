@@ -861,6 +861,28 @@ Cortico remains 2.43 MB / 202,472 triangles; shell is 114.5 KB gz and canvas 375
 
 ---
 
+## 2026-10-05: pre-breadth perf gate
+
+### D-075 The bench reports spread and refuses noisy runs (fol-kes.16)
+**Decision:**
+- `scripts/bench.mjs` keeps the median of four 240-frame bursts (D-063 method) and now also prints the burst-to-burst range and standard deviation of wall ms/frame.
+- `BENCH_SPREAD_THRESHOLD_MS = 0.25` in `src/perf/renderConfig.ts` (read by the bench the way `SATURATED_BUDGET_MS` is, so the two can never drift): the D-072 golden headroom is ~0.25 ms (2.50 − 2.25), and breadth fills that headroom, so the gate separates signal from noise first. A range above it marks the run noisy: the default run fails, knob runs (`aa=`/`bloom=`/`reflection=`/`fit=`/`shadows=`/`sway=`/`stress=N`) warn and stay advisory, as today.
+- The 0.16 ms golden rise from D-071 to D-072 is attributed to run-to-run noise, not geometry: the span's golden reads were 2.17, 2.58 and 2.25 with no new geometry between them — a 0.41 ms swing against ~0.25 ms of headroom — and the 2.58 outlier exceeds any geometry delta the span landed. The likely sources are the known ones (GPU clock state after idle, a competing scene tab — D-055's close-tabs rule), so re-running a noisy gate green on the second try proves nothing; the gate now says NOISY instead.
+
+**Cost** (saturated-frame wall, default `?perf=base`, D-063 method on the M1 Max):
+
+| Keyframe | D-071 span exit | D-072 current | Noisy span reads | Ceiling |
+|---|---:|---:|---|---:|
+| Golden hour | 2.09 | 2.25 | 2.17 / 2.58 / 2.25 | 2.50 |
+| Night | 2.01 | 2.15 | — | 2.50 |
+
+Golden keeps ~0.25 ms of headroom for all of breadth; the threshold spends none of it on noise.
+
+*Why:* fol-kes.16 — the gate must refuse a noisy run before judging the budget, or breadth will burn the last headroom chasing ghosts.
+*Refines:* D-063 (spread rides the same gate), D-071, D-072 (the 2.09 → 2.25 rise is noise, not a regression).
+
+---
+
 ## Open questions (not yet decided)
 - When to revisit WebGPU after launch.
 - Gallery exhibit stops: what one looks like and how many per case study.

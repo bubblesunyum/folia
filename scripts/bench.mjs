@@ -17,16 +17,25 @@ import { readFileSync } from 'node:fs'
 import { assertBuildFresh, CLIENT_INDEX } from './lib/fresh-build.mjs'
 import { chromium } from '@playwright/test'
 
-// Slice-exit budget: read from the single source in src/perf/renderConfig.ts
-// (D-063) so the two can never drift. Fail closed when it cannot be parsed.
-const SATURATED_BUDGET_MS = (() => {
+// Slice-exit budget and noise gate: read from the single source in
+// src/perf/renderConfig.ts (D-063, D-075) so the three can never drift.
+// Fail closed when a value cannot be parsed.
+function readRenderConst(name) {
   const match = readFileSync('src/perf/renderConfig.ts', 'utf8').match(
-    /SATURATED_BUDGET_MS\s*=\s*([\d.]+)/,
+    new RegExp(`${name}\\s*=\\s*([\\d.]+)`),
   )
   const value = match ? Number(match[1]) : NaN
-  if (!Number.isFinite(value)) throw new Error('bench: SATURATED_BUDGET_MS not found in src/perf/renderConfig.ts')
+  if (!Number.isFinite(value)) throw new Error(`bench: ${name} not found in src/perf/renderConfig.ts`)
   return value
-})()
+}
+
+// Slice-exit budget (D-063).
+const SATURATED_BUDGET_MS = readRenderConst('SATURATED_BUDGET_MS')
+
+// Noise gate: the burst-to-burst range the verdict trusts (D-075,
+// fol-kes.16). Breadth fills the ~0.25 ms of D-072 headroom, so the gate
+// refuses noisy runs before judging the budget.
+const BENCH_SPREAD_THRESHOLD_MS = readRenderConst('BENCH_SPREAD_THRESHOLD_MS')
 
 const PORT = 4299
 const BURSTS = 4
@@ -69,19 +78,37 @@ try {
     }
     const ms = median(bursts.map((b) => b.ms))
     const cpu = median(bursts.map((b) => b.cpuMs))
+    // Spread across bursts (D-075, fol-kes.16): the range (and stddev) the
+    // median hides. Above the threshold the run measured noise, not the
+    // scene, so the verdict refuses it before judging the budget.
+    const wall = bursts.map((b) => b.ms)
+    const range = Math.max(...wall) - Math.min(...wall)
+    const mean = wall.reduce((a, b) => a + b, 0) / wall.length
+    const stddev = Math.sqrt(wall.reduce((a, b) => a + (b - mean) ** 2, 0) / wall.length)
     const counts = (await page.locator('.perf-readout').textContent())?.split('\n').pop()
     // The budget binds the shipped default only (D-063); other knobs are
     // comparison levers, so their verdict is advisory. `time=` stays gated —
     // the budget holds at both keyframes — and `stress=0` adds no load.
+    // Spread follows the same split: a noisy default run fails, a noisy
+    // knob run only warns.
     const advisory =
       /(^|&)(aa|bloom|reflection|fit|shadows|sway)=/.test(run) || /(^|&)stress=[1-9]/.test(run)
     const over = ms > SATURATED_BUDGET_MS
+    const noisy = range > BENCH_SPREAD_THRESHOLD_MS
     console.log(
-      `${run || '(default)'}: ${ms.toFixed(2)} wall ms/frame · js ${cpu.toFixed(2)} · ${counts} · budget ≤${SATURATED_BUDGET_MS.toFixed(2)}: ${over ? 'FAIL' : 'PASS'}${advisory ? ' (advisory)' : ''}`,
+      `${run || '(default)'}: ${ms.toFixed(2)} wall ms/frame · js ${cpu.toFixed(2)} · spread ${range.toFixed(2)} (sd ${stddev.toFixed(2)}) · ${counts} · budget ≤${SATURATED_BUDGET_MS.toFixed(2)}: ${over ? 'FAIL' : 'PASS'}${advisory ? ' (advisory)' : ''} · spread ≤${BENCH_SPREAD_THRESHOLD_MS.toFixed(2)}: ${noisy ? (advisory ? 'NOISY (advisory)' : 'NOISY') : 'ok'}`,
     )
     if (!advisory && over) {
       failed = true
       console.error(`  over budget: ${ms.toFixed(2)} > ${SATURATED_BUDGET_MS.toFixed(2)} wall ms/frame`)
+    }
+    if (noisy) {
+      const note = `spread ${range.toFixed(2)} > ${BENCH_SPREAD_THRESHOLD_MS.toFixed(2)} wall ms/frame across ${BURSTS}×${FRAMES} bursts: close other scene tabs and re-run`
+      if (advisory) console.error(`  noisy (advisory): ${note}`)
+      else {
+        failed = true
+        console.error(`  noisy: ${note}`)
+      }
     }
     if (errors.length > 0) {
       failed = true

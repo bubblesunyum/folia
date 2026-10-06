@@ -51,6 +51,18 @@ export const BASE_AIR = { width: 1280, height: 800 }
  */
 export const SATURATED_BUDGET_MS = 2.5
 
+/**
+ * Bench noise gate (D-075, fol-kes.16): the max burst-to-burst range the
+ * gate trusts, in wall ms/frame. D-072's golden headroom is ~0.25 ms
+ * (2.50 − 2.25), and the span's unexplained reads (2.17 / 2.58 / 2.25 with
+ * no new geometry) swing wider than that — breadth would fill the headroom
+ * before the gate could separate signal from noise. Read by
+ * `scripts/bench.mjs`, which prints the spread and fails (or warns, on
+ * advisory knob runs) above it. Kept here beside the budget so the two can
+ * never drift.
+ */
+export const BENCH_SPREAD_THRESHOLD_MS = 0.25
+
 // MSAA spends its samples at DPR 1.5; SMAA gets the full DPR 2 (D-042).
 const DPR_FOR: Record<AaMode, number> = { none: 2, msaa: 1.5, smaa: 2 }
 const AA_MODES: readonly AaMode[] = ['none', 'msaa', 'smaa']
