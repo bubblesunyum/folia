@@ -23,10 +23,10 @@ describe('hoodFromProject', () => {
 describe('MaterialLook wiring (fol-5co)', () => {
   it('threads the shared hood hook into applyLook', () => {
     expect(source).toContain('useHood()')
-    expect(source).toContain('applyLook(look, renderConfig.bloom, palette, hood)')
+    expect(source).toContain('applyLook(look, tier.bloom, palette, hood)')
   })
 
   it('re-applies the look when the hood changes on nav', () => {
-    expect(source).toMatch(/\[look, palette, hood, canvas, invalidate\]/)
+    expect(source).toMatch(/\[look, palette, hood, canvas, invalidate, tier\]/)
   })
 })

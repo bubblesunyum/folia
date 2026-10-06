@@ -74,8 +74,9 @@ const MAX_STRESS = 16_000
  * the Air's workload. MSAA uses a 1920×1200 buffer; the other modes use
  * 2560×1600. This is a visual comparison at equal CSS size, not equal pixels.
  * `?aa=` picks the antialiasing mode and `?stress=` adds sub-draws in either case.
- * `?bloom=off` and `?reflection=off` stand in for the low tier's night and water
- * until quality tiers exist (D-036).
+ * `?bloom=off`, `?reflection=off` and `?shadows=static` are the tier ladder's
+ * ceilings (`perf/qualityTiers.ts`): whatever the URL forces off, the probe
+ * never re-enables (D-036).
  */
 export function parseRenderConfig(search: string): RenderConfig {
   const params = new URLSearchParams(search)

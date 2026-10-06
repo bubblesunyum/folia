@@ -4,6 +4,7 @@ import { type DirectionalLight, Vector3 } from 'three'
 import { versionForMeshes } from '../assets/townVersion'
 import { renderConfig } from '../debug'
 import { groupStateUploads } from '../materials/groupState'
+import { useQualityTierId } from '../perf/qualityTiers'
 import { SHADOW_FITS } from '../perf/renderConfig'
 import { useLook } from '../time/lookContext'
 import {
@@ -15,6 +16,10 @@ import {
   snapShadowToTexels,
 } from './shadowFit'
 import { useTownBatches } from './TownBatches'
+
+// The sun, published for the tier rig: TierRig writes the rung's shadow
+// intensity and map size through this instead of traversing the scene.
+export const shadowSunRef: { current: DirectionalLight | null } = { current: null }
 
 const DISTANCE = 40
 
@@ -57,6 +62,9 @@ export function Lights() {
   const scene = useThree((state) => state.scene)
   const invalidate = useThree((state) => state.invalidate)
   const sunRef = useRef<DirectionalLight>(null)
+  // The ladder rung: a tier step re-runs the shadow-policy effect below, so a
+  // downgrade freezes the map through the same path as a sun move.
+  const tierId = useQualityTierId()
   // Last pass's sun state: sunset issues one final shadow refresh, then the
   // map holds frozen until sunrise. Starts up so a mount at night settles
   // the same way (one refresh, then frozen).
@@ -68,8 +76,10 @@ export function Lights() {
   useEffect(() => {
     const light = sunRef.current
     if (!light) return
+    shadowSunRef.current = light
     scene.add(light.target)
     return () => {
+      shadowSunRef.current = null
       scene.remove(light.target)
     }
   }, [scene])
@@ -88,10 +98,12 @@ export function Lights() {
   // update, camera and lift moves refresh through the per-frame dirty check
   // below, and ambient-only frames skip the pass. At daylight 0 the sun's
   // intensity is 0 and the shadow pass is pure cost (spike 5: 475k tris), so
-  // sunset freezes after one final refresh and sunrise refreshes once. Only
+  // sunset freezes after one final refresh and sunrise refreshes once. Tier
+  // steps re-run it through the tier subscription, so a downgrade to a static
+  // rung freezes the map instead of leaving autoUpdate on. Only
   // the autoUpdate/needsUpdate flags move — never castShadow or
   // shadowMap.enabled, which recompile all programs.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `look` is the re-freeze trigger
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `look` and `tierId` are the re-freeze triggers
   useEffect(() => {
     const { autoUpdate, needsRefresh } = resolveShadowRefresh(
       renderConfig.shadowPolicy,
@@ -104,7 +116,7 @@ export function Lights() {
       gl.shadowMap.needsUpdate = true
       invalidate()
     }
-  }, [gl, invalidate, look, sun.daylight])
+  }, [gl, invalidate, look, sun.daylight, tierId])
 
   // Last per-frame shadow state: null until the first rendered frame, which
   // always refreshes. The scratch is mutated in place so steady frames

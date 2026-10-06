@@ -1,6 +1,7 @@
 import { advance, Canvas, useFrame } from '@react-three/fiber'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { renderConfig } from '../debug'
+import { useEffectiveTier } from '../perf/qualityTiers'
 import { ZoomButtons } from '../shell/ZoomButtons'
 import { setCanvasHook } from '../testHooks'
 import { bindAmbientReadingSignal } from '../time/ambient'
@@ -20,7 +21,12 @@ export function Viewport({
   onFirstFrame?: () => void
 }) {
   const [contextLost, setContextLost] = useState(false)
-  const { dpr, maxFps, size } = renderConfig
+  // The tier ladder's DPR and frame cap (D-036); `?perf=base` pins the bench
+  // config instead, so the D-063 proxy stays comparable. `size` never tiers.
+  const tier = useEffectiveTier()
+  const { size } = renderConfig
+  const dpr = renderConfig.budget ? renderConfig.dpr : tier.dpr
+  const maxFps = renderConfig.budget ? renderConfig.maxFps : tier.maxFps
   // The look-dev bench pauses ambient motion while it is being read (fol-k0t):
   // the pointer over leva, or focus inside it, sets the ambient flag.
   useEffect(() => bindAmbientReadingSignal(), [])

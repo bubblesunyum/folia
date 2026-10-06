@@ -4,6 +4,7 @@ import { type BloomEffect, EffectPass, SMAAEffect, ToneMappingMode } from 'postp
 import { useEffect, useMemo, useRef } from 'react'
 import { HalfFloatType } from 'three'
 import { renderConfig } from '../debug'
+import { useEffectiveTier } from '../perf/qualityTiers'
 import { useLook } from '../time/lookContext'
 import { useContextRestores } from './contextRestores'
 import { GradeEffect } from './GradeEffect'
@@ -31,6 +32,10 @@ export function Effects() {
   // whole chain remounts and the uniforms re-apply, with no reload (D-043).
   const restores = useContextRestores()
   const bloom = useRef<BloomEffect>(null)
+  // The tier ladder's bloom flag (D-036); `?perf=base` pins the bench config.
+  // Off drops the pass and night falls back to neon's fake glow (D-038).
+  const tier = useEffectiveTier()
+  const bloomOn = renderConfig.budget ? renderConfig.bloom : tier.bloom
   // GradeEffect holds uniforms only, no GL handles, but rebuilding it with
   // the composer keeps the restore path to one key instead of two lifecycles.
   // biome-ignore lint/correctness/useExhaustiveDependencies: restores is the rebuild trigger
@@ -45,12 +50,13 @@ export function Effects() {
   useEffect(() => {
     grade.apply(look)
     const effect = bloom.current
+    // Null while the tier holds bloom off: the remount re-applies on return.
     if (!effect) return
     effect.intensity = look.bloom.intensity
     effect.luminanceMaterial.threshold = look.bloom.threshold
     effect.luminanceMaterial.smoothing = look.bloom.smoothing
     invalidate()
-  }, [look, grade, invalidate, restores])
+  }, [look, grade, invalidate, restores, bloomOn])
 
   return (
     <EffectComposer
@@ -58,7 +64,7 @@ export function Effects() {
       multisampling={renderConfig.aa === 'msaa' ? MSAA_SAMPLES : 0}
       frameBufferType={HalfFloatType}
     >
-      {renderConfig.bloom && <Bloom ref={bloom} mipmapBlur levels={6} />}
+      {bloomOn && <Bloom ref={bloom} mipmapBlur levels={6} />}
       <ToneMapping mode={ToneMappingMode.NEUTRAL} />
       <primitive object={grade} dispose={null} />
       {smaa && <primitive object={smaa} dispose={null} />}
