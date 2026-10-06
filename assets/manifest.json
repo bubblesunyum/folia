@@ -1,6 +1,6 @@
 {
   "cortico/forum": {
-    "hash": "40cba0cc4a942979",
+    "hash": "adbfe6d30b401918",
     "bytes": 52324,
     "triangles": {
       "cream": 3280,
@@ -25,7 +25,7 @@
     }
   },
   "cortico/fragment": {
-    "hash": "84e42070a2c9b8e6",
+    "hash": "e292de4d42a3ee87",
     "bytes": 2097208,
     "triangles": {
       "ground": 5664,
@@ -60,7 +60,7 @@
     }
   },
   "cortico/meadow": {
-    "hash": "2a6b24dc833fe383",
+    "hash": "5ada8b44df460eec",
     "bytes": 281752,
     "triangles": {
       "cream": 3584,

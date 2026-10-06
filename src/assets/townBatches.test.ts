@@ -1,11 +1,23 @@
 import { BatchedMesh, BoxGeometry, MeshBasicMaterial } from 'three'
 import { describe, expect, it } from 'vitest'
+import art from '../../content/town/art.json' with { type: 'json' }
+import blackjack from '../../content/town/blackjack-genius.json' with { type: 'json' }
+import cortico from '../../content/town/cortico.json' with { type: 'json' }
+import earlyWork from '../../content/town/early-work.json' with { type: 'json' }
+import expressMess from '../../content/town/express-your-mess.json' with { type: 'json' }
+import expressYes from '../../content/town/express-your-yes.json' with { type: 'json' }
+import glyphite from '../../content/town/glyphite.json' with { type: 'json' }
+import ironOx from '../../content/town/iron-ox.json' with { type: 'json' }
+import purple from '../../content/town/purple-republic.json' with { type: 'json' }
+import river from '../../content/town/river.json' with { type: 'json' }
 import {
   capacityFromManifest,
   grownCapacity,
+  hoodOffset,
   LOD_RESERVE,
   type ManifestCounts,
   manifestCounts,
+  parseHoodPlacement,
   withDerivedCapacity,
 } from './townBatches'
 
@@ -153,6 +165,99 @@ describe('grownCapacity', () => {
       maxVertices: 4,
       maxIndices: 6,
     })
+  })
+})
+
+const placements = [
+  ['cortico', cortico],
+  ['early-work', earlyWork],
+  ['blackjack-genius', blackjack],
+  ['glyphite', glyphite],
+  ['purple-republic', purple],
+  ['express-your-mess', expressMess],
+  ['express-your-yes', expressYes],
+  ['iron-ox', ironOx],
+  ['art', art],
+] as const
+
+describe('town placement (fol-l7d.1)', () => {
+  it('parses every per-hood file, with unique hoods', () => {
+    const parsed = placements.map(([file, raw]) =>
+      parseHoodPlacement(raw, `content/town/${file}.json`),
+    )
+    expect(parsed.map((p) => p.hood).sort()).toEqual([
+      'art',
+      'blackjack-genius',
+      'cortico',
+      'early-work',
+      'express-your-mess',
+      'express-your-yes',
+      'glyphite',
+      'iron-ox',
+      'purple-republic',
+    ])
+  })
+
+  it('keeps cortico at the origin, so the baked light pools ride untouched', () => {
+    const place = parseHoodPlacement(cortico, 'content/town/cortico.json')
+    expect(hoodOffset(place)).toEqual([0, 0, 0])
+  })
+
+  it('orders plots down the river, oldest north to newest south', () => {
+    const ordered = placements
+      .map(([file, raw]) => ({ file, ...parseHoodPlacement(raw, String(file)) }))
+      .filter((p) => p.hood !== 'cortico' && p.hood !== 'art')
+      .sort((a, b) => a.centre[1] - b.centre[1])
+    expect(ordered.map((p) => p.hood)).toEqual([
+      'early-work',
+      'blackjack-genius',
+      'glyphite',
+      'purple-republic',
+      'express-your-mess',
+      'express-your-yes',
+      'iron-ox',
+    ])
+  })
+
+  it('holds every plot clear of the river channel', () => {
+    const riverData = river as { width: number; course: number[][] }
+    const half = riverData.width / 2
+    for (const [file, raw] of placements) {
+      const place = parseHoodPlacement(raw, String(file))
+      if (place.hood === 'cortico') continue
+      const course = riverData.course
+      let best = Number.POSITIVE_INFINITY
+      for (let i = 0; i < course.length - 1; i++) {
+        const a = course[i]
+        const b = course[i + 1]
+        if (!a || !b || a.length !== 2 || b.length !== 2) continue
+        const [ax, az] = a as [number, number]
+        const [bx, bz] = b as [number, number]
+        const abx = bx - ax
+        const abz = bz - az
+        const denom = abx * abx + abz * abz || 1
+        const t = Math.max(
+          0,
+          Math.min(1, ((place.centre[0] - ax) * abx + (place.centre[1] - az) * abz) / denom),
+        )
+        best = Math.min(
+          best,
+          Math.hypot(place.centre[0] - (ax + abx * t), place.centre[1] - (az + abz * t)),
+        )
+      }
+      expect(best).toBeGreaterThan(half + place.radius)
+    }
+  })
+
+  it('fails closed on drift', () => {
+    expect(() => parseHoodPlacement(null, 'content/town/x.json')).toThrow()
+    expect(() => parseHoodPlacement({ hood: 'Bad Hood' }, 'content/town/x.json')).toThrow()
+    expect(() =>
+      parseHoodPlacement(
+        { hood: 'x', centre: [0, Number.NaN], yaw: 0, radius: 1 },
+        'content/town/x.json',
+      ),
+    ).toThrow()
   })
 })
 

@@ -56,11 +56,24 @@ def linear(hex_colour):
 
 
 def load_asset(asset):
-    path = HERE / f"{asset}.py"
+    # Kit-resident procedures (fol-l7d.1): an asset id maps to its own script
+    # beside the params, or — when the procedures live with the shared kit —
+    # to the kit's script of the same stem (e.g. town/skeleton rides
+    # folia/town.py, whose layout is single-sourced in content/town/). Mesh
+    # names still carry the asset's hood (D-034).
+    leaf = asset.split("/")[0]
+    candidates = [HERE / f"{asset}.py", *sorted(HERE.glob(f"*/{leaf}.py"))]
+    scripts = [path for path in candidates if path.exists()]
+    if not scripts:
+        sys.exit(f"build.py: no script for asset {asset!r}")
+    path = scripts[0]
+    params_path = path.with_suffix(".json")
+    if not params_path.exists():
+        params_path = HERE / f"{asset}.json"
     spec = importlib.util.spec_from_file_location(asset.replace("/", "."), path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    params = json.loads((HERE / f"{asset}.json").read_text())
+    params = json.loads(params_path.read_text())
     return module, params
 
 
@@ -108,6 +121,8 @@ def main():
     parts = module.assemble(params, np.random.default_rng(params["seed"]))
     assembled = time.perf_counter()
 
+    # Emitters are per-asset: the fragment's mint neon spills, while the town
+    # skeleton builds no neon yet (fol-l7d.1) and bakes a black night.
     bake.assign_materials(parts, {"neon": linear(args.palette["mint"])})
     joined = export.join(parts, f"{hood}.{name}.all.{lod}")
     if args.no_bake:
@@ -115,7 +130,7 @@ def main():
         set_point_attribute(joined.data, "_AO", np.ones(count))
         set_point_attribute(joined.data, "_NIGHT", np.zeros((count, 3)))
     else:
-        bake.bake(joined, params["bake"], ["neon"])
+        bake.bake(joined, params["bake"], params["bake"].get("neon_materials", ["neon"]))
     baked = time.perf_counter()
 
     batches = export.split_by_material(joined, lambda mat: f"{hood}.{name}.{mat}.{lod}", DROP)

@@ -158,3 +158,60 @@ export function grownCapacity(capacity: BatchCapacity): BatchCapacity {
     maxIndices: capacity.maxIndices * 2,
   }
 }
+
+// Town placement (fol-l7d.1): one file per neighborhood under `content/town/`
+// (`<hood>.json` plus `river.json`) is the single source the Blender bake and
+// the runtime both read. The bake assembles the skeleton in world space around
+// these centres; the runtime applies them as offsets instead of assuming any
+// asset sits at the origin. Pure and three-free like the rest of this module.
+
+/** One hood's town placement: centre in metres (three XZ), yaw about +Y, pad radius. */
+export interface HoodPlacement {
+  hood: string
+  centre: readonly [number, number]
+  yaw: number
+  radius: number
+}
+
+const HOOD_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+function finiteNumber(value: unknown, what: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`town placement: ${what} is not a finite number`)
+  }
+  return value
+}
+
+/**
+ * Parses one `content/town/<hood>.json` file. Fail closed on any drift: a
+ * missing key, a bad slug, or a non-finite number throws instead of placing
+ * a neighborhood nowhere.
+ */
+export function parseHoodPlacement(raw: unknown, file: string): HoodPlacement {
+  if (typeof raw !== 'object' || raw === null) {
+    throw new Error(`town placement: ${file} is not an object`)
+  }
+  const { hood, centre, yaw, radius } = raw as Record<string, unknown>
+  if (typeof hood !== 'string' || !HOOD_SLUG.test(hood)) {
+    throw new Error(`town placement: ${file} has no valid hood slug`)
+  }
+  if (!Array.isArray(centre) || centre.length !== 2) {
+    throw new Error(`town placement: ${file} centre is not an xz pair`)
+  }
+  const [x, z] = centre
+  return {
+    hood,
+    centre: [finiteNumber(x, `${file} centre[0]`), finiteNumber(z, `${file} centre[1]`)],
+    yaw: finiteNumber(yaw, `${file} yaw`),
+    radius: finiteNumber(radius, `${file} radius`),
+  }
+}
+
+/**
+ * A hood's town offset in metres (three XYZ, y always 0): added to that
+ * hood's baked-local spots, mirroring `applyPoolPlacement` for light pools.
+ * Cortico's placement is the identity, so its pools ride untouched.
+ */
+export function hoodOffset(place: HoodPlacement): readonly [number, number, number] {
+  return [place.centre[0], 0, place.centre[1]]
+}
