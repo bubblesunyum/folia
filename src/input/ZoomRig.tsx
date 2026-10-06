@@ -464,6 +464,11 @@ export function ZoomRig({ limits }: { limits?: ZoomLimits }) {
       // pure intent module — focused input, then panel close, then rise —
       // so the rig holds no branching of its own.
       if (isDismissKey(event.key)) {
+        // Escape closes flight and orbit first: a zoom tween or an armed yaw
+        // spring never outlives the dismissal (fol-l7d.11, spec keyboard).
+        tweenRef.current = null
+        yawTweenRef.current = null
+        yawArmedRef.current = false
         const resolved = resolveEscape({
           panelOpen: isPanelOpen(),
           focusInEditable: isEditableTarget(event.target),

@@ -7,7 +7,7 @@ import {
   PROJECTOR_KEY,
   type WorldPoint,
 } from '../src/testHooks'
-import { expectNoErrors, trackErrors, waitForTownDrawn } from './helpers'
+import { expectNoErrors, trackErrors, urlWithQuery, waitForTownDrawn } from './helpers'
 
 // The sheet variant contract (fol-8z6): metrics.ts `panelVariant` and the
 // styles.css media query must agree, and the bottom sheet must hold at night.
@@ -38,7 +38,7 @@ async function openPlatform(page: Page): Promise<void> {
   await page.mouse.move(fresh.x, fresh.y)
   await expect(hovered).toBeVisible({ timeout: 15_000 })
   await page.mouse.click(fresh.x, fresh.y)
-  await expect(page).toHaveURL(/\/cortico\/platform\/?$/, { timeout: 15_000 })
+  await expect(page).toHaveURL(urlWithQuery(/\/cortico\/platform\/?$/), { timeout: 15_000 })
   await expect(page.getByTestId('case-panel')).toBeVisible({ timeout: 15_000 })
 }
 
@@ -98,7 +98,7 @@ test.describe('vantage dolly', () => {
     // Close before the ~80 m → 50 m dolly lands: a surviving restore proves
     // the user never drove, so the camera must fly home, not strand mid-way.
     await page.getByTestId('panel-close').click()
-    await expect(page).toHaveURL(/\/cortico\/?(\?.*)?$/, { timeout: 15_000 })
+    await expect(page).toHaveURL(urlWithQuery(/\/cortico\/?$/), { timeout: 15_000 })
     await expect.poll(zoomOf, { timeout: 30_000 }).toBeCloseTo(townDistance, 0)
     expectNoErrors(errors)
   })

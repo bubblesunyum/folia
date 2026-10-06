@@ -221,7 +221,7 @@ export function PanelCameraRig() {
           const tween = r.dollyTween ?? { from: distance, to: goal, start: now }
           r.dollyTween = tween
           tween.to = goal
-          const step = dollyFlightStep(tween.from, tween.to, tween.start, now)
+          const step = dollyFlightStep(tween.from, tween.to, tween.start, now, REFRAME_MS, reduced)
           if (step !== distance) setOrbitDistance(camera, target, step, controlsRef.current)
           if (
             tweenProgress(tween.start, now, REFRAME_MS) >= 1 ||

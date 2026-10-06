@@ -26,6 +26,16 @@ export function expectNoErrors(errors: string[]): void {
   expect(errors).toEqual([])
 }
 
+/**
+ * A `toHaveURL` pattern tolerant of the preserved QA search (fol-76l):
+ * client navigation carries `?time=` et al, so a bare `$`-anchored path
+ * fails on any QA session. `toHaveURL(urlWithQuery(/\/cortico\/platform\/?$/))`
+ * keeps the path exact and lets the query ride.
+ */
+export function urlWithQuery(pattern: RegExp): RegExp {
+  return new RegExp(`${pattern.source.replace(/\$$/, '')}(\\?.*)?$`)
+}
+
 /** The URL still carries the `?time=` override after client navigation. */
 export async function expectTimeParam(page: Page, time: string): Promise<void> {
   const [hours, minutes] = time.split(':')

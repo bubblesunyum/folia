@@ -203,6 +203,21 @@ body,
   color: inherit;
 }
 
+/* Visible keyboard focus across the HTML content layer (spec keyboard,
+   fol-l7d.11): every route link and panel link takes the same mint ring as
+   the buttons, so tab order stays legible over the canvas. */
+.route-content a:focus-visible,
+.case-panel a:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
+/* The panel container takes programmatic focus on open (focus return owns
+   it); it never shows a ring itself — its links and Close do. */
+.case-panel:focus {
+  outline: none;
+}
+
 /* The case side sheet (fol-l1r.5, D-022/D-050): a solid sheet on the right —
    ~45% of the width capped at readable measure — scrolling internally while
    the world stays live behind it. Solid, never backdrop-filter: Safari would

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   type FlightVec3,
   flightAt,
+  flightDurationMs,
   flightEase,
   flightSettled,
   flightVec3,
@@ -57,6 +58,18 @@ describe('flightAt', () => {
     expect(flightAt(50, 80, 1)).toBe(80)
     expect(flightAt(50, 80, 0.5)).toBeGreaterThan(65)
     expect(flightAt(50, 80, 0.5)).toBeLessThan(80)
+  })
+})
+
+describe('flightDurationMs', () => {
+  it('cuts flights to zero under reduced motion', () => {
+    expect(flightDurationMs(PLACE_FLIGHT_MS, true)).toBe(0)
+    expect(flightDurationMs(REFRAME_MS, true)).toBe(0)
+  })
+
+  it('keeps the authored duration in full motion', () => {
+    expect(flightDurationMs(PLACE_FLIGHT_MS, false)).toBe(PLACE_FLIGHT_MS)
+    expect(flightDurationMs(REFRAME_MS, false)).toBe(REFRAME_MS)
   })
 })
 

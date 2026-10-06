@@ -1,4 +1,4 @@
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import type { ClientLoaderFunctionArgs, LoaderFunctionArgs, MetaFunction } from 'react-router'
 import { Link, useLocation } from 'react-router'
 import { projectBody, warmProjectBody } from '../content/bodies'
@@ -6,6 +6,7 @@ import { loadProject, type ProjectDoc } from '../content/load'
 import { mdxComponents } from '../content/mdx-components'
 import { signalFocusLift } from '../input/intent'
 import { neighborhoodSignature } from '../palette'
+import { takeFocusReturn } from '../panel/panelFocus'
 import { usePedestalRouteSync } from '../panel/usePedestalRouteSync'
 import { withQaSearch } from '../time/timeParam'
 
@@ -48,6 +49,14 @@ export default function Project({ loaderData }: { loaderData: ProjectDoc }) {
   // Pedestal clicks land here from the canvas rig; case-link focus drives
   // the same 3D lift+glow as hover through the intent layer (spec keyboard).
   usePedestalRouteSync()
+  // Focus return (fol-l7d.11): a closing panel hands its slug back, and the
+  // place lands focus on that case link so keyboard users resume where they
+  // left. Null on every other arrival, so direct loads never steal focus.
+  useEffect(() => {
+    const slug = takeFocusReturn()
+    if (slug === null) return
+    document.querySelector<HTMLElement>(`a[data-pedestal="${CSS.escape(slug)}"]`)?.focus()
+  }, [])
   const Body = projectBody(loaderData.slug)
   return (
     <article className="route-content">

@@ -4,6 +4,7 @@ import {
   expectTimeParam,
   readSunValues,
   trackErrors,
+  urlWithQuery,
   waitForTownDrawn,
   watchSunValues,
 } from './helpers'
@@ -67,7 +68,7 @@ test('client navigation commits each route with its mdx body copy', async ({ pag
     'a conversation platform, grown as a solarpunk forum',
   )
   await page.getByRole('link', { name: 'cortico', exact: true }).click()
-  await expect(page).toHaveURL(/\/cortico(\?.*)?$/)
+  await expect(page).toHaveURL(urlWithQuery(/\/cortico$/))
   await expectTimeParam(page, '18:30')
   await expect(page.getByText('a conversation platform, grown as a solarpunk forum')).toBeVisible()
   expect(await page.evaluate(() => window.__bareCommits)).toEqual([])
@@ -80,7 +81,7 @@ test('client navigation commits each route with its mdx body copy', async ({ pag
     'how cortico holds large conversations',
   )
   await page.getByRole('link', { name: 'platform' }).first().click()
-  await expect(page).toHaveURL(/\/cortico\/platform(\?.*)?$/)
+  await expect(page).toHaveURL(urlWithQuery(/\/cortico\/platform$/))
   await expectTimeParam(page, '18:30')
   await expect(page.getByTestId('case-panel')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText('how cortico holds large conversations')).toBeVisible()
@@ -89,7 +90,7 @@ test('client navigation commits each route with its mdx body copy', async ({ pag
   // case -> town (back to the home route, still client-side)
   await page.goBack()
   await page.goBack()
-  await expect(page).toHaveURL(/localhost:\d+\/(\?.*)?$/)
+  await expect(page).toHaveURL(urlWithQuery(/localhost:\d+\/$/))
   await expectTimeParam(page, '18:30')
   await expect(page.getByText('a solarpunk town seen from above')).toBeVisible()
 
@@ -110,13 +111,13 @@ test('client navigation keeps ?time= and the night look', async ({ page }) => {
 
   // town -> project
   await page.getByRole('link', { name: 'cortico', exact: true }).click()
-  await expect(page).toHaveURL(/\/cortico(\?.*)?$/)
+  await expect(page).toHaveURL(urlWithQuery(/\/cortico$/))
   await expectTimeParam(page, '22:00')
   await expect(page.locator('canvas[data-sun="0.00"]')).toBeVisible()
 
   // project -> case
   await page.getByRole('link', { name: 'platform' }).first().click()
-  await expect(page).toHaveURL(/\/cortico\/platform(\?.*)?$/)
+  await expect(page).toHaveURL(urlWithQuery(/\/cortico\/platform$/))
   await expectTimeParam(page, '22:00')
   await expect(page.getByTestId('case-panel')).toBeVisible({ timeout: 15_000 })
   await expect(page.locator('canvas[data-sun="0.00"]')).toBeVisible()
@@ -124,7 +125,7 @@ test('client navigation keeps ?time= and the night look', async ({ page }) => {
   // case -> town (back to the home route, still client-side)
   await page.goBack()
   await page.goBack()
-  await expect(page).toHaveURL(/localhost:\d+\/(\?.*)?$/)
+  await expect(page).toHaveURL(urlWithQuery(/localhost:\d+\/$/))
   await expectTimeParam(page, '22:00')
   await expect(page.locator('canvas[data-sun="0.00"]')).toBeVisible()
 

@@ -25,6 +25,17 @@ export const YAW_SPRING_MS = 600
 /** Animation progress smaller than this is settled. */
 export const FLIGHT_SETTLE_EPS = 0.005
 
+/**
+ * Reduced motion turns camera flights into cuts (spec keyboard/reduced
+ * motion, fol-l7d.11): the flight lands on its final state at once instead
+ * of tweening toward it. Pure so Vitest pins the rule; the dolly step reads
+ * it so a cut lands on the goal even when motion reduces mid-flight.
+ */
+export function flightDurationMs(durationMs: number, reducedMotion: boolean): number {
+  if (reducedMotion) return 0
+  return durationMs
+}
+
 /** Clamped 0..1 progress of a tween started at `start` (ms, same clock). */
 export function tweenProgress(start: number, now: number, durationMs: number): number {
   if (!Number.isFinite(start) || !Number.isFinite(now) || !Number.isFinite(durationMs)) return 1

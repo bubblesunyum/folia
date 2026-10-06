@@ -8,7 +8,7 @@ import {
   PROJECTOR_KEY,
   type WorldPoint,
 } from '../src/testHooks'
-import { expectNoErrors, trackErrors, waitForTownDrawn } from './helpers'
+import { expectNoErrors, trackErrors, urlWithQuery, waitForTownDrawn } from './helpers'
 
 // fol-l1r.5: pedestal hover/first-tap lifts+glows only that pedestal, and
 // click/second-tap routes to /cortico/<slug> with the right-side panel,
@@ -62,7 +62,7 @@ async function openPlatform(page: Page): Promise<void> {
   await page.mouse.move(fresh.x, fresh.y)
   await expect(hovered).toBeVisible({ timeout: 15_000 })
   await page.mouse.click(fresh.x, fresh.y)
-  await expect(page).toHaveURL(/\/cortico\/platform\/?$/, { timeout: 15_000 })
+  await expect(page).toHaveURL(urlWithQuery(/\/cortico\/platform\/?$/), { timeout: 15_000 })
   await expect(page.getByTestId('case-panel')).toBeVisible({ timeout: 15_000 })
 }
 
@@ -137,20 +137,20 @@ test('Escape, Close and empty-click all close the panel', async ({ page }) => {
 
   // Escape rises to the parent through the intent layer, never the ZoomRig.
   await page.keyboard.press('Escape')
-  await expect(page).toHaveURL(/\/cortico\/?(\?.*)?$/, { timeout: 15_000 })
+  await expect(page).toHaveURL(urlWithQuery(/\/cortico\/?$/), { timeout: 15_000 })
   await expect(panel).toHaveCount(0)
   await expect(canvas).toHaveAttribute(canvasHookAttribute('panel'), '')
 
   // The one-word Close button.
   await openPlatform(page)
   await page.getByTestId('panel-close').click()
-  await expect(page).toHaveURL(/\/cortico\/?(\?.*)?$/, { timeout: 15_000 })
+  await expect(page).toHaveURL(urlWithQuery(/\/cortico\/?$/), { timeout: 15_000 })
   await expect(panel).toHaveCount(0)
 
   // A clean miss over empty world (top-strip sky) closes too.
   await openPlatform(page)
   await page.mouse.click(720, 40)
-  await expect(page).toHaveURL(/\/cortico\/?(\?.*)?$/, { timeout: 15_000 })
+  await expect(page).toHaveURL(urlWithQuery(/\/cortico\/?$/), { timeout: 15_000 })
   await expect(panel).toHaveCount(0)
 
   expectNoErrors(errors)
@@ -176,7 +176,7 @@ test('pedestal clicks swap the panel case-for-case without stacking history', as
   await expect(page.locator(canvasHookSelector('hover', '10'))).toBeVisible({ timeout: 15_000 })
   await hoverSettled(page)
   await page.mouse.click(point.x, point.y)
-  await expect(page).toHaveURL(/\/cortico\/recorder\/?$/, { timeout: 15_000 })
+  await expect(page).toHaveURL(urlWithQuery(/\/cortico\/recorder\/?$/), { timeout: 15_000 })
   await expect(page.getByTestId('panel-breadcrumb')).toHaveText('cortico › recorder')
   await expect(
     page.getByTestId('case-panel').getByRole('heading', { name: 'recorder' }),

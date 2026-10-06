@@ -8,7 +8,7 @@
 // empty-world miss. The case body itself still renders through the kind
 // registry, untouched.
 
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import type { CaseContent } from '../content/Panel'
 import { rendererFor } from '../content/registry'
@@ -16,6 +16,12 @@ import { PANEL_CLOSE_EVENT, setPanelOpen } from '../input/intent'
 import { RISE_EVENT } from '../input/sources'
 import { withQaSearch } from '../time/timeParam'
 import { getCaseInView, setCaseInView } from './caseInView'
+import {
+  clearFocusReturn,
+  FOCUSABLE_SELECTOR,
+  requestFocusReturn,
+  trapWrapTarget,
+} from './panelFocus'
 import { type PedestalSlug, slotForSlug } from './pedestals'
 import { usePanelLayout } from './usePanelLayout'
 import { usePedestalRouteSync } from './usePedestalRouteSync'
@@ -30,6 +36,11 @@ export function PanelPresenter({ content }: { content: PresenterContent }) {
   const { slug, projectSlug } = content
   usePedestalRouteSync()
   const { variant } = usePanelLayout()
+  const panelRef = useRef<HTMLElement | null>(null)
+  // The handoff slug can go stale across a case→case replace (same instance,
+  // new slug, no unmount), so the cleanup reads it through a ref.
+  const slugRef = useRef(slug)
+  slugRef.current = slug
 
   const close = useCallback(() => {
     // Open pushes /cortico → /cortico/<slug> (case-for-case swaps replace),
@@ -75,14 +86,47 @@ export function PanelPresenter({ content }: { content: PresenterContent }) {
     }
   }, [close])
 
+  // Focus ownership (fol-l7d.11, spec keyboard): the panel takes focus on
+  // open so keyboard and screen-reader users land in it, and hands its slug
+  // back on unmount so the place route returns focus to the case link.
+  // Mount-only: a case→case replace re-renders without unmounting, so focus
+  // stays where the user put it and no handoff is requested mid-panel.
+  useEffect(() => {
+    clearFocusReturn()
+    panelRef.current?.focus()
+    return () => {
+      requestFocusReturn(slugRef.current)
+    }
+    // Mount-only by design: a case→case replace re-renders without
+    // unmounting, so deps stay empty and focus stays where the user put it.
+  }, [])
+
   const Panel = rendererFor(content.kind)
   return (
     <aside
+      ref={panelRef}
+      tabIndex={-1}
       className="case-panel"
       data-testid="case-panel"
       data-case={slug}
       data-variant={variant}
       aria-label="case panel"
+      onKeyDown={(event) => {
+        // The Tab trap (fol-l7d.11): wrap past either end, otherwise let the
+        // browser move focus naturally between the sheet's stops.
+        if (event.key !== 'Tab' || event.defaultPrevented) return
+        const root = panelRef.current
+        if (root === null) return
+        const items = Array.from(root.querySelectorAll(FOCUSABLE_SELECTOR))
+        const target = trapWrapTarget(
+          items.length,
+          items.indexOf(document.activeElement as Element),
+          event.shiftKey,
+        )
+        if (target === null) return
+        event.preventDefault()
+        ;(items[target] as HTMLElement | undefined)?.focus()
+      }}
     >
       <div className="case-panel-top">
         <p className="case-breadcrumb" data-testid="panel-breadcrumb">

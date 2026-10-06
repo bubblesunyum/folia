@@ -11,7 +11,7 @@
 //     user never drove (any user drive clears it via the flight yield);
 //   - re-fires with no state change claim nothing and freeze nothing.
 
-import { flightAt, REFRAME_MS, tweenProgress } from '../motion/flight'
+import { flightAt, flightDurationMs, REFRAME_MS, tweenProgress } from '../motion/flight'
 import type { PanelVariant } from './metrics'
 import type { PedestalSlug } from './pedestals'
 
@@ -76,6 +76,7 @@ export function resolvePanelDolly(input: DollyInput): DollyDecision {
  * One eased step of the vantage dolly toward its goal, on the one camera
  * easing (motion/flight) every rise and flight shares. The rig owns the
  * tween clock; this stays pure so Vitest pins the motion without a canvas.
+ * Under reduced motion the step is a cut: the goal at once (fol-l7d.11).
  */
 export function dollyFlightStep(
   current: number,
@@ -83,6 +84,11 @@ export function dollyFlightStep(
   start: number,
   now: number,
   durationMs: number = REFRAME_MS,
+  reducedMotion = false,
 ): number {
-  return flightAt(current, goal, tweenProgress(start, now, durationMs))
+  return flightAt(
+    current,
+    goal,
+    tweenProgress(start, now, flightDurationMs(durationMs, reducedMotion)),
+  )
 }

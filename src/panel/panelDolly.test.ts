@@ -112,4 +112,11 @@ describe('dollyFlightStep', () => {
     expect(dollyFlightStep(80, PANEL_VANTAGE_M, 1000, 9000)).toBe(PANEL_VANTAGE_M)
     expect(dollyFlightStep(80, PANEL_VANTAGE_M, 1000, 1000, 0)).toBe(PANEL_VANTAGE_M)
   })
+
+  it('cuts straight to the goal under reduced motion', () => {
+    expect(dollyFlightStep(80, PANEL_VANTAGE_M, 1000, 1000, REFRAME_MS, true)).toBe(PANEL_VANTAGE_M)
+    expect(
+      dollyFlightStep(80, PANEL_VANTAGE_M, 1000, 1000 + REFRAME_MS / 2, REFRAME_MS, true),
+    ).toBe(PANEL_VANTAGE_M)
+  })
 })
