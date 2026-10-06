@@ -39,6 +39,10 @@ export function AmbientMotion() {
       reducedMotion: motionPreference.matches,
     })
     const tick = () => {
+      // Ambient-only invalidation (fol-kes.17): this deliberately never
+      // touches the shadow flags — `Lights` refreshes the map only when the
+      // camera, sun, look or lift moved since the last frame, so these ticks
+      // render with `needsUpdate` down and skip the shadow pass.
       if (ambient.tick(performance.now(), readSignals())) invalidate()
     }
     const onResume = () => ambient.rebase(performance.now())

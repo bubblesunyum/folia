@@ -6,7 +6,9 @@ import {
   quantizeExtent,
   resolveShadowRefresh,
   SHADOW_MAP_SIZE,
+  type ShadowInvalidationState,
   type ShadowSnapBase,
+  shadowNeedsRefresh,
   snapShadowToTexels,
   texelSize,
 } from './shadowFit'
@@ -37,11 +39,14 @@ describe('shadow fits', () => {
 })
 
 describe('resolveShadowRefresh', () => {
-  it('stays live while the sun is up', () => {
-    expect(resolveShadowRefresh('live', 1, true)).toEqual({ autoUpdate: true, needsRefresh: false })
+  it('refreshes once per sun/look move while the sun is up, then holds', () => {
+    // Live-day no longer auto-updates every frame (fol-kes.17): each
+    // look/sun invalidation issues one refresh, and ambient-only frames skip
+    // through the per-frame dirty check instead.
+    expect(resolveShadowRefresh('live', 1, true)).toEqual({ autoUpdate: false, needsRefresh: true })
     expect(resolveShadowRefresh('live', 0.01, true)).toEqual({
-      autoUpdate: true,
-      needsRefresh: false,
+      autoUpdate: false,
+      needsRefresh: true,
     })
   })
 
@@ -60,8 +65,8 @@ describe('resolveShadowRefresh', () => {
 
   it('restores live shadows at sunrise', () => {
     expect(resolveShadowRefresh('live', 0.5, false)).toEqual({
-      autoUpdate: true,
-      needsRefresh: false,
+      autoUpdate: false,
+      needsRefresh: true,
     })
   })
 
@@ -109,6 +114,56 @@ describe('computeSnapDelta', () => {
     expect(out.x).toBeCloseTo(-0.3, 12)
     expect(out.y).toBeCloseTo(0.3, 12)
     expect(out.z).toBeCloseTo(0, 12)
+  })
+})
+
+describe('shadowNeedsRefresh', () => {
+  const look = { night: 0 }
+  const state = (): ShadowInvalidationState => ({
+    camera: [49.23, 41.38, 49.23],
+    sun: [0.83, 0.34, 0.44],
+    daylight: 1,
+    look,
+    liftUploads: 0,
+    content: 0,
+  })
+
+  it('refreshes the first frame', () => {
+    expect(shadowNeedsRefresh(null, state())).toBe(true)
+  })
+
+  it('skips ambient-only frames: sway time matches on every field', () => {
+    expect(shadowNeedsRefresh(state(), state())).toBe(false)
+  })
+
+  it('refreshes on a camera move', () => {
+    const next = state()
+    next.camera = [50.23, 41.38, 49.23]
+    expect(shadowNeedsRefresh(state(), next)).toBe(true)
+  })
+
+  it('refreshes on a sun move', () => {
+    const next = state()
+    next.sun = [0.02, 1, 0.03]
+    expect(shadowNeedsRefresh(state(), next)).toBe(true)
+  })
+
+  it('refreshes on daylight, look and lift moves', () => {
+    const daylight = state()
+    daylight.daylight = 0
+    expect(shadowNeedsRefresh(state(), daylight)).toBe(true)
+    const lookNext = state()
+    lookNext.look = { night: 0 }
+    expect(shadowNeedsRefresh(state(), lookNext)).toBe(true)
+    const lift = state()
+    lift.liftUploads = 1
+    expect(shadowNeedsRefresh(state(), lift)).toBe(true)
+  })
+
+  it('refreshes when town content arrives after the last shadow pass', () => {
+    const arrived = state()
+    arrived.content = 1
+    expect(shadowNeedsRefresh(state(), arrived)).toBe(true)
   })
 })
 

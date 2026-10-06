@@ -29,11 +29,15 @@ export interface ShadowRefresh {
 }
 
 /**
- * The night freeze (fol-779): on the live policy the shadow map re-renders
- * every frame, including all night while the sun's intensity is 0 (spike 5:
- * 475k tris at daylight 0). So live means live-while-the-sun-is-up — sunset
- * issues one final refresh then holds frozen, sunrise restores autoUpdate.
- * The static policy keeps its D-041 re-freeze on every sun move.
+ * The night freeze (fol-779) plus the ambient stillness (fol-kes.17): the
+ * shadow map re-renders on demand, never every frame. Live means
+ * live-while-the-subject-moves — sunset issues one final refresh then holds
+ * frozen, sunrise refreshes once, and any look or sun move re-freezes with a
+ * single update. Camera and lift moves refresh through the per-frame dirty
+ * check in `Lights` (`shadowNeedsRefresh`); ambient-only frames leave
+ * `needsUpdate` down, so the 475k-tri night pass and the day shadow pass cost
+ * nothing while idle. The static policy keeps its D-041 re-freeze on every
+ * sun move.
  */
 export function resolveShadowRefresh(
   policy: ShadowPolicy,
@@ -41,13 +45,59 @@ export function resolveShadowRefresh(
   wasSunUp: boolean,
 ): ShadowRefresh {
   if (policy === 'static') return { autoUpdate: false, needsRefresh: true }
-  if (daylight > 0) return { autoUpdate: true, needsRefresh: false }
+  if (daylight > 0) return { autoUpdate: false, needsRefresh: true }
   return { autoUpdate: false, needsRefresh: wasSunUp }
 }
 
 const _right = new Vector3()
 const _up = new Vector3()
 const _delta = new Vector3()
+
+/**
+ * What the per-frame shadow dirty check compares (fol-kes.17). The shadow
+ * map is light-driven, so the check is conservative: any camera dolly, pan or
+ * orbit, sun move, look change or lift write refreshes once, while
+ * ambient-only frames (sway/ripple time) match on every field and skip the
+ * shadow pass. Tuples are fixed triples, mutated in place by the rig so
+ * steady frames allocate nothing.
+ */
+export interface ShadowInvalidationState {
+  camera: [number, number, number]
+  sun: [number, number, number]
+  daylight: number
+  /** The look object identity: a new look re-freezes even at equal weights. */
+  look: unknown
+  /** `groupStateUploads` at the last check: lift writes move the depth pass. */
+  liftUploads: number
+  /**
+   * Town content version at the last check (fol-kes.17): register/unregister
+   * moves geometry the shadow map was baked without, so the next frame
+   * refreshes once. Without this, late-streaming assets (trees arriving
+   * after the last camera move) cast no shadows until something else moves.
+   */
+  content: number
+}
+
+/**
+ * True when this frame must refresh the shadow map: the first frame, or any
+ * camera, sun, daylight, look, lift or content move since `prev`. Pure, so the ambient
+ * scheduler's cadence tests pin it without a renderer.
+ */
+export function shadowNeedsRefresh(
+  prev: ShadowInvalidationState | null,
+  next: ShadowInvalidationState,
+): boolean {
+  if (!prev) return true
+  if (prev.liftUploads !== next.liftUploads) return true
+  if (prev.content !== next.content) return true
+  if (prev.daylight !== next.daylight) return true
+  if (prev.look !== next.look) return true
+  for (let i = 0; i < 3; i += 1) {
+    if (prev.camera[i] !== next.camera[i]) return true
+    if (prev.sun[i] !== next.sun[i]) return true
+  }
+  return false
+}
 
 /** Unsnapped base transform a snap is derived from. The rig's target base is
  *  always the scene origin; snapping is its only other writer. */
