@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { HalfFloatType } from 'three'
 import { renderConfig } from '../debug'
 import { useLook } from '../time/lookContext'
+import { useContextRestores } from './contextRestores'
 import { GradeEffect } from './GradeEffect'
 
 const MSAA_SAMPLES = 4
@@ -26,13 +27,21 @@ export function Effects() {
   const { look } = useLook()
   const camera = useThree((state) => state.camera)
   const invalidate = useThree((state) => state.invalidate)
+  // Keyed on restores: the composer's buffers die with the context, so the
+  // whole chain remounts and the uniforms re-apply, with no reload (D-043).
+  const restores = useContextRestores()
   const bloom = useRef<BloomEffect>(null)
-  const grade = useMemo(() => new GradeEffect(), [])
+  // GradeEffect holds uniforms only, no GL handles, but rebuilding it with
+  // the composer keeps the restore path to one key instead of two lifecycles.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: restores is the rebuild trigger
+  const grade = useMemo(() => new GradeEffect(), [restores])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: restores is the rebuild trigger
   const smaa = useMemo(
     () => (renderConfig.aa === 'smaa' ? new EffectPass(camera, new SMAAEffect()) : null),
-    [camera],
+    [camera, restores],
   )
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-apply after a restore too
   useEffect(() => {
     grade.apply(look)
     const effect = bloom.current
@@ -41,10 +50,11 @@ export function Effects() {
     effect.luminanceMaterial.threshold = look.bloom.threshold
     effect.luminanceMaterial.smoothing = look.bloom.smoothing
     invalidate()
-  }, [look, grade, invalidate])
+  }, [look, grade, invalidate, restores])
 
   return (
     <EffectComposer
+      key={restores}
       multisampling={renderConfig.aa === 'msaa' ? MSAA_SAMPLES : 0}
       frameBufferType={HalfFloatType}
     >

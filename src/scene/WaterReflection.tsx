@@ -20,6 +20,7 @@ import { versionForMeshes } from '../assets/townVersion'
 import { renderConfig } from '../debug'
 import { materials } from '../materials/shared'
 import { water } from '../materials/water'
+import { useContextRestores } from '../renderer/contextRestores'
 import { createStreakBlur } from '../renderer/streakBlur'
 import { useLook } from '../time/lookContext'
 import {
@@ -62,6 +63,11 @@ export function WaterReflection() {
   const { look, sun, palette: pal } = useLook()
   const night = look.night
   const day = sun.daylight
+  // Recreated on restore (fol-l7d.13): the targets hold GL handles from the
+  // lost context, so the pass rebuilds on the restores count like the
+  // composer does; the previous targets are disposed underneath.
+  const restores = useContextRestores()
+  // biome-ignore lint/correctness/useExhaustiveDependencies: restores is the rebuild key
   const pass = useMemo(() => {
     return {
       target: new WebGLRenderTarget(1, 1, { type: HalfFloatType }),
@@ -96,7 +102,7 @@ export function WaterReflection() {
       // per-instance scan. Undefined until the first discovery below.
       pondVersion: undefined as number | undefined,
     }
-  }, [])
+  }, [restores])
 
   // The mirrored pass's roles by material identity, never by batch name: a
   // renamed batch, a second water batch on the same shared material, or
