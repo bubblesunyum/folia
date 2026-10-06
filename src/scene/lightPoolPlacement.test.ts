@@ -12,6 +12,7 @@ import fragmentParams from '../../assets/blender/cortico/fragment.json' with { t
 import fragmentPools from '../../assets/blender/cortico/fragment.pools.json' with { type: 'json' }
 import {
   POOL_LIFT_M,
+  POOL_OWNER_ASSET,
   POOL_RADIUS_M,
   POOL_SPACING_M,
   parseLightPoolLayout,
@@ -67,6 +68,10 @@ const layout = fragmentPools as unknown as {
 }
 
 describe('light-pool layout source (fol-kes.4)', () => {
+  it('names the owning asset, so the rig gates on the fragment that owns the terraces (fol-kes.15)', () => {
+    expect(layout.source).toMatchObject({ asset: POOL_OWNER_ASSET })
+  })
+
   it('echoes the fragment params, so a params edit without a re-bake fails', () => {
     expect(layout.source.seed).toBe(fragmentParams.seed)
     expect(layout.source.harmonics).toEqual(fragmentParams.terraces.harmonics)

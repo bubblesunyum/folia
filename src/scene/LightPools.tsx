@@ -8,6 +8,9 @@
 //
 // The mesh hides entirely by day (visible gate on the night weight) and the
 // material's opacity rides the same weight, so daylight is exactly unchanged.
+// fol-kes.15: the quads carry the terrace group slot (the lift moves them
+// with the terraces on hover) and the mesh sits at the owner placement, so
+// an off-origin fragment carries its pools with it.
 
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
@@ -17,10 +20,15 @@ import {
   buildLightPoolGeometry,
   createLightPoolMaterial,
   lightPoolsReady,
+  POOL_OWNER_OFFSET,
   parseLightPoolLayout,
+  poolOwnerSlot,
 } from '../materials/lightPool'
 import { useLook } from '../time/lookContext'
 import { useTownBatches } from './TownBatches'
+
+/** Stable mesh position: the owner placement, never reallocated per render. */
+const POOL_MESH_POSITION: [number, number, number] = [...POOL_OWNER_OFFSET]
 
 export function LightPools() {
   const { hasAsset } = useTownBatches()
@@ -29,7 +37,7 @@ export function LightPools() {
   } = useLook()
   const material = useMemo(() => createLightPoolMaterial(), [])
   const spots = useMemo(() => parseLightPoolLayout(fragmentPools), [])
-  const geometry = useMemo(() => buildLightPoolGeometry(spots), [spots])
+  const geometry = useMemo(() => buildLightPoolGeometry(spots, poolOwnerSlot()), [spots])
   const ref = useRef<Mesh>(null)
 
   // Owns the merged geometry and the material: both dispose on unmount (the
@@ -51,5 +59,13 @@ export function LightPools() {
     if (mesh) mesh.visible = night > 0.001 && lightPoolsReady(hasAsset)
   })
 
-  return <mesh ref={ref} geometry={geometry} material={material} visible={false} />
+  return (
+    <mesh
+      ref={ref}
+      geometry={geometry}
+      material={material}
+      visible={false}
+      position={POOL_MESH_POSITION}
+    />
+  )
 }

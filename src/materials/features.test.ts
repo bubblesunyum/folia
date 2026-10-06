@@ -20,6 +20,7 @@ import {
   revealBasic,
   sway,
 } from './features'
+import { lightPool } from './lightPool'
 import { neonGlow } from './neonGlow'
 import { water } from './water'
 import { windowBands } from './windowBands'
@@ -66,6 +67,10 @@ describe('feature injection against three shaders', () => {
   })
   it('puts the glow shell on the basic program with the lift', () => {
     expect(() => check(neonGlow, ShaderLib.basic, neonGlow.key)).not.toThrow()
+  })
+
+  it('puts the pool falloff on the basic program with the lift (fol-kes.15)', () => {
+    expect(() => check(lightPool, ShaderLib.basic, lightPool.key)).not.toThrow()
   })
 
   it('puts water and the full reveal on the standard program', () => {
