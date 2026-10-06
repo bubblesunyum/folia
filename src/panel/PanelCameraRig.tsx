@@ -1,6 +1,6 @@
 // The camera reframe for the open panel (fol-l1r.5, D-022/D-050): the orbit
-// target flies toward the open pedestal (back to town when it closes), the
-// camera dollies to the panel vantage on wide screens (fol-bsw), and the
+// target flies toward the open pedestal (back to the route vantage when it
+// closes), the camera dollies to the panel vantage on wide screens (fol-bsw), and the
 // camera takes a view offset so the scene sits centered in the uncovered
 // area — right of nothing on wide screens (the sheet takes the right),
 // above the bottom sheet on narrow ones. The offset flies with the panel
@@ -15,14 +15,16 @@
 
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
+import { useLocation } from 'react-router'
 import * as THREE from 'three'
 import { beginCameraFlight, currentCameraFlight } from '../input/cameraFlight'
+import { presetForPath } from '../input/cameraPresets'
 import { readReducedMotion } from '../input/intent'
 import { flightAt, flightVec3, OFFSET_MS, REFRAME_MS, tweenProgress } from '../motion/flight'
 import { setOrbitDistance } from '../motion/orbit'
 import { setCanvasHook } from '../testHooks'
 import { dollyFlightStep, resolvePanelDolly } from './panelDolly'
-import { type PedestalSlug, requireAnchor, TOWN_ORBIT_TARGET } from './pedestals'
+import { type PedestalSlug, requireAnchor } from './pedestals'
 import { usePanelLayout } from './usePanelLayout'
 
 const FOCUS_SNAP_M = 0.02
@@ -56,12 +58,25 @@ interface OffsetTween {
 
 const scratchFocus = new THREE.Vector3()
 
+/**
+ * Orbit home with no case open: the route vantage target (town at `/`, the
+ * forum centre on /cortico), never always town — otherwise the follow-branch
+ * below drags the orbit target off the cortico vantage after its place
+ * flight lands. With a case open the pedestal anchor still wins.
+ */
+function homeAnchor(pathname: string): readonly [number, number, number] {
+  return presetForPath(pathname).target
+}
+
 export function PanelCameraRig() {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
   const invalidate = useThree((state) => state.invalidate)
   const controls = useThree((state) => state.controls as unknown as ControlsLike | null)
   const layout = usePanelLayout()
+  const { pathname } = useLocation()
+  const pathnameRef = useRef(pathname)
+  pathnameRef.current = pathname
   const rig = useRef({
     slug: null as PedestalSlug | null,
     viewX: 0,
@@ -99,7 +114,7 @@ export function PanelCameraRig() {
     const target = controlsRef.current?.target
     // Focus flight: from the live orbit target toward the new anchor.
     if (focusMoved && target) {
-      const anchor = slug === null ? TOWN_ORBIT_TARGET : requireAnchor(slug)
+      const anchor = slug === null ? homeAnchor(pathname) : requireAnchor(slug)
       r.focusTween = {
         fromVec: target.clone(),
         toVec: new THREE.Vector3(anchor[0], anchor[1], anchor[2]),
@@ -142,7 +157,7 @@ export function PanelCameraRig() {
     // A new target always needs frames until the flight lands; a resize
     // re-targets while the demand loop may be at rest.
     invalidate()
-  }, [gl, invalidate, camera, layout.slug, layoutVariant, viewTargetX, viewTargetY])
+  }, [gl, invalidate, camera, layout.slug, layoutVariant, viewTargetX, viewTargetY, pathname])
 
   useEffect(() => {
     const canvas = gl.domElement
@@ -160,8 +175,9 @@ export function PanelCameraRig() {
     const reduced = readReducedMotion()
     let busy = false
 
-    // Orbit-target flight toward the open pedestal, home when it closes.
-    const anchor = r.slug === null ? TOWN_ORBIT_TARGET : requireAnchor(r.slug)
+    // Orbit-target flight toward the open pedestal, home to the route
+    // vantage when it closes.
+    const anchor = r.slug === null ? homeAnchor(pathnameRef.current) : requireAnchor(r.slug)
     scratchFocus.set(anchor[0], anchor[1], anchor[2])
     const target = controlsRef.current?.target
     if (target) {
