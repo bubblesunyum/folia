@@ -8,7 +8,7 @@
 // empty-world miss. The case body itself still renders through the kind
 // registry, untouched.
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import type { CaseContent } from '../content/Panel'
 import { rendererFor } from '../content/registry'
@@ -37,6 +37,11 @@ export function PanelPresenter({ content }: { content: PresenterContent }) {
   usePedestalRouteSync()
   const { variant } = usePanelLayout()
   const panelRef = useRef<HTMLElement | null>(null)
+  // Mount-gated entrance (see .case-panel.enter): the class is present only
+  // for the opening run, so a resize across 899/900px on a live panel swaps
+  // no animation and replays nothing. A case→case replace re-renders without
+  // unmounting, so it never re-enters either.
+  const [enter, setEnter] = useState(true)
   // The handoff slug can go stale across a case→case replace (same instance,
   // new slug, no unmount), so the cleanup reads it through a ref.
   const slugRef = useRef(slug)
@@ -101,12 +106,20 @@ export function PanelPresenter({ content }: { content: PresenterContent }) {
     // unmounting, so deps stay empty and focus stays where the user put it.
   }, [])
 
+  // Drop the entrance class just after its 450ms run (plus a buffer for
+  // reduced-motion, where no animation runs at all).
+  useEffect(() => {
+    if (!enter) return
+    const t = window.setTimeout(() => setEnter(false), 500)
+    return () => window.clearTimeout(t)
+  }, [enter])
+
   const Panel = rendererFor(content.kind)
   return (
     <aside
       ref={panelRef}
       tabIndex={-1}
-      className="case-panel"
+      className={enter ? 'case-panel enter' : 'case-panel'}
       data-testid="case-panel"
       data-case={slug}
       data-variant={variant}

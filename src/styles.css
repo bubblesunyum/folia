@@ -225,7 +225,9 @@ body,
    Widths mirror panel/metrics.ts (PANEL_WIDE_FRACTION/MAX, SHEET_FRACTION/MAX)
    and the 899px query is the other half of its `>= 900` breakpoint: keep the
    two in sync. The `data-variant` hook (side|bottom) mirrors panelVariant
-   for specs; the media query stays the styling mechanism. */
+   for specs; the media query stays the styling mechanism. The entrance is
+   mount-gated behind .enter (added on mount, removed after it runs) so
+   crossing 899/900px on a live panel never restarts it. */
 .case-panel {
   position: fixed;
   top: 0;
@@ -240,6 +242,11 @@ body,
   background: var(--cream);
   border-top-left-radius: 16px;
   border-bottom-left-radius: 16px;
+}
+
+/* Mount-gated entrance: present only at open, so a resize across the
+   breakpoint on a live panel swaps no animation and replays nothing. */
+.case-panel.enter {
   animation: case-panel-in 450ms ease;
 }
 
@@ -328,6 +335,21 @@ body,
   }
 }
 
+/* The bottom sheet rises from below instead of sliding in from the side:
+   the side entrance's translateX(48px) shifts getBoundingClientRect() right
+   past a 390px viewport while it runs (fol-583), so the narrow variant takes
+   a vertical entrance whose rect never spills horizontally. */
+@keyframes case-panel-up {
+  from {
+    opacity: 0;
+    transform: translateY(48px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes wisp-bob {
   0%,
   100% {
@@ -355,10 +377,14 @@ body,
     border-top-right-radius: 16px;
     border-bottom-left-radius: 0;
   }
+
+  .case-panel.enter {
+    animation: case-panel-up 450ms ease;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .case-panel {
+  .case-panel.enter {
     animation: none;
   }
   .wisp-perch {
