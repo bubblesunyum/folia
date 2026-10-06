@@ -89,4 +89,80 @@ describe('day reflection instance scope', () => {
     ).toThrow('render failed')
     expect(mesh.getVisibleAt(far)).toBe(true)
   })
+
+  it('caches the far set on the content version, skipping steady rescans', () => {
+    const { mesh, addAt } = batch()
+    const near = addAt(5, 0)
+    const far = addAt(30, 0)
+    const scratch = createReflectionScopeScratch()
+
+    withDayReflectionScope(
+      [mesh],
+      pond,
+      6,
+      scratch,
+      () => {
+        expect(mesh.getVisibleAt(far)).toBe(false)
+      },
+      pond.length,
+      1,
+    )
+    // Moved near without a version bump: the cached far set still hides it,
+    // proving the steady frame skipped the per-instance rescan.
+    mesh.setMatrixAt(far, new Matrix4().makeTranslation(5, 0, 0))
+    withDayReflectionScope(
+      [mesh],
+      pond,
+      6,
+      scratch,
+      () => {
+        expect(mesh.getVisibleAt(far)).toBe(false)
+        expect(mesh.getVisibleAt(near)).toBe(true)
+      },
+      pond.length,
+      1,
+    )
+    // The versioned matrix write rebuilds: the moved instance stays near.
+    withDayReflectionScope(
+      [mesh],
+      pond,
+      6,
+      scratch,
+      () => {
+        expect(mesh.getVisibleAt(far)).toBe(true)
+      },
+      pond.length,
+      2,
+    )
+  })
+
+  it('rebuilds when the ponds or margin move under the same version', () => {
+    const { mesh, addAt } = batch()
+    const mid = addAt(10, 0)
+    const scratch = createReflectionScopeScratch()
+
+    withDayReflectionScope(
+      [mesh],
+      pond,
+      6,
+      scratch,
+      () => {
+        expect(mesh.getVisibleAt(mid)).toBe(false)
+      },
+      pond.length,
+      1,
+    )
+    // Same version, wider margin: the neighborhood now reaches the instance.
+    withDayReflectionScope(
+      [mesh],
+      pond,
+      12,
+      scratch,
+      () => {
+        expect(mesh.getVisibleAt(mid)).toBe(true)
+      },
+      pond.length,
+      1,
+    )
+  })
 })

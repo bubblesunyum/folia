@@ -1,7 +1,8 @@
-import { BatchedMesh, BoxGeometry, MeshBasicMaterial, Vector3 } from 'three'
+import { BatchedMesh, BoxGeometry, Matrix4, MeshBasicMaterial, Vector3 } from 'three'
 import { describe, expect, it, vi } from 'vitest'
 import type { BatchCapacity } from './townBatches'
 import { type MeshFactory, type TownGeometries, TownRegistry } from './townRegistry'
+import { versionForMeshes } from './townVersion'
 
 function box(size: number): BoxGeometry {
   return new BoxGeometry(size, size, size)
@@ -170,6 +171,50 @@ describe('TownRegistry', () => {
     const v1 = registry.version
     registry.unregister('a')
     expect(registry.version).toBeGreaterThan(v1)
+  })
+
+  it('bumps the version on visibility, matrix, geometry and compact edits', () => {
+    const registry = new TownRegistry(caps(), factory)
+    registry.register('a', asset({ cream: [box(1)] }))
+    const mesh = registry.meshes.get('cream')
+    const v0 = registry.version
+    registry.setVisibleAt('cream', 0, false)
+    expect(mesh?.getVisibleAt(0)).toBe(false)
+    expect(registry.version).toBeGreaterThan(v0)
+    const v1 = registry.version
+    registry.setVisibleAt('cream', 0, true)
+    expect(registry.version).toBeGreaterThan(v1)
+    const v2 = registry.version
+    registry.setMatrixAt('cream', 0, new Matrix4().makeTranslation(3, 0, 0))
+    expect(registry.version).toBeGreaterThan(v2)
+    const v3 = registry.version
+    registry.setGeometryAt('cream', 0, box(1))
+    expect(registry.version).toBeGreaterThan(v3)
+    const v4 = registry.version
+    registry.compact('cream')
+    expect(registry.version).toBeGreaterThan(v4)
+    const v5 = registry.version
+    registry.markChanged()
+    expect(registry.version).toBeGreaterThan(v5)
+    const v6 = registry.version
+    registry.markChanged('cream')
+    expect(registry.version).toBeGreaterThan(v6)
+  })
+
+  it('throws versioned writes on an unknown batch', () => {
+    const registry = new TownRegistry(caps(), factory)
+    expect(() => registry.setVisibleAt('glass', 0, false)).toThrow(/no town batch/)
+    expect(() => registry.setMatrixAt('glass', 0, new Matrix4())).toThrow(/no town batch/)
+    expect(() => registry.setGeometryAt('glass', 0, box(1))).toThrow(/no town batch/)
+    expect(() => registry.compact('glass')).toThrow(/no town batch/)
+  })
+
+  it('exposes the live version through the meshes map', () => {
+    const registry = new TownRegistry(caps(), factory)
+    expect(versionForMeshes(registry.meshes)).toBe(registry.version)
+    registry.register('a', asset({ cream: [box(1)] }))
+    expect(versionForMeshes(registry.meshes)).toBe(registry.version)
+    expect(versionForMeshes(new Map())).toBeUndefined()
   })
 
   it('reports asset membership, so gates read the owner and never batch names', () => {

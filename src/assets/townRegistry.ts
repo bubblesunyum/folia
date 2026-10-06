@@ -8,6 +8,7 @@
 
 import type { BatchedMesh, BufferGeometry } from 'three'
 import { type BatchCapacity, grownCapacity, LOD_RESERVE } from './townBatches'
+import { registryForMeshes } from './townVersion'
 
 /** Batch → the asset's geometries for it. */
 export type TownGeometries = ReadonlyMap<string, readonly BufferGeometry[]>
@@ -67,6 +68,7 @@ export class TownRegistry {
       this.meshes.set(batch, factory(batch, cap))
       this.capacities.set(batch, cap)
     }
+    registryForMeshes.set(this.meshes, this)
   }
 
   register(asset: string, geometries: TownGeometries): void {
@@ -111,6 +113,70 @@ export class TownRegistry {
     const dead = this.retired
     this.retired = []
     return dead
+  }
+
+  /**
+   * Versioned visibility write (fol-kes.14): the only path that flips an
+   * instance's visibility. Direct `mesh.setVisibleAt` calls bypass the
+   * version, so picking and mirror caches holding the old version go stale.
+   * Visibility never moves bounds, so this bumps without recomputing them.
+   */
+  setVisibleAt(batch: string, instanceId: number, visible: boolean): void {
+    const mesh = this.batchFor(batch)
+    mesh.setVisibleAt(instanceId, visible)
+    this.version += 1
+  }
+
+  /**
+   * Versioned matrix write (fol-kes.14): the only path that moves an
+   * instance. The transform moves bounds, so this refreshes them like `touch`.
+   */
+  setMatrixAt(
+    batch: string,
+    instanceId: number,
+    matrix: Parameters<BatchedMesh['setMatrixAt']>[1],
+  ): void {
+    const mesh = this.batchFor(batch)
+    mesh.setMatrixAt(instanceId, matrix)
+    this.touch(batch)
+  }
+
+  /**
+   * Versioned LOD swap (fol-kes.14): the mid→hi geometry exchange inside the
+   * per-geometry reservation (D-050), so it never reallocates. Refreshes
+   * bounds like `touch`, since the geometry — and its ranges — moved.
+   */
+  setGeometryAt(batch: string, geometryId: number, geometry: BufferGeometry): void {
+    const mesh = this.batchFor(batch)
+    mesh.setGeometryAt(geometryId, geometry)
+    this.touch(batch)
+  }
+
+  /**
+   * Compacts one batch's freed ranges without adding content (fol-kes.14):
+   * the overflow path already compacts-and-retries inside `addWithGrowth`,
+   * but an explicit compact (streaming churn, LOD turnover) moves the version
+   * even when nothing is added, so cached near-sets and volumes rebuild.
+   */
+  compact(batch: string): void {
+    const mesh = this.batchFor(batch)
+    mesh.optimize()
+    this.touch(batch)
+  }
+
+  /**
+   * Version bump for edits with no registry handle: batch `matrixWorld`
+   * moves, or direct three writes that cannot route through the versioned
+   * setters above. Prefer the setters; call this when the mesh was touched
+   * from outside, so caches keyed on the version rebuild once instead of
+   * silently serving the pre-edit volumes.
+   */
+  markChanged(batch?: string): void {
+    if (batch === undefined) {
+      this.version += 1
+      return
+    }
+    this.touch(batch)
   }
 
   /**
@@ -179,6 +245,13 @@ export class TownRegistry {
       for (const { gid } of list) mesh.deleteGeometry(gid)
       this.touch(batch)
     }
+  }
+
+  /** The batch's live mesh, or a throw: versioned writes never silently miss. */
+  private batchFor(batch: string): BatchedMesh {
+    const mesh = this.meshes.get(batch)
+    if (!mesh) throw new Error(`no town batch "${batch}"`)
+    return mesh
   }
 
   /** Content changed: refresh whole-mesh bounds so frustum culling and the water plane track what is actually in the mesh. */

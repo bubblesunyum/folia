@@ -294,4 +294,59 @@ describe('pickSlotFromHit', () => {
     expect(pick(meshes, overSecond.raycaster, overSecond.pointer)).toBeNull()
     expect(pick(meshes, overFirst.raycaster, overFirst.pointer)).toBe(9)
   })
+
+  it('keys the cache on the registry version, skipping steady rescans', () => {
+    const hidden: number[] = []
+    const mesh = batchMesh('cream', {
+      positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+      groups: [9, 9, 9],
+      index: [0, 1, 2],
+      hidden,
+    })
+    const meshes = new Map([['cream', mesh]])
+    const over = rig([0.25, 0.25, 5], [0, 0, -1])
+    const pickVersioned = (version: number) =>
+      pickSlotFromHit(
+        meshes as never,
+        over.raycaster as never,
+        over.pointer as never,
+        {} as never,
+        version,
+      )
+    expect(pickVersioned(1)).toBe(9)
+    // Hidden without a version bump: the cached volumes still hit, proving
+    // the steady pick skipped the per-instance rescan.
+    hidden.push(0)
+    expect(pickVersioned(1)).toBe(9)
+    // The versioned visibility write rebuilds: the miss shows through.
+    expect(pickVersioned(2)).toBeNull()
+  })
+
+  it('rebuilds on a version move after a matrix edit', () => {
+    const matrices: number[][] = [[...IDENTITY16]]
+    const mesh = batchMesh('cream', {
+      positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+      groups: [9, 9, 9],
+      index: [0, 1, 2],
+      matrices,
+    })
+    const meshes = new Map([['cream', mesh]])
+    const overBuffer = rig([0.25, 0.25, 5], [0, 0, -1])
+    const overMoved = rig([10.25, 0.25, 5], [0, 0, -1])
+    const at = (r: ReturnType<typeof rig>, version: number) =>
+      pickSlotFromHit(
+        meshes as never,
+        r.raycaster as never,
+        r.pointer as never,
+        {} as never,
+        version,
+      )
+    matrices[0] = translation(10, 0, 0)
+    expect(at(overMoved, 1)).toBe(9)
+    // Moved back without a version bump: the stale volumes still hit moved.
+    matrices[0] = [...IDENTITY16]
+    expect(at(overMoved, 1)).toBe(9)
+    expect(at(overMoved, 2)).toBeNull()
+    expect(at(overBuffer, 2)).toBe(9)
+  })
 })

@@ -16,6 +16,7 @@ import {
   Vector4,
   WebGLRenderTarget,
 } from 'three'
+import { versionForMeshes } from '../assets/townVersion'
 import { renderConfig } from '../debug'
 import { materials } from '../materials/shared'
 import { water } from '../materials/water'
@@ -90,6 +91,10 @@ export function WaterReflection() {
       ponds: [] as Box3[],
       pondCount: 0,
       reflectionScope: createReflectionScopeScratch(),
+      // Pond discovery cache (fol-kes.14): the ponds' live bounds move only
+      // when town content does, so steady frames reuse them with no
+      // per-instance scan. Undefined until the first discovery below.
+      pondVersion: undefined as number | undefined,
     }
   }, [])
 
@@ -138,21 +143,26 @@ export function WaterReflection() {
 
     // Pass one derives each visible pond's live world bounds. A town-wide
     // batch box cannot define a useful reflection neighborhood because it
-    // includes every instance in that batch.
-    p.box.makeEmpty()
-    p.pondCount = 0
-    for (const batch of meshes.values()) {
-      if (classifyWaterBatch(batch.material, roles) !== 'pool') continue
-      if (!batch.visible) continue
-      forEachReflectionInstance(batch, p.reflectionScope, (_id, visible, bounds) => {
-        if (!visible || !bounds) return
-        const index = p.pondCount
-        p.pondCount += 1
-        const pond = p.ponds[index]
-        if (pond) pond.copy(bounds)
-        else p.ponds.push(bounds.clone())
-        p.box.union(bounds)
-      })
+    // includes every instance in that batch. Cached on the registry version
+    // (fol-kes.14): steady frames reuse the ponds with no per-instance scan.
+    const contentVersion = versionForMeshes(meshes)
+    if (contentVersion === undefined || p.pondVersion !== contentVersion) {
+      p.box.makeEmpty()
+      p.pondCount = 0
+      for (const batch of meshes.values()) {
+        if (classifyWaterBatch(batch.material, roles) !== 'pool') continue
+        if (!batch.visible) continue
+        forEachReflectionInstance(batch, p.reflectionScope, (_id, visible, bounds) => {
+          if (!visible || !bounds) return
+          const index = p.pondCount
+          p.pondCount += 1
+          const pond = p.ponds[index]
+          if (pond) pond.copy(bounds)
+          else p.ponds.push(bounds.clone())
+          p.box.union(bounds)
+        })
+      }
+      p.pondVersion = contentVersion
     }
 
     p.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
@@ -273,7 +283,16 @@ export function WaterReflection() {
         p.blur.render(gl, p.target, p.streaks)
       }
       if (nightPass) draw()
-      else withDayReflectionScope(meshes.values(), p.ponds, 6, p.reflectionScope, draw, p.pondCount)
+      else
+        withDayReflectionScope(
+          meshes.values(),
+          p.ponds,
+          6,
+          p.reflectionScope,
+          draw,
+          p.pondCount,
+          contentVersion,
+        )
     } finally {
       gl.setRenderTarget(previousTarget)
       gl.setClearColor(p.clearColor, clearAlpha)

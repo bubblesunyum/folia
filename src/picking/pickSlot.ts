@@ -20,12 +20,16 @@
 // The volumes cache rebuilds only when the content fingerprint moves (mesh
 // identity, live/hidden instance states, instance matrices, geometry ranges,
 // batch transform, attribute versions or sizes), so steady hovers pay the
-// query alone. three imports are type-only (erased at build), so this stays
-// out of the prerender graph's runtime (D-047): matrices cross as plain
-// 16-float column-major arrays through a duck-typed `fromArray` sink, never
-// a `Matrix4`.
+// query alone. When the town registry version is known (fol-kes.14) the cache
+// keys on it instead, so steady picks skip the fingerprint's per-instance
+// walk entirely. three imports are type-only (erased at build) and the only
+// runtime import is `../assets/townVersion`, which itself imports nothing at
+// runtime, so this stays out of the prerender graph's runtime (D-047):
+// matrices cross as plain 16-float column-major arrays through a duck-typed
+// `fromArray` sink, never a `Matrix4`.
 
 import type { BatchedMesh, Camera, Raycaster, Vector2 } from 'three'
+import { versionForMeshes } from '../assets/townVersion'
 import {
   buildHitVolumes,
   type HitVolume,
@@ -39,6 +43,8 @@ import { recordPick, recordRebuild } from './pickStats'
 interface VolumeCache {
   key: string
   volumes: ReadonlyMap<number, HitVolume>
+  /** Registry content version the volumes were built at, if known (fol-kes.14). */
+  version: number | undefined
 }
 
 let cache: VolumeCache | null = null
@@ -343,19 +349,43 @@ function sourcesFor(name: string, mesh: BatchedMesh): HitVolumeSource[] {
   return sources
 }
 
-function volumesFor(meshes: ReadonlyMap<string, BatchedMesh>): ReadonlyMap<number, HitVolume> {
+/** Rebuild the volumes from the live meshes and cache them under `key`/`version`. */
+function rebuildVolumes(
+  meshes: ReadonlyMap<string, BatchedMesh>,
+  key: string,
+  version: number | undefined,
+): ReadonlyMap<number, HitVolume> {
+  const started = performance.now()
+  const sources: HitVolumeSource[] = []
+  for (const [name, mesh] of meshes) {
+    sources.push(...sourcesFor(name, mesh))
+  }
+  const volumes = buildHitVolumes(sources)
+  let triangles = 0
+  for (const volume of volumes.values()) triangles += volume.triangles
+  cache = { key, volumes, version }
+  recordRebuild(performance.now() - started, volumes.size, triangles)
+  return cache.volumes
+}
+
+function volumesFor(
+  meshes: ReadonlyMap<string, BatchedMesh>,
+  contentVersion?: number,
+): ReadonlyMap<number, HitVolume> {
+  // Version fast path (fol-kes.14): steady picks skip the per-instance
+  // fingerprint walk entirely — no getters, no throws, no allocation. The
+  // version moves on every register/unregister/compact/visibility/matrix edit
+  // through the registry's versioned path, so equality means the live set is
+  // unchanged. Explicit `contentVersion` wins (tests, future callers); else
+  // the registry map's live version; else the fingerprint fallback below.
+  const version = contentVersion ?? versionForMeshes(meshes)
+  if (version !== undefined) {
+    if (cache && cache.version === version) return cache.volumes
+    return rebuildVolumes(meshes, fingerprint(meshes), version)
+  }
   const key = fingerprint(meshes)
   if (!cache || cache.key !== key) {
-    const started = performance.now()
-    const sources: HitVolumeSource[] = []
-    for (const [name, mesh] of meshes) {
-      sources.push(...sourcesFor(name, mesh))
-    }
-    const volumes = buildHitVolumes(sources)
-    let triangles = 0
-    for (const volume of volumes.values()) triangles += volume.triangles
-    cache = { key, volumes }
-    recordRebuild(performance.now() - started, volumes.size, triangles)
+    return rebuildVolumes(meshes, key, undefined)
   }
   return cache.volumes
 }
@@ -366,15 +396,21 @@ function volumesFor(meshes: ReadonlyMap<string, BatchedMesh>): ReadonlyMap<numbe
  * event (NDC) before the frame consumes it. Returns null on a miss; throws
  * on a missing group channel: fail closed, never hover or open the whole
  * town on a missing attribute.
+ *
+ * `contentVersion` (fol-kes.14) keys the volume cache on the town registry's
+ * monotonic version instead of rescanning every live instance per pick. When
+ * omitted, the registry map's live version is read when the map belongs to a
+ * `TownRegistry`; plain maps (tests) fall back to the content fingerprint.
  */
 export function pickSlotFromHit(
   meshes: ReadonlyMap<string, BatchedMesh>,
   raycaster: Raycaster,
   pointer: Vector2,
   camera: Camera,
+  contentVersion?: number,
 ): number | null {
   raycaster.setFromCamera(pointer, camera)
-  const volumes = volumesFor(meshes)
+  const volumes = volumesFor(meshes, contentVersion)
   const { origin, direction } = raycaster.ray
   const started = performance.now()
   const slot = pickHitVolume(
