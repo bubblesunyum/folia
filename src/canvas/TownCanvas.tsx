@@ -5,6 +5,7 @@ import { Viewport } from '../renderer/Viewport'
 import { LookDevScene } from '../scene/LookDevScene'
 import { TownBatches } from '../scene/TownBatches'
 import { LookProvider } from '../time/LookProvider'
+import { RevealDriver } from './RevealDriver'
 
 const PerfHud = lazy(() =>
   import('../perf/PerfHud').then((module) => ({ default: module.PerfHud })),
@@ -20,6 +21,10 @@ export function TownCanvas({ onSky }: { onSky: () => void }) {
       <LookProvider>
         <TownBatches>
           <LookDevScene />
+          {/* Outside every Suspense boundary: sky plus the cream ocean paint
+              before the town streams, and the driver sweeps the reveal once
+              it settles (D-018). */}
+          <RevealDriver />
         </TownBatches>
         <Effects />
       </LookProvider>

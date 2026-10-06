@@ -4,10 +4,15 @@
 // chunk throws at compile rather than silently rendering without the feature.
 
 import {
+  type Camera,
+  HalfFloatType,
   type IUniform,
   type Material,
   MeshDepthMaterial,
+  type Scene,
   type WebGLProgramParametersWithUniforms,
+  type WebGLRenderer,
+  WebGLRenderTarget,
 } from 'three'
 
 /** Code placed around, or instead of, one `#include <chunk>`. */
@@ -94,4 +99,30 @@ export function composeMaterial<M extends Material>(material: M, features: reado
 export function composeDepthMaterial(features: readonly Feature[]): MeshDepthMaterial {
   const moving = features.filter((f) => f.depthVertex)
   return install(new MeshDepthMaterial(), moving, (f) => ({ vertex: f.depthVertex }))
+}
+
+/**
+ * Shader warm-up (D-043): compiles every program behind the cream ocean, so
+ * nothing compiles after the reveal completes. The target matches the
+ * composer's input buffer (tiny HalfFloat, linear), so the compiled programs
+ * match the ones the post chain actually draws with. Then one forced shadow
+ * render, so the depth programs compile too. Never touches
+ * `shadowMap.enabled` (it is in every program's cache key); only the
+ * `autoUpdate`/`needsUpdate` flags move, restored in `finally`.
+ */
+export async function warmupScene(gl: WebGLRenderer, scene: Scene, camera: Camera): Promise<void> {
+  const previous = gl.getRenderTarget()
+  const target = new WebGLRenderTarget(4, 4, { type: HalfFloatType })
+  const autoUpdate = gl.shadowMap.autoUpdate
+  try {
+    gl.setRenderTarget(target)
+    await gl.compileAsync(scene, camera)
+    gl.shadowMap.autoUpdate = true
+    gl.shadowMap.needsUpdate = true
+    gl.render(scene, camera)
+  } finally {
+    gl.shadowMap.autoUpdate = autoUpdate
+    gl.setRenderTarget(previous)
+    target.dispose()
+  }
 }

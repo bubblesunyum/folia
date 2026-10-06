@@ -1,5 +1,6 @@
 import { type ComponentType, type ReactNode, Suspense, useEffect, useState } from 'react'
 import { CanvasBoundary } from './CanvasBoundary'
+import { ShellOcean } from './ShellOcean'
 
 // How long the canvas takes to fade in over the shell once it paints.
 // This must match the `.canvas-fade.is-ready` transition in styles.css:
@@ -51,6 +52,11 @@ export function CanvasHost({ children }: { children?: ReactNode }) {
       {!shellGone && (
         <div className="shell-backdrop" aria-hidden="true" data-testid="shell-backdrop">
           <div className="sky-shell-gradient" />
+          {/* Cream-ocean first paint (D-018): the sky gradient above, opaque
+              cream below, so the route shows sky plus ocean before the canvas
+              chunk streams and through the first frame. The WebGL ocean takes
+              over behind the crossfade; both read the same palette cream. */}
+          <ShellOcean testId="shell-ocean" />
         </div>
       )}
       <div className={sky ? 'canvas-fade is-ready' : 'canvas-fade'}>
