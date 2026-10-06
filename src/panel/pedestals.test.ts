@@ -166,6 +166,22 @@ describe('resolveCaseNav', () => {
   it('fails closed off-path with no project instead of guessing one', () => {
     expect(() => resolveCaseNav('/', 'platform')).toThrowError(/no project/)
   })
+
+  it('carries the QA search onto the case path, leaving bare calls bare', () => {
+    const night = resolveCaseNav('/cortico', 'platform', undefined, '?time=22:00')
+    expect(night.replace).toBe(false)
+    expect(new URL(night.to, 'http://x').pathname).toBe('/cortico/platform')
+    expect(new URL(night.to, 'http://x').searchParams.get('time')).toBe('22:00')
+    const swap = resolveCaseNav('/cortico/platform', 'recorder', undefined, '?time=22:00&sway=off')
+    expect(swap.replace).toBe(true)
+    expect(new URL(swap.to, 'http://x').pathname).toBe('/cortico/recorder')
+    expect(new URL(swap.to, 'http://x').searchParams.get('time')).toBe('22:00')
+    expect(new URL(swap.to, 'http://x').searchParams.get('sway')).toBe('off')
+    expect(resolveCaseNav('/cortico', 'platform', 'cortico', '')).toEqual({
+      to: '/cortico/platform',
+      replace: false,
+    })
+  })
 })
 
 describe('second-project probe (fol-ya7)', () => {

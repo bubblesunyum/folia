@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
+import { withQaSearch } from '../time/timeParam'
 import { caseBody } from './bodies'
 import { mdxComponents } from './mdx-components'
 
@@ -22,6 +23,7 @@ export function CasePanel({ content }: { content: CaseContent }) {
   // Warmed by the case route loader, so this resolves synchronously on
   // prerender and navigation; the boundary covers client hydration, whose
   // loaders never re-run (fol-kes.9).
+  const { search } = useLocation()
   const Body = caseBody(content.projectSlug, content.slug)
   return (
     <article className="route-content">
@@ -31,7 +33,7 @@ export function CasePanel({ content }: { content: CaseContent }) {
         <Body components={mdxComponents} />
       </Suspense>
       <p>
-        <Link to={`/${content.projectSlug}`} prefetch="intent">
+        <Link to={withQaSearch(`/${content.projectSlug}`, search)} prefetch="intent">
           {content.projectTitle}
         </Link>
       </p>

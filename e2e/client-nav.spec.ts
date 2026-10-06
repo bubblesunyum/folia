@@ -1,5 +1,12 @@
 import { expect, type Page, test } from '@playwright/test'
-import { expectNoErrors, trackErrors, waitForTownDrawn } from './helpers'
+import {
+  expectNoErrors,
+  expectTimeParam,
+  readSunValues,
+  trackErrors,
+  waitForTownDrawn,
+  watchSunValues,
+} from './helpers'
 
 // fol-kes.12: the route loaders warm the lazy mdx body chunk, but the fully
 // static build has no server loader at navigation time, so a client
@@ -60,7 +67,8 @@ test('client navigation commits each route with its mdx body copy', async ({ pag
     'a conversation platform, grown as a solarpunk forum',
   )
   await page.getByRole('link', { name: 'cortico', exact: true }).click()
-  await expect(page).toHaveURL(/\/cortico$/)
+  await expect(page).toHaveURL(/\/cortico(\?.*)?$/)
+  await expectTimeParam(page, '18:30')
   await expect(page.getByText('a conversation platform, grown as a solarpunk forum')).toBeVisible()
   expect(await page.evaluate(() => window.__bareCommits)).toEqual([])
 
@@ -72,7 +80,8 @@ test('client navigation commits each route with its mdx body copy', async ({ pag
     'how cortico holds large conversations',
   )
   await page.getByRole('link', { name: 'platform' }).first().click()
-  await expect(page).toHaveURL(/\/cortico\/platform$/)
+  await expect(page).toHaveURL(/\/cortico\/platform(\?.*)?$/)
+  await expectTimeParam(page, '18:30')
   await expect(page.getByTestId('case-panel')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText('how cortico holds large conversations')).toBeVisible()
   expect(await page.evaluate(() => window.__bareCommits)).toEqual([])
@@ -81,7 +90,48 @@ test('client navigation commits each route with its mdx body copy', async ({ pag
   await page.goBack()
   await page.goBack()
   await expect(page).toHaveURL(/localhost:\d+\/(\?.*)?$/)
+  await expectTimeParam(page, '18:30')
   await expect(page.getByText('a solarpunk town seen from above')).toBeVisible()
+
+  expectNoErrors(errors)
+})
+
+// fol-76l: client navigation used to drop the query, so a QA night session
+// snapped back to golden hour on the next load. Every link and canvas nav
+// carries the QA search now; this pins the URL and the look (canvas
+// `data-sun` is the night fingerprint: 0.00, against golden hour's 4.50).
+test('client navigation keeps ?time= and the night look', async ({ page }) => {
+  test.slow()
+  const errors = trackErrors(page)
+  await page.goto('/?time=22:00')
+  await waitForTownDrawn(page, ASSETS)
+  await expect(page.locator('canvas[data-sun="0.00"]')).toBeVisible()
+  await watchSunValues(page)
+
+  // town -> project
+  await page.getByRole('link', { name: 'cortico', exact: true }).click()
+  await expect(page).toHaveURL(/\/cortico(\?.*)?$/)
+  await expectTimeParam(page, '22:00')
+  await expect(page.locator('canvas[data-sun="0.00"]')).toBeVisible()
+
+  // project -> case
+  await page.getByRole('link', { name: 'platform' }).first().click()
+  await expect(page).toHaveURL(/\/cortico\/platform(\?.*)?$/)
+  await expectTimeParam(page, '22:00')
+  await expect(page.getByTestId('case-panel')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('canvas[data-sun="0.00"]')).toBeVisible()
+
+  // case -> town (back to the home route, still client-side)
+  await page.goBack()
+  await page.goBack()
+  await expect(page).toHaveURL(/localhost:\d+\/(\?.*)?$/)
+  await expectTimeParam(page, '22:00')
+  await expect(page.locator('canvas[data-sun="0.00"]')).toBeVisible()
+
+  // No golden flash at any commit: every recorded sun value is the night one.
+  const values = await readSunValues(page)
+  expect(values.length).toBeGreaterThan(0)
+  expect(values.every((value) => value === '0.00')).toBe(true)
 
   expectNoErrors(errors)
 })

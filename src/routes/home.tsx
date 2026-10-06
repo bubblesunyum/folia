@@ -1,9 +1,10 @@
 import { Suspense } from 'react'
 import type { ClientLoaderFunctionArgs, MetaFunction } from 'react-router'
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import { townBody, warmTownBody } from '../content/bodies'
 import { loadTown, type TownDoc } from '../content/load'
 import { mdxComponents } from '../content/mdx-components'
+import { withQaSearch } from '../time/timeParam'
 
 export async function loader(): Promise<TownDoc> {
   // Prerender only: warms the body so the static HTML carries the real copy.
@@ -29,6 +30,9 @@ export const meta: MetaFunction<typeof loader> = ({ loaderData }) => [
 ]
 
 export default function Home({ loaderData }: { loaderData: TownDoc }) {
+  // The QA search (`?time=`, the render switches) rides along so a client
+  // navigation never drops a QA session back to defaults (fol-76l).
+  const { search } = useLocation()
   const Body = townBody()
   return (
     <article className="route-content">
@@ -37,7 +41,7 @@ export default function Home({ loaderData }: { loaderData: TownDoc }) {
         <Body components={mdxComponents} />
       </Suspense>
       <p>
-        <Link to="/cortico" prefetch="intent">
+        <Link to={withQaSearch('/cortico', search)} prefetch="intent">
           cortico
         </Link>
       </p>

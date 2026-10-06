@@ -1,12 +1,13 @@
 import { Suspense } from 'react'
 import type { ClientLoaderFunctionArgs, LoaderFunctionArgs, MetaFunction } from 'react-router'
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import { projectBody, warmProjectBody } from '../content/bodies'
 import { loadProject, type ProjectDoc } from '../content/load'
 import { mdxComponents } from '../content/mdx-components'
 import { signalFocusLift } from '../input/intent'
 import { neighborhoodSignature } from '../palette'
 import { usePedestalRouteSync } from '../panel/usePedestalRouteSync'
+import { withQaSearch } from '../time/timeParam'
 
 export async function loader({ params }: LoaderFunctionArgs): Promise<ProjectDoc> {
   if (params.project === undefined) throw new Response('missing project', { status: 404 })
@@ -67,9 +68,11 @@ export default function Project({ loaderData }: { loaderData: ProjectDoc }) {
 }
 
 function CaseLink({ slug, title }: { slug: string; title: string }) {
+  // Same QA-search carry as the town link above (fol-76l).
+  const { search } = useLocation()
   return (
     <Link
-      to={slug}
+      to={withQaSearch(slug, search)}
       prefetch="intent"
       data-pedestal={slug}
       onFocus={() => signalFocusLift(slug)}

@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from 'react'
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
+import { withQaSearch } from '../time/timeParam'
 
 // Overrides injected into every compiled MDX body via the `components` prop
 // (no MDX provider — the browser graph stays react-only, D-047).
@@ -11,9 +12,12 @@ export interface MdxLinkProps {
 }
 
 function MdxLink({ href, children }: MdxLinkProps) {
+  // The QA search (?time=, render switches) rides along so MDX body links
+  // never drop a QA session back to defaults (fol-76l).
+  const { search } = useLocation()
   if (href === undefined) return <>{children}</>
   return href.startsWith('/') ? (
-    <Link to={href} prefetch="intent">
+    <Link to={withQaSearch(href, search)} prefetch="intent">
       {children}
     </Link>
   ) : (

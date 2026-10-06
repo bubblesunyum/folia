@@ -9,11 +9,12 @@
 // registry, untouched.
 
 import { useCallback, useEffect } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import type { CaseContent } from '../content/Panel'
 import { rendererFor } from '../content/registry'
 import { PANEL_CLOSE_EVENT, setPanelOpen } from '../input/intent'
 import { RISE_EVENT } from '../input/sources'
+import { withQaSearch } from '../time/timeParam'
 import { getCaseInView, setCaseInView } from './caseInView'
 import { type PedestalSlug, slotForSlug } from './pedestals'
 import { usePanelLayout } from './usePanelLayout'
@@ -25,6 +26,7 @@ export interface PresenterContent extends CaseContent {
 
 export function PanelPresenter({ content }: { content: PresenterContent }) {
   const navigate = useNavigate()
+  const { search } = useLocation()
   const { slug, projectSlug } = content
   usePedestalRouteSync()
   const { variant } = usePanelLayout()
@@ -34,11 +36,13 @@ export function PanelPresenter({ content }: { content: PresenterContent }) {
     // so popping returns to the project page without stacking a duplicate
     // /cortico entry — otherwise Back would reopen the closed panel
     // (fol-e6h). A directly loaded case has no previous entry (router idx
-    // 0), so replace to the project page instead.
+    // 0), so replace to the project page instead. Either way the QA search
+    // rides along (fol-76l): popping restores the pushed URL as-is, and the
+    // replace carries it explicitly.
     const idx = (window.history.state as { idx?: unknown } | null)?.idx
     if (typeof idx === 'number' && idx > 0) navigate(-1)
-    else navigate(`/${projectSlug}`, { replace: true })
-  }, [navigate, projectSlug])
+    else navigate(withQaSearch(`/${projectSlug}`, search), { replace: true })
+  }, [navigate, projectSlug, search])
 
   // Open-case registration: the canvas rigs (focus ease, view offset, wisp)
   // and ZoomRig's Escape priority read this. A content-only case (MDX added

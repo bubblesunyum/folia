@@ -26,6 +26,43 @@ export function expectNoErrors(errors: string[]): void {
   expect(errors).toEqual([])
 }
 
+/** The URL still carries the `?time=` override after client navigation. */
+export async function expectTimeParam(page: Page, time: string): Promise<void> {
+  const [hours, minutes] = time.split(':')
+  await expect(page).toHaveURL(new RegExp(`[?&]time=${hours}(%3A|:)${minutes}`))
+}
+
+declare global {
+  interface Window {
+    __sunValues?: (string | null)[]
+  }
+}
+
+/**
+ * Records every canvas `data-sun` value from here on (fol-76l): the sun
+ * intensity is the look's fingerprint (night reads 0.00, golden hour 4.50),
+ * so a golden flash mid-session shows up as a non-night entry.
+ */
+export async function watchSunValues(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    window.__sunValues = []
+    const record = (): void => {
+      window.__sunValues?.push(document.querySelector('canvas')?.getAttribute('data-sun') ?? null)
+    }
+    record()
+    new MutationObserver(record).observe(document.body, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ['data-sun'],
+    })
+  })
+}
+
+/** Every recorded canvas `data-sun` value, oldest first. */
+export function readSunValues(page: Page): Promise<(string | null)[]> {
+  return page.evaluate(() => window.__sunValues ?? [])
+}
+
 /** Counts WebGL draw calls the page issues. */
 export const COUNT_DRAWS = `
   window.foliaDrawCalls = 0

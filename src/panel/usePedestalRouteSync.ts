@@ -15,6 +15,8 @@ export function usePedestalRouteSync(): void {
   const params = useParams()
   const pathRef = useRef(location.pathname)
   pathRef.current = location.pathname
+  const searchRef = useRef(location.search)
+  searchRef.current = location.search
   const projectRef = useRef(params.project)
   projectRef.current = params.project
   const navigateRef = useRef(navigate)
@@ -23,7 +25,7 @@ export function usePedestalRouteSync(): void {
     const onOpen = (event: Event) => {
       const slug = (event as CustomEvent<CaseOpenDetail>).detail?.slug
       if (slug === undefined || slug === null) return
-      const nav = resolveCaseNav(pathRef.current, slug, projectRef.current)
+      const nav = resolveCaseNav(pathRef.current, slug, projectRef.current, searchRef.current)
       navigateRef.current(nav.to, { replace: nav.replace })
     }
     window.addEventListener(CASE_OPEN_EVENT, onOpen)

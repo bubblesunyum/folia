@@ -12,6 +12,7 @@
 import forumLayout from '../../assets/blender/cortico/forum-layout.json' with { type: 'json' }
 import manifest from '../../assets/manifest.json' with { type: 'json' }
 import { listCases, listProjects } from '../content/load'
+import { withQaSearch } from '../time/timeParam'
 
 /** The cortico/forum group slots from the asset manifest, fail closed. */
 const forumSlots: Readonly<Record<string, number>> = (() => {
@@ -200,16 +201,24 @@ export interface CaseNav {
  * place, a replace when swapping the open panel case-for-case. The project
  * comes from the caller, which reads it from its route params, falling back
  * to the current path; off-path with no project it throws instead of
- * guessing the first content project (fail closed).
+ * guessing the first content project (fail closed). `search` is the current
+ * location search: the QA params (`?time=`, the render switches) carry onto
+ * the target so a canvas tap never drops a QA session (fol-76l); empty by
+ * default, which leaves historical bare-path callers untouched.
  */
-export function resolveCaseNav(currentPath: string, slug: string, project?: string): CaseNav {
+export function resolveCaseNav(
+  currentPath: string,
+  slug: string,
+  project?: string,
+  search = '',
+): CaseNav {
   const fromPath = projectFromPath(currentPath)
   const resolved = project ?? fromPath
   if (resolved === null) {
     throw new Error(`pedestals: cannot route case "${slug}" with no project (pass it explicitly)`)
   }
   const onCase = fromPath !== null && isCasePath(currentPath, fromPath)
-  return { to: `/${resolved}/${slug}`, replace: onCase }
+  return { to: withQaSearch(`/${resolved}/${slug}`, search), replace: onCase }
 }
 
 /** The known project a path sits under, or null at town level and elsewhere. */
