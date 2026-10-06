@@ -1,6 +1,7 @@
 import hashes from 'virtual:folia-assets'
 import { startTransition, useEffect, useState } from 'react'
 import type { AssetEvent } from '../../assets/pipeline/vitePlugin'
+import { lodStems } from './lods'
 
 /** The newest hash per asset, so a remount after a hot swap keeps the new geometry. */
 const latest: Record<string, string> = { ...hashes }
@@ -39,13 +40,21 @@ export function useAssetUrl(asset: string): string {
 }
 
 /**
- * The URL of one side of an asset's D-072 split (fol-l7d.2): `file` is the
- * manifest-recorded stem (`cortico/fragment.mid`), versioned by the same
- * per-asset content hash as the full export — mid and high twins come from
- * one build, so one hash versions both.
+ * The URL of one side of an asset's D-072 split (fol-l7d.2), resolved from
+ * the manifest-recorded stems: callers name the side, never the file, so a
+ * re-split never touches the scene. Both sides are versioned by the same
+ * per-asset content hash — mid and high twins come from one build, so one
+ * hash versions both. `high` is null for single-LOD assets, where the
+ * vantage mounts no stream.
  */
-export function useLodUrl(asset: string, file: string): string {
-  return `/assets/${file}.glb?v=${useAssetHash(asset)}`
+export function useLodUrl(asset: string, side: 'mid'): string
+export function useLodUrl(asset: string, side: 'high'): string | null
+export function useLodUrl(asset: string, side: 'mid' | 'high'): string | null {
+  const hash = useAssetHash(asset)
+  const { mid, high } = lodStems(asset)
+  const file = side === 'mid' ? mid : high
+  if (file === null) return null
+  return `/assets/${file}.glb?v=${hash}`
 }
 
 /** Called once a swapped asset has drawn; logs save-to-pixels time (D-034 target: under 10 s). */
