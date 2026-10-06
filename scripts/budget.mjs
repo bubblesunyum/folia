@@ -5,17 +5,18 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { join } from 'node:path';
+import { checkLodBudgets, hoodLodTotals } from '../src/assets/lods.ts';
 import { assertBuildFresh, CLIENT_INDEX } from './lib/fresh-build.mjs';
 
 let failed = false;
 const bad = (m) => { failed = true; console.error(`budget: failed: ${m}`); };
 const say = (m) => console.log(`budget: ${m}`);
 
-// Breadth starting allowance (D-072): 1 MB / 75k tris of town mid-LOD,
-// plus 2 MB / 200k of route hero detail. Until separate LOD exports exist,
-// enforce their combined ceiling across every asset in the neighborhood.
-const HOOD_BYTES = 3_000_000;
-const HOOD_TRIS = 275_000;
+// Breadth starting allowance (D-072, fol-l7d.2): the caps live in
+// `src/assets/lods.ts`, the one file the gate and the client derive the
+// split from — never a hand copy here. Each hood's mid town read (1 MB /
+// 75k) and high hero stream (2 MB / 200k) fail on their own cap,
+// independently of each other and the combined 3 MB / 275k ceiling.
 // Shell/canvas JS gz caps: shell re-measured post-router (fol-3qa) — the `/`
 // initial-route chunk union is ~113 KB gz, so the cap holds ~20% headroom.
 // Canvas re-measures at ~365 KB gz against its 450 KB cap.
@@ -23,27 +24,48 @@ const SHELL_GZ = 140_000;
 const CANVAS_GZ = 450_000;
 
 const manifest = JSON.parse(readFileSync('assets/manifest.json', 'utf8'));
-const hoods = {};
+for (const error of checkLodBudgets(manifest)) bad(error);
+// Totals re-throw the same drift the check already reported: say what can
+// be said, never crash the gate.
+let hoods = {};
+try {
+  hoods = hoodLodTotals(manifest);
+} catch {
+  /* reported above */
+}
 for (const [asset, rec] of Object.entries(manifest)) {
-  let bytes;
-  try {
-    bytes = statSync(join('public/assets', `${asset}.glb`)).size;
-  } catch {
-    bad(`${asset}.glb missing from public/assets`);
-    continue;
+  // Every recorded side ships exactly its recorded bytes: the full export
+  // anchors the split (rebuilds move it), and each twin anchors its half.
+  const sides = rec.lods ?? {};
+  const files = Object.values(sides).map((s) => s.file);
+  if (rec.sourceBytes !== undefined) {
+    let full;
+    try {
+      full = statSync(join('public/assets', `${asset}.glb`)).size;
+    } catch {
+      bad(`${asset}.glb missing from public/assets`);
+      continue;
+    }
+    if (full !== rec.sourceBytes) {
+      bad(`${asset}: full export is ${full} bytes but the twins split from ${rec.sourceBytes} — rebuild, then rerun node scripts/lib/split-lods.mjs ${asset}`);
+    }
   }
-  if (bytes !== rec.bytes) {
-    bad(`${asset}: manifest lists ${rec.bytes} bytes but the file is ${bytes} — rerun the asset build`);
+  for (const file of files) {
+    let bytes;
+    try {
+      bytes = statSync(join('public/assets', `${file}.glb`)).size;
+    } catch {
+      bad(`${file}.glb missing from public/assets — run node scripts/lib/split-lods.mjs ${asset}`);
+      continue;
+    }
+    const want = Object.values(sides).find((s) => s.file === file)?.bytes;
+    if (bytes !== want) {
+      bad(`${file}: manifest lists ${want} bytes but the file is ${bytes} — rerun node scripts/lib/split-lods.mjs ${asset}`);
+    }
   }
-  const tris = Object.values(rec.triangles).reduce((a, b) => a + b, 0);
-  const h = (hoods[asset.split('/')[0]] ??= { bytes: 0, tris: 0 });
-  h.bytes += bytes;
-  h.tris += tris;
 }
 for (const [hood, h] of Object.entries(hoods)) {
-  say(`${hood}: ${(h.bytes / 1e6).toFixed(2)} MB glb, ${h.tris.toLocaleString('en-US')} tris`);
-  if (h.bytes > HOOD_BYTES) bad(`${hood} glb bytes ${h.bytes} over allowance ${HOOD_BYTES}`);
-  if (h.tris > HOOD_TRIS) bad(`${hood} tris ${h.tris} over allowance ${HOOD_TRIS}`);
+  say(`${hood}: mid ${(h.mid.bytes / 1e6).toFixed(2)} MB / ${h.mid.tris.toLocaleString('en-US')} tris, high ${(h.high.bytes / 1e6).toFixed(2)} MB / ${h.high.tris.toLocaleString('en-US')} tris`);
 }
 
 // The client build must be current. React Router framework mode emits

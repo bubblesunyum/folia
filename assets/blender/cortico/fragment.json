@@ -1,6 +1,8 @@
 {
   "seed": 7,
   "lod": "hi",
+  "mid_groups": ["ground", "terrace"],
+  "high_groups": ["canopy", "shell", "planting"],
   "groups": {
     "ground": 0,
     "terrace": 1,

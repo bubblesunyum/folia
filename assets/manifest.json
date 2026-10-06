@@ -1,7 +1,7 @@
 {
   "cortico/forum": {
-    "hash": "adbfe6d30b401918",
-    "bytes": 52324,
+    "hash": "5eb74e07ee45291e",
+    "bytes": 59152,
     "triangles": {
       "cream": 3280,
       "gold": 1048,
@@ -22,18 +22,59 @@
       "medley": 8,
       "platform": 9,
       "recorder": 10
-    }
+    },
+    "lods": {
+      "mid": {
+        "file": "cortico/forum.mid",
+        "bytes": 31072,
+        "triangles": {
+          "cream": 1600,
+          "gold": 1024,
+          "neon": 864
+        },
+        "vertices": {
+          "cream": 833,
+          "gold": 512,
+          "neon": 432
+        },
+        "indices": {
+          "cream": 4800,
+          "gold": 3072,
+          "neon": 2592
+        }
+      },
+      "high": {
+        "file": "cortico/forum.high",
+        "bytes": 28080,
+        "triangles": {
+          "cream": 1680,
+          "gold": 24,
+          "neon": 708
+        },
+        "vertices": {
+          "cream": 868,
+          "gold": 16,
+          "neon": 358
+        },
+        "indices": {
+          "cream": 5040,
+          "gold": 72,
+          "neon": 2124
+        }
+      }
+    },
+    "sourceBytes": 52324
   },
   "cortico/fragment": {
-    "hash": "e292de4d42a3ee87",
-    "bytes": 2097208,
+    "hash": "e528e9bc8bd95085",
+    "bytes": 2101564,
     "triangles": {
-      "ground": 5664,
       "cream": 107920,
       "gold": 6720,
+      "ground": 5664,
       "neon": 1968,
-      "foliage": 57624,
-      "water": 360
+      "water": 360,
+      "foliage": 57624
     },
     "vertices": {
       "cream": 54003,
@@ -57,11 +98,55 @@
       "planting": 2,
       "shell": 3,
       "terrace": 4
-    }
+    },
+    "lods": {
+      "mid": {
+        "file": "cortico/fragment.mid",
+        "bytes": 188108,
+        "triangles": {
+          "cream": 16560,
+          "gold": 6720,
+          "ground": 5664,
+          "neon": 1968,
+          "water": 360
+        },
+        "vertices": {
+          "cream": 8451,
+          "gold": 3360,
+          "ground": 2881,
+          "neon": 988,
+          "water": 217
+        },
+        "indices": {
+          "cream": 49680,
+          "gold": 20160,
+          "ground": 16992,
+          "neon": 5904,
+          "water": 1080
+        }
+      },
+      "high": {
+        "file": "cortico/fragment.high",
+        "bytes": 1913456,
+        "triangles": {
+          "cream": 91360,
+          "foliage": 57624
+        },
+        "vertices": {
+          "cream": 45552,
+          "foliage": 86436
+        },
+        "indices": {
+          "cream": 274080,
+          "foliage": 172872
+        }
+      }
+    },
+    "sourceBytes": 2097208
   },
   "cortico/meadow": {
-    "hash": "5ada8b44df460eec",
-    "bytes": 281752,
+    "hash": "a067599893d106c6",
+    "bytes": 281760,
     "triangles": {
       "cream": 3584,
       "gold": 2048,
@@ -83,6 +168,19 @@
     "groups": {
       "planting": 5,
       "terrace": 6
-    }
+    },
+    "lods": {
+      "mid": {
+        "file": "cortico/meadow",
+        "bytes": 281760,
+        "triangles": {
+          "cream": 3584,
+          "gold": 2048,
+          "neon": 912,
+          "foliage": 9772
+        }
+      }
+    },
+    "sourceBytes": 281760
   }
 }

@@ -11,3 +11,15 @@ export function useHood(): string {
   const { project } = useParams()
   return hoodFromProject(project)
 }
+
+/**
+ * The vantage hood, if the route is a neighborhood vantage or below it:
+ * `/cortico` and `/cortico/<case>` return `cortico`, `/` returns null.
+ * `BlenderAsset` streams a hood's high LOD only here (fol-l7d.2) — at `/`
+ * the town loads mid only. The rule itself is `shouldStreamHigh`, pinned in
+ * vitest instead of pixels.
+ */
+export function useVantageHood(): string | null {
+  const { project } = useParams()
+  return project ?? null
+}

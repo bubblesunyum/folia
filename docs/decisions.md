@@ -883,6 +883,15 @@ Golden keeps ~0.25 ms of headroom for all of breadth; the threshold spends none 
 
 ---
 
+## 2026-10-06: breadth round (fol-l7d.2, fol-l7d.5, fol-l7d.6, fol-l7d.11)
+
+### D-072 refinement: separate LOD exports with twins-as-derivatives (fol-l7d.2)
+**Decision:** each hood ships `.mid` (town read, ≤1 MB / 75k) + `.high` (streamed hero detail, ≤2 MB / 200k) inside the 3 MB / 275k ceiling; `budget.mjs` fails each half independently from the one source (`src/assets/lods.ts`). Twins are derivatives: one Blender run bakes the full export, `scripts/lib/split-lods.mjs` partitions it by `_ID` slot (byte-exact, deterministic), and the manifest stamps per-LOD bytes/tris — any asset rebuild wipes the stamps and the budget fails closed with the rerun command until re-split. `/` loads mid only; high joins at the vantage (preloaded on hover-intent, latched, no unload in M1).
+**Measured:** cortico mid 0.50 MB / 51,076 tris, high 1.94 MB / 151,396 tris; shell 115.6 KB / canvas 382.7 KB gz. High-bytes margin is thin (1.94/2.0) — fol-l7d.3's cortico geometry must respect it. Open: wiring split-lods into the asset pipeline + dev HMR (which serves `x.glb`), tracked as round follow-ups.
+*Refines:* D-072 (the split half of the ceiling is now enforced, not just allocated), D-034 (mesh names carry the lod segment), D-047 (no unload in M1).
+
+---
+
 ## Open questions (not yet decided)
 - When to revisit WebGPU after launch.
 - Gallery exhibit stops: what one looks like and how many per case study.

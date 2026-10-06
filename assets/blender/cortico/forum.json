@@ -1,6 +1,8 @@
 {
   "seed": 31,
   "lod": "hi",
+  "mid_groups": ["forum"],
+  "high_groups": ["platform", "recorder", "medley"],
   "groups": {
     "forum": 0,
     "medley": 1,
