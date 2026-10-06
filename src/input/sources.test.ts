@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { gestureToZoomDelta, keyToZoomDelta, pinchToZoomDelta, wheelToZoomDelta } from './sources'
+import {
+  gestureToZoomDelta,
+  keyToZoomDelta,
+  pinchToZoomDelta,
+  wheelToPan,
+  wheelToZoomDelta,
+} from './sources'
 
 describe('wheelToZoomDelta', () => {
   it('ignores a plain wheel: that is a pan, not a zoom', () => {
@@ -42,5 +48,28 @@ describe('keyToZoomDelta', () => {
 
   it('ignores other keys', () => {
     expect(keyToZoomDelta('a')).toBeNull()
+  })
+})
+
+describe('wheelToPan', () => {
+  it('passes plain wheel pixels through as a pan', () => {
+    expect(wheelToPan({ deltaX: 10, deltaY: -20, ctrlKey: false, deltaMode: 0 })).toEqual({
+      dx: 10,
+      dy: -20,
+    })
+  })
+
+  it('yields the pinch path on ctrl+wheel and drops empty pans', () => {
+    expect(wheelToPan({ deltaX: 0, deltaY: 100, ctrlKey: true, deltaMode: 0 })).toBeNull()
+    expect(wheelToPan({ deltaX: 0, deltaY: 0, ctrlKey: false, deltaMode: 0 })).toBeNull()
+  })
+
+  it('scales line and page deltas up from pixels', () => {
+    const pixel = wheelToPan({ deltaX: 0, deltaY: 1, ctrlKey: false, deltaMode: 0 })
+    const line = wheelToPan({ deltaX: 0, deltaY: 1, ctrlKey: false, deltaMode: 1 })
+    expect(pixel).not.toBeNull()
+    expect(line).not.toBeNull()
+    if (pixel === null || line === null) throw new Error('expected pans')
+    expect(line.dy).toBeGreaterThan(pixel.dy)
   })
 })

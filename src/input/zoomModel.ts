@@ -7,6 +7,7 @@
  * far limit into a rise-one-level detent (D-006).
  */
 
+import { flightEase, ZOOM_STEP_MS } from '../motion/flight'
 import { readReducedMotion } from './intent'
 
 export interface ZoomLimits {
@@ -42,17 +43,15 @@ export function zoomRenderDistance(state: ZoomState): number {
 }
 
 /**
- * The one zoom easing (fol-etn, spec: consistent easing). Discrete steps
+ * The one zoom easing (spec: consistent easing) lives in motion/flight: the
+ * single curve every rise and flight shares. These re-exports keep the spike
+ * names working; new code imports from motion/flight directly. Discrete steps
  * (+/-/buttons) and the detent release ease with this curve over this long;
  * continuous sources (wheel/pinch/gesture) stay 1:1. Phase 2 flights reuse
  * the same curve so rising feels identical every time.
  */
-export const ZOOM_STEP_DURATION_MS = 180
-
-export function easeOutCubic(t: number): number {
-  const u = Math.min(Math.max(t, 0), 1)
-  return 1 - (1 - u) ** 3
-}
+export const ZOOM_STEP_DURATION_MS = ZOOM_STEP_MS
+export const easeOutCubic = flightEase
 
 /** Camera drift past this is someone else's move (a flight), not our easing. */
 export const ZOOM_EXTERNAL_EPS = 0.05

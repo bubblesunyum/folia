@@ -1,9 +1,18 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import {
+  FLIGHT_SETTLE_EPS,
+  flightAt,
+  tweenProgress,
+  YAW_SPRING_MS,
+  ZOOM_STEP_MS,
+} from '../motion/flight'
 import { setOrbitDistance } from '../motion/orbit'
+import { azimuthOf, rotateOffsetY, wheelPanScale, YAW_SNAP_RAD } from '../motion/orbitLimits'
 import { type RiseCountHost, recordRise, setCanvasHook } from '../testHooks'
 import { beginCameraFlight, currentCameraFlight } from './cameraFlight'
+import { limitsForPath, yawStatusForOffset } from './cameraPresets'
 import {
   isDismissKey,
   isPanelOpen,
@@ -17,25 +26,23 @@ import {
   keyToZoomDelta,
   pinchToZoomDelta,
   RISE_EVENT,
+  wheelToPan,
   wheelToZoomDelta,
   ZOOM_IN_EVENT,
   ZOOM_OUT_EVENT,
 } from './sources'
 import {
   applyZoomDelta,
-  easeOutCubic,
   resolveZoomBase,
   shouldSnapZoom,
-  ZOOM_SETTLE_EPS,
-  ZOOM_STEP_DURATION_MS,
   type ZoomLimits,
   zoomRenderDistance,
 } from './zoomModel'
 
 /**
- * Spike-local preset standing in for the per-Place limits Phase 2 keeps in
- * content data (spec: camera system). The look-dev camera sits at ~65 m, so
- * the far limit is one scroll-push away and the detent is reachable in e2e.
+ * The town zoom limits (D-060's spike preset, kept as the town default so the
+ * detent stays reachable in e2e). Other places resolve per route through
+ * cameraPresets.limitsForPath; an explicit `limits` prop still wins (tests).
  */
 export const ZOOM_LIMITS: ZoomLimits = { minDistance: 25, maxDistance: 90 }
 
@@ -55,6 +62,11 @@ function isGestureEvent(event: Event): event is SafariGestureEvent {
 
 /** Default orbit target, shared so the per-frame loop never allocates. */
 const FALLBACK_TARGET = new THREE.Vector3(0, 2, 0)
+
+/** Scratch pan vectors, reused every wheel-pan. */
+const scratchRight = new THREE.Vector3()
+const scratchUp = new THREE.Vector3()
+const scratchPan = new THREE.Vector3()
 
 /** Two-pointer pinch tracking: finger distance in CSS pixels feeds one delta. */
 function createPinchTracker(onPinch: (delta: number) => void) {
@@ -112,13 +124,31 @@ interface ZoomTween {
   flight: number
 }
 
+interface YawTween {
+  fromAz: number
+  toAz: number
+  start: number
+}
+
+/** pathname without the query/hash, safe outside the browser. */
+function currentPath(): string {
+  if (typeof window === 'undefined' || typeof window.location?.pathname !== 'string') return '/'
+  return window.location.pathname
+}
+
 /**
- * The spike 7 input rig (D-048): ctrl+wheel, Safari GestureEvent and
+ * The input rig (D-048/D-006): ctrl+wheel, Safari GestureEvent and
  * two-pointer pinch all feed the one zoom model, with the resistance detent
- * past the far limit. iOS fires gesture events for touch pinches alongside
+ * past the Place's far limit; a plain wheel (two-finger swipe) pans like an
+ * OrbitControls drag-pan. iOS fires gesture events for touch pinches alongside
  * the pointers, so the gesture channel stays silent while two fingers are
  * down (fol-crx). OrbitControls keeps pan and rotate; its own zoom stays
  * off so there is exactly one zoom path.
+ *
+ * Yaw follows the place preset (D-008): fixed at town, a limited orbit at a
+ * neighborhood that springs back with the one easing once the user lets go.
+ * The spring only ever arms off a real pointer release, so panel refocuses
+ * and flights never fight it — and at rest it invalidates nothing (D-056).
  *
  * fol-etn: the rig keeps no cached distance. Every event re-reads the camera,
  * so a Phase 2 flight can move it without the next zoom snapping back; the
@@ -129,46 +159,89 @@ interface ZoomTween {
  * discrete steps ease toward it with the one zoom easing; continuous sources
  * stay 1:1.
  */
-export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
+export function ZoomRig({ limits }: { limits?: ZoomLimits }) {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
   const invalidate = useThree((state) => state.invalidate)
   const controls = useThree((state) => state.controls as unknown as ControlsLike | null)
-  const limitsRef = useRef(limits)
-  limitsRef.current = limits
+  const limitsPropRef = useRef(limits)
+  limitsPropRef.current = limits
+  const limitsRef = useRef<ZoomLimits>(limits ?? ZOOM_LIMITS)
   const controlsRef = useRef(controls)
   controlsRef.current = controls
   const overscrollRef = useRef(0)
   const lastRenderRef = useRef<number | null>(null)
   const tweenRef = useRef<ZoomTween | null>(null)
+  const yawTweenRef = useRef<YawTween | null>(null)
+  const yawArmedRef = useRef(false)
+  const pointersDownRef = useRef(0)
   const invalidateRef = useRef(invalidate)
   invalidateRef.current = invalidate
 
-  // Discrete steps ease toward their render target. Continuous input cancels
-  // the tween by writing a new one (or jumping straight there). Other camera
-  // drivers claim via beginCameraFlight(); the loop yields when its flight
-  // is stale.
+  // Discrete steps ease toward their render target on the one easing, and a
+  // released orbit springs back to its preset yaw on the same curve.
+  // Continuous input cancels the tween by writing a new one (or jumping
+  // straight there). Other camera drivers claim via beginCameraFlight(); the
+  // loop yields when its flight is stale. At rest (no tween, yaw arrived)
+  // this invalidates nothing, so ?sway=off keeps resting at zero draws.
   useFrame(() => {
-    const tween = tweenRef.current
-    if (!tween) return
-    // Another driver (the panel vantage dolly) took the camera: yield.
-    if (tween.flight !== currentCameraFlight()) {
-      tweenRef.current = null
-      return
-    }
     const target = controlsRef.current?.target ?? FALLBACK_TARGET
-    const now = performance.now()
-    const t = Math.min(Math.max((now - tween.start) / ZOOM_STEP_DURATION_MS, 0), 1)
-    const renderDistance = tween.fromDistance + (tween.to - tween.fromDistance) * easeOutCubic(t)
-    setOrbitDistance(camera, target, renderDistance, controlsRef.current)
-    const canvas = gl.domElement
-    setCanvasHook(canvas, 'zoom', renderDistance.toFixed(2))
-    if (t >= 1 || Math.abs(tween.to - renderDistance) < ZOOM_SETTLE_EPS) {
-      tweenRef.current = null
-      setOrbitDistance(camera, target, tween.to, controlsRef.current)
-      setCanvasHook(canvas, 'zoom', camera.position.distanceTo(target).toFixed(2))
+    const tween = tweenRef.current
+    if (tween) {
+      // Another driver (the panel vantage dolly) took the camera: yield.
+      if (tween.flight !== currentCameraFlight()) {
+        tweenRef.current = null
+      } else {
+        const now = performance.now()
+        const progress = tweenProgress(tween.start, now, ZOOM_STEP_MS)
+        const renderDistance = flightAt(tween.fromDistance, tween.to, progress)
+        setOrbitDistance(camera, target, renderDistance, controlsRef.current)
+        const canvas = gl.domElement
+        setCanvasHook(canvas, 'zoom', renderDistance.toFixed(2))
+        if (progress >= 1 || Math.abs(tween.to - renderDistance) < FLIGHT_SETTLE_EPS) {
+          tweenRef.current = null
+          setOrbitDistance(camera, target, tween.to, controlsRef.current)
+          setCanvasHook(canvas, 'zoom', camera.position.distanceTo(target).toFixed(2))
+        }
+        invalidateRef.current()
+      }
     }
-    invalidateRef.current()
+
+    // Yaw spring-back (D-008): only when armed off a pointer release and the
+    // user is no longer driving. Panel refocuses move the target, never the
+    // arm, so they can't start this.
+    if (yawArmedRef.current && pointersDownRef.current === 0) {
+      const offset: [number, number, number] = [
+        camera.position.x - target.x,
+        camera.position.y - target.y,
+        camera.position.z - target.z,
+      ]
+      const az = azimuthOf(offset)
+      const { clamped, outOfRange } = yawStatusForOffset(offset, currentPath(), YAW_SNAP_RAD)
+      if (!outOfRange) {
+        yawTweenRef.current = null
+        yawArmedRef.current = false
+      } else {
+        let yawTween = yawTweenRef.current
+        if (!yawTween) {
+          yawTween = { fromAz: az, toAz: clamped, start: performance.now() }
+          yawTweenRef.current = yawTween
+        }
+        const now = performance.now()
+        const progress = tweenProgress(yawTween.start, now, YAW_SPRING_MS)
+        const step = flightAt(yawTween.fromAz, yawTween.toAz, progress)
+        const turned = rotateOffsetY(offset, step - az)
+        camera.position.set(target.x + turned[0], target.y + turned[1], target.z + turned[2])
+        controlsRef.current?.update()
+        if (progress >= 1) {
+          yawTweenRef.current = null
+          yawArmedRef.current = false
+        }
+        invalidateRef.current()
+      }
+    } else if (!tween) {
+      yawTweenRef.current = null
+    }
   })
 
   useEffect(() => {
@@ -211,6 +284,13 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
       invalidate()
     }
 
+    /** Per-place limits: an explicit prop wins, else the route's preset. */
+    const activeLimits = (): ZoomLimits => {
+      const next = limitsPropRef.current ?? limitsForPath(currentPath())
+      limitsRef.current = next
+      return next
+    }
+
     // The pure computation lives in resolveZoomBase (unit-tested); this only
     // moves the ref bookkeeping in and out of it.
     const takeZoomBase = (): { distance: number; overscroll: number } => {
@@ -221,7 +301,7 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
           overscroll: overscrollRef.current,
           tweenTo: tweenRef.current?.to ?? null,
         },
-        limitsRef.current,
+        activeLimits(),
       )
       if (base.interrupted) tweenRef.current = null
       if (base.external) overscrollRef.current = 0
@@ -258,11 +338,79 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
       easeTo(step.renderDistance)
     }
 
+    // Trackpad swipe pans with OrbitControls' own feel (D-006): same pixels
+    // move the same world as a drag-pan. Preserves distance, so the zoom
+    // readout never moves on a pan.
+    const panByPixels = (dx: number, dy: number) => {
+      const target = targetOf()
+      const rect = canvas.getBoundingClientRect()
+      // The canvas camera is always perspective (Viewport): the one fov the
+      // pan scale matches against OrbitControls' own _pan branch.
+      const { fov } = camera as THREE.PerspectiveCamera
+      const scale = wheelPanScale(camera.position.distanceTo(target), rect.height || 1, fov)
+      if (scale === 0 || (dx === 0 && dy === 0)) return
+      camera.updateMatrixWorld()
+      scratchRight.setFromMatrixColumn(camera.matrix, 0)
+      scratchUp.setFromMatrixColumn(camera.matrix, 1)
+      scratchPan
+        .copy(scratchRight)
+        .multiplyScalar(-dx * scale)
+        .addScaledVector(scratchUp, dy * scale)
+      target.add(scratchPan)
+      camera.position.add(scratchPan)
+      controlsRef.current?.update()
+      invalidate()
+    }
+
+    /** Whether the orbit sits outside its place window right now. */
+    const yawOutOfRange = (): { clamped: number; outOfRange: boolean } => {
+      const target = targetOf()
+      return yawStatusForOffset(
+        [camera.position.x - target.x, camera.position.y - target.y, camera.position.z - target.z],
+        currentPath(),
+        YAW_SNAP_RAD,
+      )
+    }
+
+    /** Arm the spring off a release, or snap it under reduced motion. */
+    const settleYawAfterRelease = () => {
+      const { clamped, outOfRange } = yawOutOfRange()
+      if (!outOfRange) {
+        yawArmedRef.current = false
+        yawTweenRef.current = null
+        return
+      }
+      if (readReducedMotion()) {
+        const target = targetOf()
+        const offset: [number, number, number] = [
+          camera.position.x - target.x,
+          camera.position.y - target.y,
+          camera.position.z - target.z,
+        ]
+        const turned = rotateOffsetY(offset, clamped - azimuthOf(offset))
+        camera.position.set(target.x + turned[0], target.y + turned[1], target.z + turned[2])
+        controlsRef.current?.update()
+        yawArmedRef.current = false
+        yawTweenRef.current = null
+        invalidate()
+        return
+      }
+      yawArmedRef.current = true
+      yawTweenRef.current = null
+      invalidate()
+    }
+
     const onWheel = (event: WheelEvent) => {
-      const delta = wheelToZoomDelta(event)
-      if (delta === null) return
+      const zoomDelta = wheelToZoomDelta(event)
+      if (zoomDelta !== null) {
+        event.preventDefault()
+        zoomContinuous(zoomDelta)
+        return
+      }
+      const pan = wheelToPan(event)
+      if (pan === null) return
       event.preventDefault()
-      zoomContinuous(delta)
+      panByPixels(pan.dx, pan.dy)
     }
 
     // OrbitControls would pan from the same two fingers (DOLLY_PAN), walking
@@ -287,8 +435,16 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
       if (!pinch.twoFinger) zoomContinuous(gestureToZoomDelta(scale, gestureScale))
       gestureScale = scale
     }
+    const onGestureEnd = (event: Event) => {
+      event.preventDefault()
+      gestureScale = 1
+    }
 
     const onPointerDown = (event: PointerEvent) => {
+      pointersDownRef.current += 1
+      // The user is driving: a spring in flight yields to the hand.
+      yawArmedRef.current = false
+      yawTweenRef.current = null
       pinch.down(event)
       if (controlsRef.current) controlsRef.current.enablePan = !pinch.twoFinger
     }
@@ -296,8 +452,10 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
       pinch.move(event)
     }
     const onPointerUp = (event: PointerEvent) => {
+      pointersDownRef.current = Math.max(pointersDownRef.current - 1, 0)
       pinch.up(event)
       if (controlsRef.current) controlsRef.current.enablePan = !pinch.twoFinger
+      if (pointersDownRef.current === 0 && !pinch.twoFinger) settleYawAfterRelease()
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -335,6 +493,7 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
     canvas.addEventListener('wheel', onWheel, { passive: false })
     canvas.addEventListener('gesturestart', onGestureStart, { passive: false })
     canvas.addEventListener('gesturechange', onGestureChange, { passive: false })
+    canvas.addEventListener('gestureend', onGestureEnd, { passive: false })
     canvas.addEventListener('pointerdown', onPointerDown)
     canvas.addEventListener('pointermove', onPointerMove)
     canvas.addEventListener('pointerup', onPointerUp)
@@ -348,9 +507,13 @@ export function ZoomRig({ limits = ZOOM_LIMITS }: { limits?: ZoomLimits }) {
     publishCamera()
     return () => {
       tweenRef.current = null
+      yawTweenRef.current = null
+      yawArmedRef.current = false
+      pointersDownRef.current = 0
       canvas.removeEventListener('wheel', onWheel)
       canvas.removeEventListener('gesturestart', onGestureStart)
       canvas.removeEventListener('gesturechange', onGestureChange)
+      canvas.removeEventListener('gestureend', onGestureEnd)
       canvas.removeEventListener('pointerdown', onPointerDown)
       canvas.removeEventListener('pointermove', onPointerMove)
       canvas.removeEventListener('pointerup', onPointerUp)

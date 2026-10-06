@@ -17,6 +17,14 @@ export const projectFrontmatterSchema = z.strictObject({
   title: z.string().min(1),
   summary: z.string().min(1),
   neon: z.enum(paletteNames),
+  // Optional camera preset keys (fol-l7d.7): raw scalars only — full
+  // validation lives in parseCameraPreset, the schema just stops rejecting.
+  cameraTarget: z.string().optional(),
+  cameraDistance: z.string().optional(),
+  cameraFov: z.string().optional(),
+  cameraYaw: z.string().optional(),
+  cameraMin: z.string().optional(),
+  cameraMax: z.string().optional(),
 })
 
 export const caseKindSchema = z.enum(['panel'])

@@ -29,13 +29,38 @@ interface WheelLike {
 }
 
 /**
+ * Wheel deltaMode to pixels: line and page deltas scale up to pixel space.
+ */
+function deltaModeScale(deltaMode: number): number {
+  return deltaMode === 1 ? 16 : deltaMode === 2 ? 400 : 1
+}
+
+/**
  * Chromium/Firefox pinch arrives as `wheel` with `ctrlKey`. A plain wheel
  * (two-finger swipe) is a pan (D-006) and returns null: not zoom's business.
  */
 export function wheelToZoomDelta(event: WheelLike): number | null {
   if (!event.ctrlKey) return null
-  const lineHeight = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1
+  const lineHeight = deltaModeScale(event.deltaMode)
   return event.deltaY * lineHeight * WHEEL_GAIN
+}
+
+export interface PanWheelLike extends WheelLike {
+  deltaX: number
+}
+
+/**
+ * A plain wheel (two-finger swipe) pans (D-006): pixel deltas for the rig to
+ * scale into world metres like OrbitControls' own pan. A ctrl+wheel is the
+ * pinch path's and returns null here.
+ */
+export function wheelToPan(event: PanWheelLike): { dx: number; dy: number } | null {
+  if (event.ctrlKey) return null
+  const lineHeight = deltaModeScale(event.deltaMode)
+  const dx = event.deltaX * lineHeight
+  const dy = event.deltaY * lineHeight
+  if (dx === 0 && dy === 0) return null
+  return { dx, dy }
 }
 
 /**

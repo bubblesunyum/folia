@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { PANEL_VANTAGE_M, resolvePanelDolly } from './panelDolly'
+import { REFRAME_MS } from '../motion/flight'
+import { dollyFlightStep, PANEL_VANTAGE_M, resolvePanelDolly } from './panelDolly'
 
 const OPEN = {
   slug: 'platform' as const,
@@ -93,5 +94,22 @@ describe('resolvePanelDolly', () => {
     })
     expect(decision.state).toEqual({ goal: PANEL_VANTAGE_M, restore: null })
     expect(decision.claim).toBe(false)
+  })
+})
+
+describe('dollyFlightStep', () => {
+  it('eases from the current distance to the goal on the one easing', () => {
+    expect(dollyFlightStep(80, PANEL_VANTAGE_M, 1000, 1000)).toBe(80)
+    const mid = dollyFlightStep(80, PANEL_VANTAGE_M, 1000, 1000 + REFRAME_MS / 2)
+    expect(mid).toBeGreaterThan(PANEL_VANTAGE_M)
+    expect(mid).toBeLessThan(80)
+    // Ease-out: past halfway by mid-flight.
+    expect(mid).toBeLessThan((80 + PANEL_VANTAGE_M) / 2)
+    expect(dollyFlightStep(80, PANEL_VANTAGE_M, 1000, 1000 + REFRAME_MS)).toBe(PANEL_VANTAGE_M)
+  })
+
+  it('clamps past the end and honors a custom duration', () => {
+    expect(dollyFlightStep(80, PANEL_VANTAGE_M, 1000, 9000)).toBe(PANEL_VANTAGE_M)
+    expect(dollyFlightStep(80, PANEL_VANTAGE_M, 1000, 1000, 0)).toBe(PANEL_VANTAGE_M)
   })
 })
