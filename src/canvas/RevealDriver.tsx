@@ -13,7 +13,7 @@
 // ocean → rising → done (plus `data-programs` at done), so specs wait on
 // flags, never timeouts.
 
-import { useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import { type BatchedMesh, type Mesh, PlaneGeometry } from 'three'
 import { versionForMeshes } from '../assets/townVersion'
@@ -92,6 +92,49 @@ export function RevealDriver() {
   const material = useMemo(() => createCreamOceanMaterial(), [])
   const geometry = useMemo(() => new PlaneGeometry(OCEAN_SIZE_M, OCEAN_SIZE_M, 48, 48), [])
   const meshRef = useRef<Mesh>(null)
+  // Shared sweep state between the mount effect (settle wait, warm-up) and
+  // the frame loop below. Refs, not state: every write here already
+  // invalidates explicitly, and re-rendering mid-sweep would restart nothing
+  // but cost a commit.
+  const cancelledRef = useRef(false)
+  const phaseRef = useRef<RevealPhase>('ocean')
+  const armedRef = useRef(false)
+  const riseStartRef = useRef(0)
+  const sweepStartRef = useRef(REVEAL_START_M)
+  const durationRef = useRef(0)
+  const startedAtRef = useRef(0)
+  const finishRef = useRef(() => {})
+
+  // The sweep rides the R3F frame loop (D-056): each rendered frame advances
+  // the reveal height while rising and invalidates for the next one — the
+  // self-perpetuating demand-mode loop from ZoomRig. At rest (the ocean wait
+  // or done) this invalidates nothing, so ?sway=off still rests at zero
+  // draws. Values, not programs: one uniform write per frame, never a
+  // recompile.
+  //
+  // Why not the ambient scheduler (D-073): it freezes while a panel is open
+  // or being read, when the tab hides, and under reduced motion — and the
+  // reveal must finish through all of those (reduced motion cuts straight to
+  // done, the wait cap still fires behind a panel). Its ~30 Hz cadence would
+  // also step the 2.5 s sweep. The settle wait below stays on a bare 120 ms
+  // interval for the same reason in miniature: it polls the registry without
+  // drawing, while a useFrame poll would need an invalidate per check and
+  // burn frames through the whole wait.
+  useFrame(() => {
+    if (cancelledRef.current || phaseRef.current !== 'rising' || !armedRef.current) return
+    const now = performance.now()
+    const progress = revealProgressAt(now - riseStartRef.current, durationRef.current)
+    const height = revealHeightAt(progress, sweepStartRef.current)
+    reveal.uniforms.uRevealHeight.value = height
+    const ocean = meshRef.current
+    if (ocean) ocean.position.y = height
+    oceanUniforms.uOceanTime.value = (now - startedAtRef.current) / 1000
+    if (progress >= 1) {
+      finishRef.current()
+      return
+    }
+    invalidate()
+  })
 
   useEffect(() => {
     const owned = { geometry, material }
@@ -103,16 +146,18 @@ export function RevealDriver() {
 
   useEffect(() => {
     const canvas = gl.domElement
-    let cancelled = false
-    let raf = 0
+    cancelledRef.current = false
+    armedRef.current = false
     let settledTimer = 0
     const startedAt = performance.now()
+    startedAtRef.current = startedAt
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const duration = revealDurationMs({
       repeat: readRepeatVisit(),
       deepLink: window.location.pathname !== '/',
       reducedMotion,
     })
+    durationRef.current = duration
     // Above the town: every shared program reads full cream until the sweep,
     // and the ocean plane covers the town by depth.
     reveal.uniforms.uRevealHeight.value = REVEAL_START_M
@@ -127,9 +172,7 @@ export function RevealDriver() {
 
     let lastVersion: number | undefined
     let lastChange = startedAt
-    let phase: RevealPhase = 'ocean'
-    let riseStart = 0
-    let sweepStart = REVEAL_START_M
+    phaseRef.current = 'ocean'
     // The batch map is pre-populated (one entry per shared material) before
     // any asset registers, so map size says nothing about content. The sweep
     // waits for a registry version past zero — a real asset landing, before
@@ -140,6 +183,8 @@ export function RevealDriver() {
     const finish = () => {
       // Parked below the town the band mix is exactly zero: still renders sit
       // on the authored look, and the ocean hides on the same tick.
+      phaseRef.current = 'done'
+      armedRef.current = false
       reveal.uniforms.uRevealHeight.value = REVEAL_PARKED_M
       const ocean = meshRef.current
       if (ocean) ocean.visible = false
@@ -148,36 +193,22 @@ export function RevealDriver() {
       markRevealSeen()
       invalidate()
     }
-
-    const tickRise = (now: number) => {
-      if (cancelled) return
-      const progress = revealProgressAt(now - riseStart, duration)
-      const height = revealHeightAt(progress, sweepStart)
-      reveal.uniforms.uRevealHeight.value = height
-      const ocean = meshRef.current
-      if (ocean) ocean.position.y = height
-      oceanUniforms.uOceanTime.value = (now - startedAt) / 1000
-      invalidate()
-      if (progress >= 1) {
-        finish()
-        return
-      }
-      raf = requestAnimationFrame(tickRise)
-    }
+    finishRef.current = finish
 
     const beginRise = async () => {
-      if (phase !== 'ocean' || cancelled) return
-      phase = 'rising'
+      if (phaseRef.current !== 'ocean' || cancelledRef.current) return
+      phaseRef.current = 'rising'
       window.clearInterval(settledTimer)
       try {
         await warmupScene(gl, scene, camera)
       } catch {
         // Compile errors surface on real frames; the sweep still runs.
       }
-      if (cancelled) return
+      if (cancelledRef.current) return
       // Start just above the live town top: both the ceiling and the
       // measured start read full cream, so the snap is invisible.
-      sweepStart = revealStartFor(measureContentTop(meshesRef.current))
+      const sweepStart = revealStartFor(measureContentTop(meshesRef.current))
+      sweepStartRef.current = sweepStart
       reveal.uniforms.uRevealHeight.value = sweepStart
       const ocean = meshRef.current
       if (ocean) ocean.position.y = sweepStart
@@ -188,13 +219,16 @@ export function RevealDriver() {
         finish()
         return
       }
-      riseStart = performance.now()
-      raf = requestAnimationFrame(tickRise)
+      // Arm the frame loop: the invalidate below draws the first rising
+      // frame, and each rising frame invalidates the next until done.
+      riseStartRef.current = performance.now()
+      armedRef.current = true
+      invalidate()
     }
 
     const mountVersion = versionForMeshes(meshesRef.current)
     settledTimer = window.setInterval(() => {
-      if (cancelled || phase !== 'ocean') return
+      if (cancelledRef.current || phaseRef.current !== 'ocean') return
       const current = versionForMeshes(meshesRef.current)
       const now = performance.now()
       if (current !== lastVersion) {
@@ -207,8 +241,8 @@ export function RevealDriver() {
     }, 120)
 
     return () => {
-      cancelled = true
-      cancelAnimationFrame(raf)
+      cancelledRef.current = true
+      armedRef.current = false
       window.clearInterval(settledTimer)
     }
     // The sweep runs once per canvas mount: live registry reads go through
