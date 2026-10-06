@@ -6,7 +6,9 @@
     "pad": 1,
     "scaffold": 2,
     "planting": 3,
-    "river": 4
+    "river": 4,
+    "cards": 5,
+    "skirt": 6
   },
   "terrain": {
     "size": 240,

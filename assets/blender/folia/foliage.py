@@ -6,8 +6,21 @@ as one soft, lumpy mass; the rest is the leaf's own creased normal, so single
 leaves still catch the light inside it. Sprays are the middle scale: a
 handful of leaves fanned out from one point, facing roughly one way, so they
 shade together between the lobe and the leaf.
+
+Forest edge (fol-l7d.5): the far layers behind the near-field instanced
+repeats. Mid-field single-view baked cards (`forest_card`, R-010) and the
+horizon skirt band (`skirt_band`, D-050) bake into the town skeleton's foliage
+and ground batches; the near trees stay runtime-instanced forever (D-032),
+so this module builds no near-tree mesh. Ring placement lives in `town.py`
+(`forest_ring`) over `content/town/` + `foliage_params.json`'s `forest`
+section — the same inputs the runtime `ForestEdge` places its instanced
+layer from, with the baked and instanced rings kept apart by radii.
 """
 
+import math
+
+import bmesh
+import bpy
 import numpy as np
 
 from .mesh import new_object, set_point_attribute
@@ -159,4 +172,48 @@ def clump(name, p, rng):
     blend = p["leaf_normal"]
     proxy = _proxy_normals(corners, centres, sizes, p["sharpness"])
     ob.data.normals_split_custom_set_from_vertices(_unit(proxy * (1 - blend) + leaf_normals * blend).tolist())
+    return ob
+
+
+TAU = math.tau
+
+
+def forest_card(name, w, h):
+    """A mid-field baked card (R-010): one vertical quad, normal +Y, wound
+    for the shared single-sided foliage program. The asset script yaws it to
+    face the town centre, so every card shares the town vantage pitch and no
+    vantage frames the band at a new one (D-050). `_SWAY` stays 0 — cards are
+    baked, only the near instanced repeats move — and `_ID`/`_AO`/`_NIGHT`
+    ride the standard placed-context bake through `export.join`."""
+    verts = [(-w / 2, 0.0, 0.0), (w / 2, 0.0, 0.0), (w / 2, 0.0, h), (-w / 2, 0.0, h)]
+    # (0, 3, 2, 1): e1 = +z, e2 = +x+z, so e1 x e2 = +y, the card's face.
+    return new_object(name, verts, [(0, 3, 2, 1)])
+
+
+def skirt_band(name, radius, bottom, top, segments=128):
+    """The horizon skirt (D-050): a vertical ring at `radius` whose faces wind
+    inward, so the town sees front faces on the shared single-sided ground
+    program. `bottom`/`top` are scalars or per-segment arrays (the town script
+    tucks the bottom under its terrain height); the top stays level so the
+    height fog (D-046) melts one clean edge into the sky gradient instead of
+    a ragged one. Wound inward, then reversed back after `new_object`'s
+    outward normalization (see below)."""
+    theta = np.linspace(0.0, TAU, segments, endpoint=False)
+    ring = np.stack([np.cos(theta) * radius, np.sin(theta) * radius], axis=1)
+    lo = np.broadcast_to(np.asarray(bottom, dtype=float), (segments,))
+    hi = np.broadcast_to(np.asarray(top, dtype=float), (segments,))
+    verts = []
+    for (x, y), b, t in zip(ring, lo, hi):
+        verts.append((x, y, b))
+        verts.append((x, y, t))
+    faces = [(2 * s, 2 * s + 1, 2 * ((s + 1) % segments) + 1, 2 * ((s + 1) % segments))
+             for s in range(segments)]
+    ob = new_object(name, verts, faces)
+    # The closed band's volume heuristic in `new_object` normalizes faces
+    # outward; the town watches from inside, so reverse the winding back.
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bmesh.ops.reverse_faces(bm, faces=bm.faces)
+    bm.to_mesh(ob.data)
+    bm.free()
     return ob

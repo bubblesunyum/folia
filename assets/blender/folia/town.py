@@ -347,6 +347,59 @@ def build_art_platform(p, rng, art, pad_top, g_pad, g_scaffold):
     return parts
 
 
+# --- forest edge (fol-l7d.5): baked mid cards + horizon skirt --------------------
+# Near trees stay runtime-instanced forever (D-032), so the bake carries only
+# the static layers: single-view mid cards (R-010) and the far skirt (D-050).
+# The ring definition (annulus + keep-clear over content/town/ + the
+# foliage_params.json `forest` section) is the same input the runtime
+# ForestEdge places its instanced near layer from; baked and instanced rings
+# are kept apart by radii, never by stream identity, so neither double-draws.
+
+def forest_ring(rng, fp, course, river, pads, count, r0, r1):
+    """Area-uniform points in the annulus, clear of the river and plot pads."""
+    f = fp["forest"]
+    half = river["width"] / 2
+    pts = []
+    guard = 0
+    while len(pts) < count and guard < count * 60:
+        guard += 1
+        angle = rng.uniform(0, TAU)
+        r = math.sqrt(rng.uniform(r0 * r0, r1 * r1))
+        x, z = r * math.cos(angle), r * math.sin(angle)
+        if float(dist_to_course(np.array([x]), np.array([z]), course)[0]) < half + f["keep_river_m"]:
+            continue
+        if any(math.hypot(x - cx, z - cz) < pr + f["keep_plot_m"] for (cx, cz, pr, _top) in pads):
+            continue
+        pts.append((x, z))
+    if len(pts) < count:
+        raise ValueError(f"town: forest ring placed {len(pts)}/{count} (keep-clear too tight?)")
+    return pts
+
+
+def build_forest(p, rng, course, river, pads, group_cards, group_skirt, height_fn):
+    """Mid cards facing the town centre plus the horizon skirt band."""
+    fp = _FOLIAGE_PARAMS["forest"]
+    parts = []
+    m = fp["mid"]
+    for k, (x, z) in enumerate(forest_ring(rng, _FOLIAGE_PARAMS, course, river, pads,
+                                           int(m["count"]), float(m["r0"]), float(m["r1"]))):
+        ob = foliage.forest_card(f"card{k}", float(m["card_w"]), float(m["card_h"]))
+        # Local +Y (the card face) maps to (-sin yaw, cos yaw) under place();
+        # atan2(x, -z) sends it at the town centre.
+        yaw = math.atan2(x, -z)
+        parts.append(Part(place(ob, x, z, float(height_fn(x, z)) + float(m["lift"]), yaw),
+                          "foliage", group_cards))
+    f = fp["far"]
+    n = int(f["segments"])
+    theta = np.linspace(0.0, TAU, n, endpoint=False)
+    ring = np.stack([np.cos(theta) * float(f["skirt_r"]), np.sin(theta) * float(f["skirt_r"])], axis=1)
+    ground = np.array([float(height_fn(x, z)) for x, z in ring])
+    ob = foliage.skirt_band("skirt", float(f["skirt_r"]), ground - float(f["skirt_tuck"]),
+                            float(f["skirt_top"]), n)
+    parts.append(Part(place(ob, 0.0, 0.0, 0.0), "ground", group_skirt))
+    return parts
+
+
 # --- shore texture (D-039): depth + shore distance, top-down -----------------------
 
 def shore_texture(course, river, size, resolution, foam_width):
@@ -417,6 +470,14 @@ def assemble(p, rng):
             parts.extend(build_art_platform(p, rng, hood, top, g["pad"], g["scaffold"]))
         else:
             parts.extend(build_plot(p, rng, hood, top, g["pad"], g["scaffold"], g["planting"]))
+
+    # Forest (fol-l7d.5): NOT baked here. `build_forest()` below emits the
+    # same mid cards + skirt the runtime `ForestEdge` layer draws, so calling
+    # it from `assemble()` would double-draw until the skeleton lands forest.
+    # One-source rule: the runtime owns all three layers until bead fol-l7d.15
+    # retires the runtime mid/skirt layers when the skeleton lands them. The
+    # helpers and the foliage_params.json `forest` section stay as the shared
+    # ring definition both sides read.
 
     # The river's baked look, rewritten every build from the same course.
     write_shore_texture(shore_texture(course, river, p["terrain"]["size"],

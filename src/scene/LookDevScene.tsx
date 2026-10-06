@@ -7,6 +7,7 @@ import { PedestalNavigate } from '../panel/PedestalNavigate'
 import { WispLight } from '../panel/WispLight'
 import { StressDraws } from '../perf/StressDraws'
 import { AmbientMotion } from './AmbientMotion'
+import { ForestEdge } from './ForestEdge'
 import { Fragment } from './Fragment'
 import { HoverHighlight } from './HoverHighlight'
 import { LightPools } from './LightPools'
@@ -31,6 +32,7 @@ export function LookDevScene() {
         <Fragment />
         <LightPools />
       </Suspense>
+      <ForestEdge />
       <HoverHighlight />
       <PedestalNavigate />
       <PanelCameraRig />
