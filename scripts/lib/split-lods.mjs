@@ -89,81 +89,92 @@ function compactAttribute(doc, oldAccessor, used, map) {
 }
 
 /**
- * Rewrites every primitive in `doc` to its `keep` triangles (global `_ID`
- * slots in `slots`), compacting vertices. Returns per-batch triangles plus
- * vertex/index counts for the manifest. Primitives left empty are detached
- * and disposed with their accessors; replaced accessors are disposed too —
+ * One primitive's `keep` triangles (global `_ID` slots in `slots`),
+ * compacting vertices by raw byte copy. Returns per-batch triangle plus
+ * vertex/index counts, or null when the primitive is left empty (detached
+ * and disposed with its accessors; replaced accessors are disposed too —
  * the writer emits every accessor left in the graph, so anything untracked
- * ships its bytes.
+ * ships its bytes).
+ */
+function filterPrimitive(doc, buffer, mesh, prim, slots) {
+  const meshName = mesh.getName()
+  const indexAccessor = prim.getIndices()
+  const idAccessor = prim.getAttribute('_ID')
+  if (!indexAccessor || !idAccessor) fail(`${meshName}: primitive has no index or _ID`)
+  const indexArray = Array.from(indexAccessor.getArray() ?? [])
+  const idArray = Array.from(idAccessor.getArray() ?? [])
+  const groups = triangleGroups(indexArray, idArray)
+  const tris = []
+  for (let t = 0; t < groups.length; t++) {
+    if (slots.has(groups[t])) tris.push(t)
+  }
+  if (tris.length === 0) {
+    for (const semantic of prim.listSemantics()) prim.getAttribute(semantic)?.dispose()
+    indexAccessor.dispose()
+    mesh.removePrimitive(prim)
+    prim.dispose()
+    return null
+  }
+  const usedSet = new Set()
+  for (const t of tris) {
+    usedSet.add(indexArray[t * 3])
+    usedSet.add(indexArray[t * 3 + 1])
+    usedSet.add(indexArray[t * 3 + 2])
+  }
+  const used = [...usedSet].sort((a, b) => a - b)
+  const map = new Map()
+  for (const semantic of prim.listSemantics()) {
+    const old = prim.getAttribute(semantic)
+    const fresh = compactAttribute(doc, old, used, map)
+    fresh.setBuffer(buffer)
+    prim.setAttribute(semantic, fresh)
+    old?.dispose()
+  }
+  const freshIndex = new Uint32Array(tris.length * 3)
+  tris.forEach((t, i) => {
+    freshIndex[i * 3] = map.get(indexArray[t * 3])
+    freshIndex[i * 3 + 1] = map.get(indexArray[t * 3 + 1])
+    freshIndex[i * 3 + 2] = map.get(indexArray[t * 3 + 2])
+  })
+  // Keep the original index width when the compacted vertices fit, so a
+  // u16 batch stays u16 instead of doubling.
+  const narrowed =
+    used.length <= 65535 && indexAccessor.getComponentType() !== 5125
+      ? Uint16Array.from(freshIndex)
+      : freshIndex
+  const index = doc.createAccessor()
+  index.setType('SCALAR')
+  index.setArray(narrowed)
+  index.setBuffer(buffer)
+  prim.setIndices(index)
+  indexAccessor.dispose()
+  return { tris: tris.length, vertices: used.length, indices: narrowed.length }
+}
+
+/**
+ * Rewrites every primitive in `doc` to its `keep` triangles (global `_ID`
+ * slots in `slots`). Returns per-batch triangles plus vertex/index counts
+ * for the manifest via `counts`.
  */
 function filterDocument(doc, slots, counts) {
   let liveAccessors = 0
+  const buffer = doc.getRoot().listBuffers()[0] ?? doc.createBuffer()
   for (const mesh of doc.getRoot().listMeshes()) {
     const name = parseMeshName(mesh.getName())
     if (!name) fail(`mesh "${mesh.getName()}" is not <hood>.<object>.<material>.<lod>`)
     const kept = []
     for (const prim of mesh.listPrimitives()) {
-      const indexAccessor = prim.getIndices()
-      const idAccessor = prim.getAttribute('_ID')
-      if (!indexAccessor || !idAccessor) fail(`${mesh.getName()}: primitive has no index or _ID`)
-      const indexArray = Array.from(indexAccessor.getArray() ?? [])
-      const idArray = Array.from(idAccessor.getArray() ?? [])
-      const groups = triangleGroups(indexArray, idArray)
-      const tris = []
-      for (let t = 0; t < groups.length; t++) {
-        if (slots.has(groups[t])) tris.push(t)
-      }
-      if (tris.length === 0) {
-        for (const semantic of prim.listSemantics()) prim.getAttribute(semantic)?.dispose()
-        indexAccessor.dispose()
-        mesh.removePrimitive(prim)
-        prim.dispose()
-        continue
-      }
-      const usedSet = new Set()
-      for (const t of tris) {
-        usedSet.add(indexArray[t * 3])
-        usedSet.add(indexArray[t * 3 + 1])
-        usedSet.add(indexArray[t * 3 + 2])
-      }
-      const used = [...usedSet].sort((a, b) => a - b)
-      const map = new Map()
-      const buffer = doc.getRoot().listBuffers()[0] ?? doc.createBuffer()
-      for (const semantic of prim.listSemantics()) {
-        const old = prim.getAttribute(semantic)
-        const fresh = compactAttribute(doc, old, used, map)
-        fresh.setBuffer(buffer)
-        prim.setAttribute(semantic, fresh)
-        old?.dispose()
-      }
-      const freshIndex = new Uint32Array(tris.length * 3)
-      tris.forEach((t, i) => {
-        freshIndex[i * 3] = map.get(indexArray[t * 3])
-        freshIndex[i * 3 + 1] = map.get(indexArray[t * 3 + 1])
-        freshIndex[i * 3 + 2] = map.get(indexArray[t * 3 + 2])
-      })
-      // Keep the original index width when the compacted vertices fit, so a
-      // u16 batch stays u16 instead of doubling.
-      const narrowed =
-        used.length <= 65535 && indexAccessor.getComponentType() !== 5125
-          ? Uint16Array.from(freshIndex)
-          : freshIndex
-      const index = doc.createAccessor()
-      index.setType('SCALAR')
-      index.setArray(narrowed)
-      index.setBuffer(buffer)
-      prim.setIndices(index)
-      indexAccessor.dispose()
+      const result = filterPrimitive(doc, buffer, mesh, prim, slots)
+      if (!result) continue
       liveAccessors += prim.listSemantics().length + 1
-      kept.push({ prim, tris: tris.length, vertices: used.length, indices: narrowed.length })
+      kept.push(result)
     }
     if (kept.length === 0) {
       for (const node of doc.getRoot().listNodes()) {
         if (node.getMesh() === mesh) node.setMesh(null)
       }
     }
-    for (const { prim, tris, vertices, indices } of kept) {
-      void prim
+    for (const { tris, vertices, indices } of kept) {
       const batch = counts[name.material] ?? (counts[name.material] = { tris: 0, vertices: 0, indices: 0 })
       batch.tris += tris
       batch.vertices += vertices
