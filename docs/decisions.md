@@ -890,6 +890,25 @@ Golden keeps ~0.25 ms of headroom for all of breadth; the threshold spends none 
 **Measured:** cortico mid 0.50 MB / 51,076 tris, high 1.94 MB / 151,396 tris; shell 115.6 KB / canvas 382.7 KB gz. High-bytes margin is thin (1.94/2.0) — fol-l7d.3's cortico geometry must respect it. Open: wiring split-lods into the asset pipeline + dev HMR (which serves `x.glb`), tracked as round follow-ups.
 *Refines:* D-072 (the split half of the ceiling is now enforced, not just allocated), D-034 (mesh names carry the lod segment), D-047 (no unload in M1).
 
+### D-076 Phase-closeout timing targets and breadth budget verdict (fol-1ux, fol-l7d.14)
+**Decision (2026-10-06):** per-route delivery-timing TARGETS (policy, not measured values), and the breadth budget verdict below.
+- **Fast-4G targets:** sky (shell first paint) ≤ 3 s on every entry route; scene (canvas drawn) ≤ 12 s on `/` (D-059 kept), ≤ 25 s on `/cortico` and `/cortico/<case>` (provisional, pending a Vercel preview re-measurement — local raw overstates transfer, see variance note).
+- **Frame budget verdict:** the gated ≤ 2.5 ms saturated-frame wall (D-063/D-072, `scripts/bench.mjs`) HOLDS on all breadth routes — `/` 1.81 golden / 1.82 night (spread 0.02), `/cortico` 2.21–2.23 golden / 2.15–2.25 night (spread ≤ 0.08), `/cortico/platform` 2.34–2.41 golden / 2.32–2.41 night (spread ≤ 0.09), all clean PASS. An earlier NOISY span (spread 0.34–0.84, since-refused per D-075) was re-run on a quiet machine after killing a stray 700%-CPU SwiftShader capture process: the first quiet pass still showed heat-soak (platform ~3.1), the second settled to the numbers above. Lesson restated, not new: close other scene tabs and let the machine cool before judging the gate (D-055, D-075).
+- **Draw/delivery verdict:** calls 31–33 (< 100 ✓) and sub-draws 35–46 (≤ 3000 ✓) on all routes; `node scripts/budget.mjs` clean — cortico mid 0.84 MB / 72,738, high 1.92 MB / 148,736; town mid 0.29 MB / 41,448; shell 115.6 KB gz; canvas 386.8 KB gz, all inside D-072 caps.
+
+**Cost table** (local real-Chrome, headless ANGLE Metal, `build/client` via `scripts/serve-static.mjs`; representative case `platform` — all three cases share the same stream):
+
+| Route | Fast-4G sky / scene (local raw) | ?perf=base wall ms (golden) | Calls / sub-draws (?hud) | Delivery GLB local raw (Vercel-br est.) / tris |
+|---|---|---|---|---|
+| `/` | 1.8 s / 17.9 s | **1.83 PASS** (night 1.82 PASS, spread 0.01) | 33 / 35 | 1.13 MB (~0.9 MB) / 114,186 |
+| `/cortico` | 2.3 s / 25.8 s | **2.21 PASS** (night 2.19 PASS, spread ≤ 0.08) | 31 / 46 | 3.05 MB (~2.4 MB) / 262,922 |
+| `/cortico/platform` | 2.3 s / 25.8 s | **2.41 PASS** (night 2.36 PASS, spread ≤ 0.09) | 33 / 46 | 3.05 MB (~2.4 MB) / 262,922 |
+
+JS per route: shell 115.6 KB + canvas 386.8 KB gz (~0.5 MB; case routes add small MDX chunks on top). HUD tris (`/` 276.7k, vantage 565.7k) accumulate main + shadow + reflection passes (`autoReset = false`), so they are not geometry totals. HUD gpu-estimate ms (7–12) is indicative only (D-055), never a gate.
+**Variance, stated honestly:** local `serve-static` sends everything raw — no gzip/br — so local scene times overstate Vercel (which Brotli-compresses the GLB ~0.78×, D-059; JS rode raw locally too). Vercel-expected transfer ≈ `/` 1.4 MB (~7 s floor), vantage ~2.9 MB (~14.5 s floor); the rest is GLTF parse + shader compile on a cold headless profile. Real-radio and real-GPU calibration stay deferred with D-051; Max→Air factors are unmeasured. Timer-query GPU ms remains indicative (D-055). 120 Hz applies Chromium-only while moving (R-002/D-036) and is outside this gate.
+*Why:* fol-1ux needed route targets from measured bytes, and fol-l7d.14 needed the budgets judged or explicitly refused.
+*Refines:* D-047 (per-route budgets now cover breadth routes), D-059 (its `/` line kept; Vercel re-measurement still open), D-072 (frame target held on all breadth routes, quiet-machine).
+
 ---
 
 ## Open questions (not yet decided)
