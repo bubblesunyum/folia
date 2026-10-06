@@ -2,8 +2,9 @@
 // fragment.pools.json is the owning source, so this spec pins every pool to
 // a walkable terrace top — the right level's height (never the canopy roof),
 // inside that level's baked outline (never lawn), clear of the trunk, petals,
-// pond and forum footprints, and separated from every other pool. Any params
-// edit without a re-bake fails here instead of shipping stale spots.
+// pond, forum, dwelling, court and bedrow footprints, and separated from
+// every other pool. Any params edit without a re-bake fails here instead of
+// shipping stale spots.
 
 import { describe, expect, it } from 'vitest'
 import forumParams from '../../assets/blender/cortico/forum.json' with { type: 'json' }
@@ -56,9 +57,11 @@ const layout = fragmentPools as unknown as {
     levels: { centre: [number, number]; radius: number; top: number }[]
     pools: { radius: number; lift: number; spacing: number }
     exclusions: Record<
-      'trunk' | 'shell' | 'pond' | 'forum',
+      'trunk' | 'shell' | 'pond' | 'forum' | 'court',
       { at: [number, number]; r: number }
     > & {
+      dwellings: { at: [number, number]; r: number }[]
+      bedrows: { at: [number, number]; r: number }[]
       clearance: number
     }
     edgeMargin: number
@@ -118,6 +121,20 @@ describe('light-pool layout source (fol-kes.4)', () => {
     )
     expect(exclusions.forum?.at).toEqual(forumLayout.centre)
     expect(exclusions.forum?.r).toBe(forumParams.medallion.radius)
+    expect(exclusions.dwellings).toEqual(
+      fragmentParams.housing.pods.map((pod: { at: number[]; base_r: number }) => ({
+        at: pod.at,
+        r: pod.base_r + 0.3,
+      })),
+    )
+    expect(exclusions.court?.at).toEqual(fragmentParams.court.at)
+    expect(exclusions.court?.r).toBe(fragmentParams.court.radius + 0.2)
+    expect(exclusions.bedrows).toEqual(
+      (fragmentParams.beds.spots as [number, number][]).flatMap(([cx, cz]) => [
+        { at: [cx - 0.55, cz], r: 0.85 },
+        { at: [cx + 0.55, cz], r: 0.85 },
+      ]),
+    )
   })
 
   it('parses through the component path', () => {
@@ -162,11 +179,20 @@ describe('light-pool placement (fol-kes.4)', () => {
     const { exclusions } = layout.source
     const clearance = exclusions.clearance
     for (const pool of layout.pools) {
-      for (const name of ['trunk', 'shell', 'pond', 'forum'] as const) {
+      for (const name of ['trunk', 'shell', 'pond', 'forum', 'court'] as const) {
         const zone = exclusions[name]
         expect(zone).toBeDefined()
         const [cx, cz] = zone.at
         expect(Math.hypot(pool.x - cx, pool.z - cz)).toBeGreaterThanOrEqual(zone.r + clearance)
+      }
+      for (const name of ['dwellings', 'bedrows'] as const) {
+        const zones = exclusions[name]
+        expect(Array.isArray(zones)).toBe(true)
+        expect(zones.length).toBeGreaterThan(0)
+        for (const zone of zones) {
+          const [cx, cz] = zone.at
+          expect(Math.hypot(pool.x - cx, pool.z - cz)).toBeGreaterThanOrEqual(zone.r + clearance)
+        }
       }
     }
   })
