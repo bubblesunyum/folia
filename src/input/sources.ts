@@ -6,6 +6,12 @@
  * - pinch-out (fingers apart, content follows the fingers) zooms in.
  */
 
+/**
+ * D-060 starting points, kept as the tuned defaults (fol-j08 code part).
+ * PENDING ON-DEVICE VERIFICATION (@bubbles): retune these three against a
+ * real Max trackpad pinch and an iPad pinch; the device check stays open
+ * after this change.
+ */
 export const WHEEL_GAIN = 0.05
 export const GESTURE_GAIN = 20
 export const PINCH_GAIN = 0.05
@@ -70,6 +76,26 @@ export function wheelToPan(event: PanWheelLike): { dx: number; dy: number } | nu
  */
 export function gestureToZoomDelta(scale: number, previousScale: number): number {
   return -(scale - previousScale) * GESTURE_GAIN
+}
+
+/**
+ * Double-count guards for pinch paths that arrive on two channels at once.
+ *
+ * - iOS Safari fires `gesturechange` for a touch pinch alongside the pointer
+ *   events the two-finger tracker already counts (fol-crx): while two touch
+ *   pointers are down the pointers own the zoom.
+ * - macOS Safari trackpad pinch may emit `ctrl+wheel` alongside the gesture
+ *   events: while a gesture is active the gesture channel owns the zoom.
+ * Both are pure so Vitest pins them; the on-device proof that neither path
+ * double-counts on real hardware stays pending (fol-j08 device check).
+ */
+export function shouldIgnoreGestureWhilePinching(twoFingerDown: boolean): boolean {
+  return twoFingerDown
+}
+
+/** While a Safari gesture is active, a ctrl+wheel for the same pinch yields. */
+export function shouldIgnoreWheelDuringGesture(gestureActive: boolean): boolean {
+  return gestureActive
 }
 
 /** iPad two-pointer pinch, from finger distance in CSS pixels. */

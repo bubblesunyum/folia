@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  GESTURE_GAIN,
   gestureToZoomDelta,
   keyToZoomDelta,
+  PINCH_GAIN,
   pinchToZoomDelta,
+  shouldIgnoreGestureWhilePinching,
+  shouldIgnoreWheelDuringGesture,
+  WHEEL_GAIN,
   wheelToPan,
   wheelToZoomDelta,
 } from './sources'
@@ -48,6 +53,24 @@ describe('keyToZoomDelta', () => {
 
   it('ignores other keys', () => {
     expect(keyToZoomDelta('a')).toBeNull()
+  })
+})
+
+describe('fol-j08 tuned defaults', () => {
+  it('keeps the D-060 gains as the defaults pending the device tune', () => {
+    expect(WHEEL_GAIN).toBe(0.05)
+    expect(GESTURE_GAIN).toBe(20)
+    expect(PINCH_GAIN).toBe(0.05)
+  })
+
+  it('routes a touch pinch to the pointers, not the gesture channel', () => {
+    expect(shouldIgnoreGestureWhilePinching(true)).toBe(true)
+    expect(shouldIgnoreGestureWhilePinching(false)).toBe(false)
+  })
+
+  it('routes a trackpad pinch to the gesture, not ctrl+wheel', () => {
+    expect(shouldIgnoreWheelDuringGesture(true)).toBe(true)
+    expect(shouldIgnoreWheelDuringGesture(false)).toBe(false)
   })
 })
 

@@ -26,6 +26,8 @@ import {
   keyToZoomDelta,
   pinchToZoomDelta,
   RISE_EVENT,
+  shouldIgnoreGestureWhilePinching,
+  shouldIgnoreWheelDuringGesture,
   wheelToPan,
   wheelToZoomDelta,
   ZOOM_IN_EVENT,
@@ -49,7 +51,45 @@ export const ZOOM_LIMITS: ZoomLimits = { minDistance: 25, maxDistance: 90 }
 interface ControlsLike {
   target: THREE.Vector3
   enablePan: boolean
+  enableRotate?: boolean
+  mouseButtons?: { LEFT?: number; MIDDLE?: number; RIGHT?: number }
+  touches?: { ONE?: number; TWO?: number }
   update: () => void
+}
+
+/**
+ * Drag pans (D-006, fol-j08): left-drag and one-finger touch pan instead of
+ * rotating. The rig configures the shared OrbitControls imperatively (the
+ * JSX lives in LookDevScene, outside this module): rotate off, LEFT and ONE
+ * remapped to pan. Pan moves target and camera together, so the orbit offset
+ * — and with it the pitch — is preserved by construction; the yaw spring
+ * stays armed as the bounds safety net, not the driver.
+ *
+ * PENDING ON-DEVICE VERIFICATION (@bubbles): confirm drag-pan feel on the
+ * Max trackpad / mouse and one-finger pan on the iPad (fol-j08 device check).
+ */
+export function applyDragPanConfig(controls: ControlsLike | null): () => void {
+  if (!controls) return () => {}
+  const previous = {
+    enablePan: controls.enablePan,
+    enableRotate: controls.enableRotate,
+    left: controls.mouseButtons?.LEFT,
+    one: controls.touches?.ONE,
+  }
+  if (controls.enableRotate !== undefined) controls.enableRotate = false
+  if (controls.mouseButtons) controls.mouseButtons.LEFT = THREE.MOUSE.PAN
+  if (controls.touches) controls.touches.ONE = THREE.TOUCH.PAN
+  return () => {
+    // Borrow-and-restore covers enablePan too: setup never changes it (only
+    // the pinch-time toggle does), so unmount restores the setup value
+    // instead of forcing true and stranding a setup that had pan off.
+    controls.enablePan = previous.enablePan
+    if (controls.enableRotate !== undefined) controls.enableRotate = previous.enableRotate
+    if (controls.mouseButtons && previous.left !== undefined) {
+      controls.mouseButtons.LEFT = previous.left
+    }
+    if (controls.touches && previous.one !== undefined) controls.touches.ONE = previous.one
+  }
 }
 
 interface SafariGestureEvent extends Event {
@@ -142,8 +182,15 @@ function currentPath(): string {
  * past the Place's far limit; a plain wheel (two-finger swipe) pans like an
  * OrbitControls drag-pan. iOS fires gesture events for touch pinches alongside
  * the pointers, so the gesture channel stays silent while two fingers are
- * down (fol-crx). OrbitControls keeps pan and rotate; its own zoom stays
- * off so there is exactly one zoom path.
+ * down (fol-crx). OrbitControls' own zoom stays off so there is exactly
+ * one zoom path; left-drag and one-finger pan (rotate off, fol-j08), so
+ * pitch cannot drift off the art-directed vantage and the yaw spring only
+ * ever fires as a bounds safety net.
+ *
+ * fol-j08 PENDING ON-DEVICE VERIFICATION (@bubbles): the WHEEL/GESTURE/PINCH
+ * gains are D-060 starting points kept as defaults, and the gesture +
+ * ctrl+wheel double-count guard is code-only — confirm on a real Max
+ * trackpad pinch (gesture vs ctrl+wheel co-occurrence) and an iPad pinch.
  *
  * Yaw follows the place preset (D-008): fixed at town, a limited orbit at a
  * neighborhood that springs back with the one easing once the user lets go.
@@ -400,7 +447,21 @@ export function ZoomRig({ limits }: { limits?: ZoomLimits }) {
       invalidate()
     }
 
+    // Gesture-channel ownership (fol-j08): a Safari gesture owns its pinch,
+    // so a co-occurring ctrl+wheel for the same fingers yields. Declared
+    // before onWheel: the wheel handler closes over it.
+    let gestureScale = 1
+    let gestureActive = false
+
     const onWheel = (event: WheelEvent) => {
+      // macOS trackpad pinch may arrive as ctrl+wheel alongside the gesture
+      // events (fol-j08): while a gesture is active the gesture owns the
+      // zoom, so the wheel channel yields instead of double-counting.
+      // PENDING ON-DEVICE VERIFICATION: confirm the co-occurrence on hardware.
+      if (shouldIgnoreWheelDuringGesture(gestureActive)) {
+        event.preventDefault()
+        return
+      }
       const zoomDelta = wheelToZoomDelta(event)
       if (zoomDelta !== null) {
         event.preventDefault()
@@ -419,10 +480,10 @@ export function ZoomRig({ limits }: { limits?: ZoomLimits }) {
     // the gesture channel yields while the tracker holds two fingers (fol-crx).
     const pinch = createPinchTracker(zoomContinuous)
 
-    let gestureScale = 1
     const onGestureStart = (event: Event) => {
       event.preventDefault()
       gestureScale = 1
+      gestureActive = true
     }
     const onGestureChange = (event: Event) => {
       event.preventDefault()
@@ -432,12 +493,15 @@ export function ZoomRig({ limits }: { limits?: ZoomLimits }) {
       // pointer events the tracker already counts (fol-crx): while two
       // fingers are down the pointers own the zoom, so the gesture channel
       // only keeps its baseline in sync instead of zooming a second time.
-      if (!pinch.twoFinger) zoomContinuous(gestureToZoomDelta(scale, gestureScale))
+      if (!shouldIgnoreGestureWhilePinching(pinch.twoFinger)) {
+        zoomContinuous(gestureToZoomDelta(scale, gestureScale))
+      }
       gestureScale = scale
     }
     const onGestureEnd = (event: Event) => {
       event.preventDefault()
       gestureScale = 1
+      gestureActive = false
     }
 
     const onPointerDown = (event: PointerEvent) => {
@@ -495,6 +559,9 @@ export function ZoomRig({ limits }: { limits?: ZoomLimits }) {
     const onZoomOut = () => zoomStepped(KEY_STEP)
 
     // Safari page-zoom must not eat the gesture; the canvas owns touch.
+    // fol-j08: left-drag / one-finger pans (rotate off). Restored on
+    // unmount so a hot reload never strands the shared controls.
+    const restoreDragPan = applyDragPanConfig(controlsRef.current)
     canvas.addEventListener('wheel', onWheel, { passive: false })
     canvas.addEventListener('gesturestart', onGestureStart, { passive: false })
     canvas.addEventListener('gesturechange', onGestureChange, { passive: false })
@@ -527,7 +594,7 @@ export function ZoomRig({ limits }: { limits?: ZoomLimits }) {
       window.removeEventListener(ZOOM_IN_EVENT, onZoomIn)
       window.removeEventListener(ZOOM_OUT_EVENT, onZoomOut)
       canvas.style.touchAction = previousTouchAction
-      if (controlsRef.current) controlsRef.current.enablePan = true
+      restoreDragPan()
     }
   }, [camera, gl, invalidate])
 
