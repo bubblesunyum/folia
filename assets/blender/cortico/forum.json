@@ -66,6 +66,44 @@
     "bevel": 0.012,
     "neon": { "lift": 0.06, "foot": 0.28, "tube": 0.022, "sides": 6 }
   },
+  "planters": {
+    "seed": 77,
+    "count": 6,
+    "radius": 2.6,
+    "phase_deg": 30,
+    "ring": {
+      "r": 0.26,
+      "lift": 0.1,
+      "samples": 20,
+      "tube": 0.07,
+      "sides": 6
+    },
+    "puff": {
+      "overhang": 0.35,
+      "leaf_size": 0.15,
+      "leaf_aspect": 0.5,
+      "fold": 0.35,
+      "scatter": 0.45,
+      "depth": 0.3,
+      "floor": 0.35,
+      "density": 35,
+      "curl": 0.1,
+      "lobes": 4,
+      "lobe_spread": 0.75,
+      "lobe_size": [0.4, 0.6],
+      "sharpness": 4,
+      "leaf_normal": 0.3,
+      "buried": 0.85,
+      "lobe_rise": [0.5, -0.15],
+      "spray": 7,
+      "spray_radius": 0.2,
+      "leaf_scatter": 0.3,
+      "spray_depth": 0.25,
+      "fan_scatter": 0.35,
+      "lattice_jitter": 0.3,
+      "radii": [0.35, 0.3, 0.22]
+    }
+  },
   "bake": {
     "ao_distance": 2.5,
     "ao_samples": 64,

@@ -162,7 +162,8 @@ describe('cortico/forum slots and batches (fol-l1r.4)', () => {
   it('the forum stays lean and reuses shared batches only', () => {
     const triangles = readManifest()['cortico/forum']?.triangles ?? {}
     // Shared batches only: no new materials, so no new programs (D-012).
-    expect(Object.keys(triangles).sort()).toEqual(['cream', 'gold', 'neon'])
+    // foliage joined with the forum planter ring (fol-l7d.3) — still shared.
+    expect(Object.keys(triangles).sort()).toEqual(['cream', 'foliage', 'gold', 'neon'])
     // ~6k tris against the fragment's ~132k: the slice-exit headroom (D-063)
     // must survive the forum.
     const total = Object.values(triangles).reduce((a, b) => a + b, 0)

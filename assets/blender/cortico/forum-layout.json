@@ -1,6 +1,7 @@
 {
   "centre": [-3.4, -2.6],
   "floor_top": 2.35,
+  "terrace_top": 2.25,
   "anchors": {
     "platform": [-3.4, 3.6, 1.55],
     "recorder": [-4.30932667397366, 3.7, 3.125],

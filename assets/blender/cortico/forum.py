@@ -15,13 +15,20 @@ from pathlib import Path
 
 import numpy as np
 
-from folia import forms
+from folia import foliage, forms
 from folia.mesh import Part
 
 # The forum placement is single-sourced in the sibling forum-layout.json
 # (fol-bll): the same centre/floor_top the TS rigs' anchors derive from, so
 # the two can never drift. forum.json carries only the build params.
+# Planters stand on the fragment's level-2 top around the medallion; that
+# height is placement, so it lives in the layout file next to the centre —
+# never a copy of the fragment's level table, and the pipeline already
+# hashes the layout file with every asset that reads it.
 _LAYOUT = json.loads((Path(__file__).with_name("forum-layout.json")).read_text())
+_FOLIAGE_PARAMS = json.loads(
+    (Path(__file__).resolve().parent.parent / "folia" / "foliage_params.json").read_text()
+)
 
 TAU = math.tau
 
@@ -131,6 +138,32 @@ def glyph(px, py, top, yaw, spec, group):
     return parts
 
 
+def planters(params, rng):
+    """The curated ring (fol-l7d.3): six gold planters with foliage puffs
+    around the medallion, on the forum mid slot — the curated greenery the
+    town read gets at `/`."""
+    parts = []
+    f = params["planters"]
+    group = params["groups"]["forum"]
+    cx, cy = _LAYOUT["centre"]
+    top = _LAYOUT["terrace_top"]
+    sway = {"sway_base_m": _FOLIAGE_PARAMS["sway_base_m"],
+            "sway_top_m": _FOLIAGE_PARAMS["sway_top_m"]}
+    prng = np.random.default_rng(f["seed"])
+    for i in range(f["count"]):
+        angle = TAU * (i + f["phase_deg"] / 360) / f["count"]
+        px = cx + f["radius"] * math.cos(angle)
+        py = cy + f["radius"] * math.sin(angle)
+        ring = forms.circle_points(f["ring"]["r"], f["ring"]["samples"],
+                                   top + f["ring"]["lift"], (px, py))
+        parts.append(Part(forms.tube(f"planter{i}.ring", ring, f["ring"]["tube"],
+                                     f["ring"]["sides"], closed=True), "gold", group))
+        puff = foliage.clump(f"planter{i}.puff", {**f["puff"], **sway}, prng)
+        parts.append(Part(place(puff, px, py, top + f["puff"]["radii"][2] * 0.35,
+                                prng.uniform(0, TAU)), "foliage", group))
+    return parts
+
+
 BUILDERS = {
     "platform": laptop,
     "recorder": phone,
@@ -182,5 +215,8 @@ def assemble(params, rng):
         parts.extend(
             build(px, py, floor - 0.01 + pedestal["height"], yaw, params[spot["slug"]], groups[spot["group"]])
         )
+
+    # The curated ring around the medallion (fol-l7d.3).
+    parts.extend(planters(params, rng))
 
     return parts
