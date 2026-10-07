@@ -8,7 +8,7 @@ import { COUNT_DRAWS, drawCalls, waitForTownDrawn } from './helpers'
 // explained by an ambient frame. A stray invalidate loop breaks both.
 
 const REST_MS = 2_000
-const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow'
+const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow,town/skeleton'
 
 async function ambientFrames(page: Page): Promise<number> {
   const value = await page
