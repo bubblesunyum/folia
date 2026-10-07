@@ -205,7 +205,7 @@ Performance is a first-class requirement: fast and beautiful, never one at the e
   - Gentle ambient motion runs by default at about 30 fps while idle; it pauses while a panel is open or being read, when the tab is hidden, and for reduced motion (D-073).
 - **Asset compression and delivery (R-009, D-047):**
   - Meshopt for geometry. No KTX2 until textures justify its ~217 KB transcoder.
-  - Vercel doesn't compress `.glb`, so spike 6 picks the workaround.
+  - Vercel Brotli-compresses `.glb` (D-059), so no workaround.
 - **Loading and reveal (D-018, D-044):**
   - The sky gradient and a cream "ocean" wave shader appear first while the town streams.
   - The town then rises through the opaque cream, and a glossy cream band flows off it as a color and roughness blend above `revealHeight`. There's no clipping and no fluid simulation.
