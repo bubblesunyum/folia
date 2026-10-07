@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MOON_RIM_POWER, MOON_RIM_SCALE, moonRim, moonRimResponse } from './moonRim'
+import { materials } from './shared'
 
 describe('moonRimResponse', () => {
   it('is zero face-on and peaks edge-on, scaled by moon strength', () => {
@@ -20,5 +21,21 @@ describe('moonRim', () => {
     expect((moonRim.uniforms.uMoonRimColor.value as { r: number }).r).toBe(0)
     expect(moonRim.uniforms.uMoonRimStrength.value).toBe(0)
     expect(moonRim.key).toBe('moon-rim')
+  })
+})
+
+describe('moonRim composition (fol-snu.5)', () => {
+  it('rims the lit batches: cream, gold, ground and foliage', () => {
+    for (const name of ['cream', 'gold', 'ground', 'foliage']) {
+      const keys = materials[name]?.features.map((f) => f.key) ?? []
+      expect(keys, `${name} has no moon rim`).toContain('moon-rim')
+    }
+  })
+
+  it('stays out of the unlit programs: neon, glow and water', () => {
+    for (const name of ['neon', 'neonGlow', 'water']) {
+      const keys = materials[name]?.features.map((f) => f.key) ?? []
+      expect(keys, `${name} should not rim`).not.toContain('moon-rim')
+    }
   })
 })

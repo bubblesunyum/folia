@@ -202,12 +202,15 @@ export const foliage = {
             float wrapped = saturate((ndl + uWrap) / (1.0 + uWrap)) - saturate(ndl);
             float backLit = pow(saturate(dot(-geometryViewDir, sunDir)), uTranslucencyPower);
             float thin = 1.0 - ${FOLIAGE_THIN_FALLOFF.toFixed(2)} * saturate(ndl);
-            // The sun's shadow attenuation for light 0 (fol-rzn): shaded
-            // clumps keep wrap but lose the back-light glow. This is the stock
-            // shadow term, so intensity-0 tiers read 1.0 and render unchanged.
+            // The sun's shadow attenuation for light 0 (fol-rzn, fol-snu.5):
+            // shaded clumps keep wrap but lose the back-light glow. This is
+            // the stock shadow term, so intensity-0 tiers read 1.0 and render
+            // unchanged. Skipped while the sun is off (night): the whole term
+            // below scales by sunColor, so the sample would gate nothing — one
+            // fewer PCF fetch per leaf fragment at night, pixels unchanged.
             float sunShadow = 1.0;
             #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
-              if (receiveShadow) {
+              if (receiveShadow && dot(sunColor, vec3(1.0)) > 0.0) {
                 sunShadow = getShadow( directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize, directionalLightShadows[ 0 ].shadowIntensity, directionalLightShadows[ 0 ].shadowBias, directionalLightShadows[ 0 ].shadowRadius, vDirectionalShadowCoord[ 0 ] );
               }
             #endif

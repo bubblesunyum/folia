@@ -1,6 +1,8 @@
-// Moon rim on the hero forms (fol-2mq): a fresnel edge light in moonlight, so
-// the voronoi canopy and the lotus read rimmed instead of unlit black
-// silhouettes at night. Weighted by the look's moon strength, which is exactly
+// Moon rim on the lit batches (fol-2mq, fol-snu.5): a fresnel edge light in
+// moonlight, so the voronoi canopy and the lotus read rimmed instead of unlit
+// black silhouettes at night. It composes through the shared `lit` set, so
+// lawn and foliage rim with the architecture — the moon lights the world, not
+// just the hero forms. Weighted by the look's moon strength, which is exactly
 // zero by day, so daylight pixels are unchanged. Uniforms default inert (black
 // / 0): the feature composes unconditionally, so a nonzero default would tint
 // still renders with the look unapplied.
