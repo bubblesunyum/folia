@@ -6,6 +6,15 @@ import { getCaseInView } from '../panel/caseInView'
 import { setCanvasHook } from '../testHooks'
 import { ambient, isAmbientReading } from '../time/ambient'
 
+/** Canvas dataset mirrors of the ambient clock (data-ambient-time /
+ * data-ambient-frames). Throttled, never gated: e2e serves the production
+ * build (playwright serves build/client, so DEV is false there) and polls
+ * these hooks — ambient.spec needs >0.45 s of movement inside an 800 ms
+ * window, so a 200 ms write cadence keeps every spec green while cutting
+ * DOM churn ~6x vs per-tick. Uniform motion is unaffected — sway and ripple
+ * still update every tick in every build. */
+const HOOK_WRITE_MS = 200
+
 /** One ~30 Hz owner for foliage and pond motion, including reflection=off. */
 export function AmbientMotion() {
   const invalidate = useThree((state) => state.invalidate)
@@ -16,12 +25,17 @@ export function AmbientMotion() {
     setCanvasHook(canvas, 'ambientTime', '0')
     setCanvasHook(canvas, 'ambientFrames', '0')
     let frameCount = 0
+    let lastHookWrite = 0
     ambient.register('sway', {
       update: (time) => {
         sway.uniforms.uSwayTime.value = time
         frameCount += 1
-        setCanvasHook(canvas, 'ambientTime', String(time))
-        setCanvasHook(canvas, 'ambientFrames', String(frameCount))
+        const now = performance.now()
+        if (now - lastHookWrite >= HOOK_WRITE_MS) {
+          lastHookWrite = now
+          setCanvasHook(canvas, 'ambientTime', String(time))
+          setCanvasHook(canvas, 'ambientFrames', String(frameCount))
+        }
       },
       claim: () => {
         sway.uniforms.uSwayStrength.value = SWAY_STRENGTH
