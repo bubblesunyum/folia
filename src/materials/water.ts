@@ -7,6 +7,27 @@ import { Matrix4, type Texture } from 'three'
 import type { AmbientConsumer } from '../time/ambient'
 import type { Feature } from './composer'
 
+/** Base ripple scale (per metre); the `uRippleScale` uniform default. */
+export const WATER_RIPPLE_SCALE = 0.9
+/** Plan stretch of the ripple base: ripples run across the pool. */
+export const WATER_STRETCH_X = 0.6
+export const WATER_STRETCH_Y = 1.4
+/** First-octave advection vector (opposite the second octave). */
+export const WATER_ADVECT_AX = 0.32
+export const WATER_ADVECT_AY = 0.18
+/** Second-octave advection vector. */
+export const WATER_ADVECT_BX = 0.24
+export const WATER_ADVECT_BY = 0.36
+/** Second-octave frequency multiplier and scalar offset. */
+export const WATER_OCTAVE_SCALE = 2.3
+export const WATER_OCTAVE_OFFSET = 7.1
+/** Smoothstep edges mapping ripple height to the visible tint ridge. */
+export const WATER_TINT_LO = 0.72
+export const WATER_TINT_HI = 1.12
+/** Tinted-teal gain: `BASE + ridge * GAIN`. */
+export const WATER_TINT_BASE = 0.84
+export const WATER_TINT_GAIN = 0.24
+
 export const water = {
   key: 'water',
   uniforms: {
@@ -20,7 +41,7 @@ export const water = {
     uRippleTime: { value: 0 },
     /** Ripple slope and scale (per metre). */
     uRipple: { value: 0.14 },
-    uRippleScale: { value: 0.9 },
+    uRippleScale: { value: WATER_RIPPLE_SCALE },
   },
   vertex: {
     header: /* glsl */ `
@@ -63,9 +84,9 @@ export const water = {
       // advected in opposite directions by the ambient clock. The color
       // modulation below makes those moving ridges readable at this framing.
       float waterHeight(vec2 p, float t) {
-        vec2 rippleBase = p * uRippleScale * vec2(0.6, 1.4);
-        return waterNoise(rippleBase + vec2(0.32, 0.18) * t)
-          + 0.5 * waterNoise(rippleBase * 2.3 + 7.1 - vec2(0.24, 0.36) * t);
+        vec2 rippleBase = p * uRippleScale * vec2(${WATER_STRETCH_X.toFixed(1)}, ${WATER_STRETCH_Y.toFixed(1)});
+        return waterNoise(rippleBase + vec2(${WATER_ADVECT_AX.toFixed(2)}, ${WATER_ADVECT_AY.toFixed(2)}) * t)
+          + 0.5 * waterNoise(rippleBase * ${WATER_OCTAVE_SCALE.toFixed(1)} + ${WATER_OCTAVE_OFFSET.toFixed(1)} - vec2(${WATER_ADVECT_BX.toFixed(2)}, ${WATER_ADVECT_BY.toFixed(2)}) * t);
       }`,
     chunks: {
       // Normal-only ripples were invisible from the town camera. A restrained
@@ -73,8 +94,8 @@ export const water = {
       // introducing colors outside the shared material palette.
       color_fragment: {
         after: /* glsl */ `
-          float rippleTint = smoothstep(0.72, 1.12, waterHeight(vWaterWorld.xz, uRippleTime));
-          diffuseColor.rgb *= 0.84 + rippleTint * 0.24;`,
+          float rippleTint = smoothstep(${WATER_TINT_LO.toFixed(2)}, ${WATER_TINT_HI.toFixed(2)}, waterHeight(vWaterWorld.xz, uRippleTime));
+          diffuseColor.rgb *= ${WATER_TINT_BASE.toFixed(2)} + rippleTint * ${WATER_TINT_GAIN.toFixed(2)};`,
       },
       // The pool is flat and faces up, so the ripple replaces the normal outright.
       // Both chunks land in main() and this one runs first, so the emissive chunk
@@ -121,18 +142,21 @@ export function rippleConsumer(): AmbientConsumer {
 
 /** CPU mirror of the water's moving tint, for regression checks on visible motion. */
 export function waterTintAt(x: number, z: number, timeSeconds: number): number {
-  const rippleBaseX = x * 0.9 * 0.6
-  const rippleBaseZ = z * 0.9 * 1.4
+  const rippleBaseX = x * WATER_RIPPLE_SCALE * WATER_STRETCH_X
+  const rippleBaseZ = z * WATER_RIPPLE_SCALE * WATER_STRETCH_Y
   const height =
-    noise(rippleBaseX + 0.32 * timeSeconds, rippleBaseZ + 0.18 * timeSeconds) +
+    noise(
+      rippleBaseX + WATER_ADVECT_AX * timeSeconds,
+      rippleBaseZ + WATER_ADVECT_AY * timeSeconds,
+    ) +
     0.5 *
       noise(
-        rippleBaseX * 2.3 + 7.1 - 0.24 * timeSeconds,
-        rippleBaseZ * 2.3 + 7.1 - 0.36 * timeSeconds,
+        rippleBaseX * WATER_OCTAVE_SCALE + WATER_OCTAVE_OFFSET - WATER_ADVECT_BX * timeSeconds,
+        rippleBaseZ * WATER_OCTAVE_SCALE + WATER_OCTAVE_OFFSET - WATER_ADVECT_BY * timeSeconds,
       )
-  const t = Math.max(0, Math.min(1, (height - 0.72) / (1.12 - 0.72)))
+  const t = Math.max(0, Math.min(1, (height - WATER_TINT_LO) / (WATER_TINT_HI - WATER_TINT_LO)))
   const ridge = t * t * (3 - 2 * t)
-  return 0.84 + ridge * 0.24
+  return WATER_TINT_BASE + ridge * WATER_TINT_GAIN
 }
 
 function noise(x: number, y: number): number {
