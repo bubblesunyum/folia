@@ -191,6 +191,22 @@ export function shouldLiftSlot(slot: number, pathname: string): boolean {
   return !pedestalOnlyForPath(pathname) || isPedestalSlot(slot)
 }
 
+/**
+ * The empty-world close (D-022): a click that picks nothing closes an open
+ * case; scenery hits hold the panel, and outside project paths taps do
+ * nothing. Pure so the contract holds without pixels — breadth wraps the
+ * horizon in forest, so no e2e framing offers sky to miss.
+ */
+export function shouldCloseOnMiss(
+  slot: number | null,
+  pathname: string,
+  caseInView: PedestalSlug | null,
+): boolean {
+  if (!pedestalOnlyForPath(pathname)) return false
+  if (slot !== null) return false
+  return caseInView !== null
+}
+
 export interface CaseNav {
   to: string
   replace: boolean

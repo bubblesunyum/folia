@@ -145,23 +145,40 @@ function TierRig() {
   // One post-reveal idle burst: upgrades on headroom, downgrades past the gate.
   // A hidden tab parks the burst on `visibilitychange` instead of dropping it:
   // the early return below must not consume the probe.
+  // `data-tier-probe` walks unset → done when the probe (and its tier verdict)
+  // lands, so rest assertions wait out startup instead of racing it.
   useEffect(() => {
-    if (renderConfig.budget || stressProbed) return
+    if (renderConfig.budget || stressProbed) {
+      // No probe on this mount (bench pins the config, or a StrictMode
+      // re-run found the module flag): rest needs no wait.
+      gl.domElement.dataset.tierProbe = 'done'
+      return
+    }
     const canvas = gl.domElement
     let idleTimer = 0
     let onVisible: (() => void) | null = null
     const runBurstOnce = (): void => {
       stressProbed = true
-      try {
-        const raw = gl.getContext() as WebGL2RenderingContext | null
-        if (!raw) return
-        const result = runBurst(raw, STRESS_FRAMES, STRESS_WARMUP)
-        const id = getTierId()
-        if (shouldStressDowngrade(result.ms, id)) applyTierRef.current(stepTier(id, -1))
-        else if (shouldStressUpgrade(result.ms, id)) applyTierRef.current(stepTier(id, 1))
-      } catch {
-        // Indicative only: the ladder stands where the placement put it.
-      }
+      // Fire and forget: the burst yields between chunks, so flights, tests
+      // and input breathe while it measures. The tier verdict lands in
+      // `finally` below whenever the probe ends, early or full.
+      void (async () => {
+        try {
+          const raw = gl.getContext() as WebGL2RenderingContext | null
+          if (!raw) return
+          const result = await runBurst(raw, STRESS_FRAMES, STRESS_WARMUP)
+          const id = getTierId()
+          if (shouldStressDowngrade(result.ms, id)) applyTierRef.current(stepTier(id, -1))
+          else if (shouldStressUpgrade(result.ms, id)) applyTierRef.current(stepTier(id, 1))
+        } catch {
+          // Indicative only: the ladder stands where the placement put it.
+        } finally {
+          // The startup probe is over (or never ran): rest assertions may begin.
+          // Set after the tier verdict lands so the downgrade storm renders
+          // before settledDraws starts watching, not inside its window.
+          canvas.dataset.tierProbe = 'done'
+        }
+      })()
     }
     const armIdle = (): void => {
       idleTimer = window.setTimeout(() => {

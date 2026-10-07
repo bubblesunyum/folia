@@ -16,6 +16,7 @@ import {
   nextTapState,
   type PedestalSlug,
   pedestalOnlyForPath,
+  shouldCloseOnMiss,
   shouldLiftSlot,
   slugForSlot,
 } from './pedestals'
@@ -58,6 +59,11 @@ export function PedestalNavigate() {
       const moved = Math.hypot(event.clientX - rig.current.downX, event.clientY - rig.current.downY)
       if (moved > CLICK_DRAG_TOLERANCE_PX) return
       const slot = pick(event.clientX, event.clientY)
+      // A clean miss is the empty-world close; scenery hits hold the panel.
+      if (shouldCloseOnMiss(slot, window.location.pathname, getCaseInView())) {
+        requestPanelClose(readReducedMotion())
+        return
+      }
       if (slot !== null && shouldLiftSlot(slot, window.location.pathname)) {
         const step = nextTapState(rig.current.armedTap, slot, rig.current.downPointerType)
         rig.current.armedTap = step.armed
@@ -67,10 +73,6 @@ export function PedestalNavigate() {
           requestCaseOpen(slug)
         }
         return
-      }
-      // A clean miss is the empty-world close; scenery hits hold the panel.
-      if (slot === null && getCaseInView() !== null) {
-        requestPanelClose(readReducedMotion())
       }
     }
     canvas.addEventListener('pointerdown', onPointerDown)

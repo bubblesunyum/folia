@@ -124,8 +124,8 @@ function FrameMeters() {
 
 declare global {
   interface Window {
-    /** Under `?perf=base`: time `count` frames drawn back to back (see `runBurst`). */
-    foliaBench?: (count?: number, warmup?: number) => BenchResult
+    /** Under `?perf=base`: time `count` frames in yields-bounded chunks (see `runBurst`). */
+    foliaBench?: (count?: number, warmup?: number) => Promise<BenchResult>
   }
 }
 

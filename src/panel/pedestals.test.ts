@@ -12,6 +12,7 @@ import {
   pedestalOnlyForPath,
   pedestalSlotBySlug,
   resolveCaseNav,
+  shouldCloseOnMiss,
   shouldLiftSlot,
   slotForSlug,
   slugForSlot,
@@ -133,6 +134,25 @@ describe('shouldLiftSlot', () => {
     expect(shouldLiftSlot(PLATFORM, '/')).toBe(true)
     expect(shouldLiftSlot(FORUM_FLOOR_SLOT, '/')).toBe(true)
     expect(shouldLiftSlot(SPARE, '/')).toBe(true)
+  })
+})
+
+describe('shouldCloseOnMiss', () => {
+  it('a clean miss closes an open case on a project path', () => {
+    expect(shouldCloseOnMiss(null, '/cortico/platform', 'platform')).toBe(true)
+  })
+
+  it('a scenery hit holds the panel', () => {
+    expect(shouldCloseOnMiss(PLATFORM, '/cortico/platform', 'platform')).toBe(false)
+    expect(shouldCloseOnMiss(FORUM_FLOOR_SLOT, '/cortico/platform', 'platform')).toBe(false)
+  })
+
+  it('a miss with no case open closes nothing', () => {
+    expect(shouldCloseOnMiss(null, '/cortico/platform', null)).toBe(false)
+  })
+
+  it('a miss outside project paths does nothing (town level keeps /)', () => {
+    expect(shouldCloseOnMiss(null, '/', 'platform')).toBe(false)
   })
 })
 

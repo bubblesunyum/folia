@@ -21,12 +21,17 @@ export function Viewport({
   onFirstFrame?: () => void
 }) {
   const [contextLost, setContextLost] = useState(false)
-  // The tier ladder's DPR and frame cap (D-036); `?perf=base` pins the bench
-  // config instead, so the D-063 proxy stays comparable. `size` never tiers.
+  // The tier ladder's DPR (D-036); `?perf=base` pins the bench config
+  // instead, so the D-063 proxy stays comparable. `size` never tiers.
+  // The loop stays demand on every tier: under frameloop 'never' R3F's
+  // invalidate() only records (its loop never runs), so a capped driver
+  // renders continuously and idle-rest can never settle (fol-36m) — and a
+  // still town burns frames at the cap on every capped device. The bench
+  // keeps its saturated driver through renderConfig.maxFps below.
   const tier = useEffectiveTier()
   const { size } = renderConfig
   const dpr = renderConfig.budget ? renderConfig.dpr : tier.dpr
-  const maxFps = renderConfig.budget ? renderConfig.maxFps : tier.maxFps
+  const maxFps = renderConfig.budget ? renderConfig.maxFps : null
   // The look-dev bench pauses ambient motion while it is being read (fol-k0t):
   // the pointer over leva, or focus inside it, sets the ambient flag.
   useEffect(() => bindAmbientReadingSignal(), [])
@@ -58,7 +63,12 @@ export function Viewport({
 // jittering mix of one and two.
 const CAP_SLACK_MS = 4
 
-/** Drives the frame loop itself, no faster than `fps`. */
+/**
+ * The bench's saturated driver (`?perf=base` only): advances the frame loop
+ * itself, no faster than `fps`, unasked frames included — the D-063 proxy
+ * measures wall ms per frame drawn back to back, so idling would measure
+ * nothing. Never tier-driven: see above.
+ */
 function FrameCap({ fps }: { fps: number }) {
   useEffect(() => {
     const interval = 1000 / fps
