@@ -11,6 +11,9 @@ import forumParams from '../../assets/blender/cortico/forum.json' with { type: '
 import forumLayout from '../../assets/blender/cortico/forum-layout.json' with { type: 'json' }
 import fragmentParams from '../../assets/blender/cortico/fragment.json' with { type: 'json' }
 import fragmentPools from '../../assets/blender/cortico/fragment.pools.json' with { type: 'json' }
+import fragmentPoolsOnly from '../../assets/blender/cortico/fragment.pools.only.json' with {
+  type: 'json',
+}
 import {
   POOL_LIFT_M,
   POOL_OWNER_ASSET,
@@ -140,11 +143,25 @@ describe('light-pool layout source (fol-kes.4)', () => {
   it('parses through the component path', () => {
     expect(parseLightPoolLayout(fragmentPools)).toHaveLength(layout.pools.length)
   })
+
+  it('keeps the pools-only runtime file in sync with the full bake (fol-snu.9)', () => {
+    const only = fragmentPoolsOnly as unknown as {
+      pools: { x: number; y: number; z: number; r: number; level: number }[]
+    }
+    expect(only.pools).toEqual(layout.pools)
+    // The runtime file carries spots only: outlines and provenance stay in
+    // the full file, never in the canvas chunk.
+    expect('outlines' in (fragmentPoolsOnly as object)).toBe(false)
+    expect('source' in (fragmentPoolsOnly as object)).toBe(false)
+    expect(parseLightPoolLayout(fragmentPoolsOnly)).toHaveLength(layout.pools.length)
+  })
 })
 
 describe('light-pool placement (fol-kes.4)', () => {
   it('lands pools only on terrace walk surfaces', () => {
-    expect(layout.source.edgeMargin).toBeGreaterThanOrEqual(POOL_RADIUS_M)
+    // Half-radius edge margin (fol-snu.6): lantern spill washes over the lip,
+    // so the bake grounds the quad's heart, not the whole disc.
+    expect(layout.source.edgeMargin).toBe(POOL_RADIUS_M * 0.5)
     expect(layout.pools.length).toBeGreaterThan(0)
     for (const pool of layout.pools) {
       expect(pool.r).toBe(POOL_RADIUS_M)
@@ -154,13 +171,15 @@ describe('light-pool placement (fol-kes.4)', () => {
       expect(pool.y).toBeCloseTo((level?.top ?? 0) + POOL_LIFT_M, 2)
       const outline = layout.outlines[pool.level]
       expect(outline).toBeDefined()
-      // The whole visible disc, not just the centre: every footprint point
-      // stays on the walk surface (layout rounds to the millimetre, so test
-      // a hair inside the authored radius).
+      // The quad's heart stays on the walk surface: every footprint point
+      // inside the bake's edge margin is on the terrace (layout rounds to
+      // the millimetre, so test a hair inside). The falloff rim beyond the
+      // margin may wash over the lip — spill, never a floater, since the
+      // highest-top check below still grounds the centre.
       for (let k = 0; k < 8; k++) {
         const angle = (k / 8) * Math.PI * 2
-        const px = pool.x + Math.cos(angle) * (POOL_RADIUS_M - 0.005)
-        const pz = pool.z + Math.sin(angle) * (POOL_RADIUS_M - 0.005)
+        const px = pool.x + Math.cos(angle) * (layout.source.edgeMargin - 0.005)
+        const pz = pool.z + Math.sin(angle) * (layout.source.edgeMargin - 0.005)
         expect(pointInOutline(px, pz, outline ?? [])).toBe(true)
       }
       // The highest top under the pool: no higher terrace claims its centre.

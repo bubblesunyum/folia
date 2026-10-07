@@ -1,9 +1,11 @@
 // Additive light-pool decals (D-038, fol-0sj, fol-kes.4, fol-kes.15): warm
 // pools of lantern light drawn as flat decals on the terrace walk lines,
 // where lanterns and paths will go. The spots are authored at bake in
-// assets/blender/cortico/fragment.py on the live terrace outlines and read
-// from the sibling fragment.pools.json (the forum-layout.json anchor
-// precedent) — the runtime only builds the merged quad mesh, never grounds,
+// assets/blender/cortico/fragment.py on the live terrace outlines; the
+// runtime reads the pools-only sibling fragment.pools.only.json (the
+// forum-layout.json anchor precedent) — the full fragment.pools.json keeps
+// the outlines and bake provenance for the placement spec, never the canvas
+// chunk. The runtime only builds the merged quad mesh, never grounds,
 // raycasts, or polls. No lantern geometry exists yet, so these baked spots
 // stand in for the future lantern/planter spill until the fragment models them.
 //
@@ -179,8 +181,9 @@ export function buildLightPoolGeometry(pools: readonly PoolSpot[], slot: number)
 }
 
 /**
- * The authored pool spots (fol-kes.4): parsed out of fragment.pools.json,
- * the file the fragment bake writes. Fail closed on any drift — a missing or
+ * The authored pool spots (fol-kes.4, fol-snu.9): parsed out of
+ * fragment.pools.only.json, the pools-only sibling the fragment bake writes
+ * alongside fragment.pools.json. Fail closed on any drift — a missing or
  * malformed entry throws instead of drawing a half-grounded ring.
  */
 export function parseLightPoolLayout(raw: unknown): PoolSpot[] {

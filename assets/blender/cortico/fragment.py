@@ -4,9 +4,10 @@ the levels, one mint neon line in the groove under a terrace lip, and a
 reflecting pool below it.
 
 Light-pool spots (fol-kes.4) are authored here at bake on the live terrace
-outlines and written to the sibling fragment.pools.json, which the
-LightPools rig reads — no runtime raycast. Every build rewrites the pools file,
-so it can never drift from the geometry.
+outlines and written to the sibling fragment.pools.json, with a pools-only
+sibling (fol-snu.9) carrying the same spots for the LightPools rig to read —
+no runtime raycast. Every build rewrites both pools files,
+so they can never drift from the geometry.
 """
 
 import json
@@ -32,15 +33,17 @@ _FORUM_LAYOUT = json.loads((Path(__file__).with_name("forum-layout.json")).read_
 TAU = math.tau
 
 POOLS_PATH = Path(__file__).with_name("fragment.pools.json")
+POOLS_ONLY_PATH = Path(__file__).with_name("fragment.pools.only.json")
 
 # Light pools (fol-kes.4): lantern spill quads authored on walkable terrace.
 # Radius/lift/spacing come from the "pools" params in fragment.json (the same
 # object src/materials/lightPool.ts reads), so both stay in sync by
-# construction. Pool centres stay a full pool radius inside the terrace edge,
-# so the whole visible disc sits on the walk surface instead of spilling over
-# the lip onto lawn or air. A disc reaching under a higher terrace is
-# occluded, never floating, so only the containing outline constrains
-# placement.
+# construction. Pool centres stay half a pool radius inside the terrace edge
+# (fol-snu.6): lantern light spills over the lip in reality, so the baked
+# margin is 0.5x the pool radius — enough terrace under the quad's heart to
+# ground it, with the falloff's rim allowed to wash over the edge. A disc
+# reaching under a higher terrace is occluded, never floating, so only the
+# containing outline constrains placement.
 
 
 def _place(ob, x, y, z=0.0, rot=0.0):
@@ -115,9 +118,15 @@ def assemble(p, rng):
     parts.extend(leisure_lawn(p, outlines, levels, t_group))
     parts.extend(stepping_discs(p, outlines, levels, t_group))
 
-    # Authored light-pool spots (fol-kes.4): every build rewrites the pools file
-    # from these live outlines, so the TS rig can never drift from the mesh.
-    POOLS_PATH.write_text(json.dumps(pool_layout(p, outlines, levels), indent=2) + "\n")
+    # Authored light-pool spots (fol-kes.4): every build rewrites the pools
+    # file from these live outlines, so the TS rig can never drift from the
+    # mesh. The pools-only sibling (fol-snu.9) carries the same spots without
+    # the outlines, so the canvas chunk never bundles the full provenance
+    # file — both are rewritten together and the placement spec pins them
+    # in sync.
+    layout = pool_layout(p, outlines, levels)
+    POOLS_PATH.write_text(json.dumps(layout, indent=2) + "\n")
+    POOLS_ONLY_PATH.write_text(json.dumps({"pools": layout["pools"]}, indent=2) + "\n")
 
     return parts
 
@@ -342,8 +351,10 @@ def pool_layout(p, outlines, levels):
     """Light-pool spots on walkable terrace, plain data for fragment.pools.json.
 
     Samples the plan-view walk lines, keeps the highest terrace top under each
-    sample, and drops whatever is not walkable: off-terrace (lawn), too close
-    to a lip, inside the trunk/petal/podium/pond footprints (plus one pool
+    sample, and drops whatever is not walkable: off-terrace (lawn), inside
+    half a pool radius of a lip (lantern spill washes over the edge, so the
+    margin is 0.5x the radius rather than the whole disc), inside the
+    trunk/petal/podium/pond footprints (plus one pool
     radius of clearance), or under the forum medallion. Uses no rng, so a
     rebuild from unchanged params rewrites the identical file.
     """
@@ -351,7 +362,7 @@ def pool_layout(p, outlines, levels):
     pool_radius = pool["radius"]
     pool_lift = pool["lift"]
     pool_spacing = pool["spacing"]
-    pool_edge = pool_radius
+    pool_edge = pool_radius * 0.5
     lines = [_ring_walk_line([0, 0], 3.5), _ring_walk_line([0, 0], 5.5), _ring_walk_line([0, 0], 7.5),
              [(6, 2), (15, 4)]]
     trunk_at, trunk_r = p["canopy"]["position"], p["canopy"]["trunk"]["r_base"]

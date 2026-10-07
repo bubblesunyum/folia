@@ -1,7 +1,10 @@
 // Light-pool decals on authored terrace spots (D-038, fol-kes.4). The spots
 // are baked in assets/blender/cortico/fragment.py on the live terrace
-// outlines and read from the sibling fragment.pools.json (the forum-layout
+// outlines and read from the sibling fragment.pools.only.json — the
+// pools-only sibling of fragment.pools.json (the forum-layout
 // anchor precedent) — no raycast, no dataset read, no readiness polling.
+// The full pools file keeps the outlines and bake provenance for the
+// placement spec; the canvas chunk only ever bundles the spots.
 // Each spot is one quad in a single merged additive mesh (one draw call),
 // gated by the registry holding the owning terraces (reads live per frame,
 // like the water pass) and by night.
@@ -15,7 +18,9 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import type { Mesh } from 'three'
-import fragmentPools from '../../assets/blender/cortico/fragment.pools.json' with { type: 'json' }
+import fragmentPools from '../../assets/blender/cortico/fragment.pools.only.json' with {
+  type: 'json',
+}
 import {
   buildLightPoolGeometry,
   createLightPoolMaterial,
