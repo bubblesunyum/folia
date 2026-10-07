@@ -13,7 +13,7 @@ import { expectNoErrors, trackErrors, urlWithQuery, waitForTownDrawn } from './h
 // styles.css media query must agree, and the bottom sheet must hold at night.
 // Captures land in /tmp/fol-panel-*.png.
 
-const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow'
+const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow,town/skeleton'
 
 /** Canvas CSS pixels for a world position, projected by the app itself. */
 function screenPoint(page: Page, world: WorldPoint): Promise<{ x: number; y: number }> {
@@ -93,7 +93,10 @@ test.describe('vantage dolly', () => {
         .getAttribute(canvasHookAttribute('zoom'))
         .then((v) => (v === null || v === '' ? Number.NaN : Number(v)))
     const townDistance = await zoomOf()
-    expect(townDistance).toBeGreaterThan(70)
+    // The cortico place vantage sits at ~55 m (D-007 neighborhood lens), not
+    // the town's ~80 m: gate above the 50 m panel dolly goal, so the dolly
+    // still has somewhere to go.
+    expect(townDistance).toBeGreaterThan(50)
     await openPlatform(page)
     // Close before the ~80 m → 50 m dolly lands: a surviving restore proves
     // the user never drove, so the camera must fly home, not strand mid-way.

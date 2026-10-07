@@ -11,7 +11,7 @@ const keyframes = [
   { name: 'night', time: '22:00' },
 ]
 
-const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow'
+const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow,town/skeleton'
 
 for (const { name, time } of keyframes) {
   test(`forum pedestals register at ${name}`, async ({ page }) => {

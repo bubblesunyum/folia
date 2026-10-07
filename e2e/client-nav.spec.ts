@@ -16,7 +16,7 @@ import {
 // route's heading is on screen without its body copy; one such commit is the
 // flash.
 
-const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow'
+const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow,town/skeleton'
 
 declare global {
   interface Window {

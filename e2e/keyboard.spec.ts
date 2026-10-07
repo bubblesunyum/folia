@@ -10,7 +10,7 @@ import { expectNoErrors, trackErrors, urlWithQuery, waitForTownDrawn } from './h
 // cuts the reveal. Every wait rides a data flag the app sets — never a bare
 // timeout — and routes load directly from the static server like a deep link.
 
-const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow'
+const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow,town/skeleton'
 
 /** Tab until the focused element matches, in DOM order from wherever focus sits. */
 async function tabUntil(page: Page, selector: string, max = 40): Promise<void> {
@@ -53,6 +53,10 @@ test('keyboard-only traverse town -> project -> case with visible focus', async 
   const errors = trackErrors(page)
   await page.goto('/?time=18:30')
   await waitForTownDrawn(page, ASSETS)
+
+  // Startup first: the tier probe's frames stall input response, so the
+  // keyboard asserts below start after it, not inside it.
+  await expect(page.locator('canvas[data-tier-probe="done"]')).toBeVisible({ timeout: 60_000 })
 
   await tabUntil(page, 'a[href^="/cortico"]')
   expect(await focusIsVisible(page)).toBe(true)
@@ -182,6 +186,9 @@ test('the +/- keys zoom and Escape rises the detent', async ({ page }) => {
   // scope): run the zoom asserts at town, where the keys demonstrably step.
   await page.goto('/?time=18:30')
   await waitForTownDrawn(page, ASSETS)
+
+  // Startup first, as above: stepped zoom needs rendered frames to land.
+  await expect(page.locator('canvas[data-tier-probe="done"]')).toBeVisible({ timeout: 60_000 })
 
   const start = await zoomOf(page)
   expect(start).toBeGreaterThan(0)

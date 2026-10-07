@@ -39,6 +39,9 @@ test('?sway=off rests: zero draw calls over the rest window', async ({ page }) =
   await page.addInitScript(COUNT_DRAWS)
   await page.goto('/?time=18:30&sway=off&reflection=off')
   await waitForTownDrawn(page, ASSETS)
+  // Startup first: the post-reveal tier probe draws ~150 frames once, so the
+  // rest window starts after it (data-tier-probe), not inside it.
+  await expect(page.locator('canvas[data-tier-probe="done"]')).toBeVisible({ timeout: 60_000 })
   await settledDraws(page, 1_000)
 
   const before = await drawCalls(page)
@@ -75,6 +78,8 @@ test('the default path rests too once ambient motion is paused', async ({ page }
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/?time=18:30')
   await waitForTownDrawn(page, ASSETS)
+  // Startup first, as above: the tier probe's frames must land before rest.
+  await expect(page.locator('canvas[data-tier-probe="done"]')).toBeVisible({ timeout: 60_000 })
   await settledDraws(page, 1_000)
 
   const before = await drawCalls(page)

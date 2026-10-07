@@ -8,7 +8,7 @@ import { expectNoErrors, trackErrors, waitForTownDrawn } from './helpers'
 // that the panel renders with no hydration error, and that the URL stays
 // slashless (no directory redirect, which would remap the .data URL).
 
-const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow'
+const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow,town/skeleton'
 
 for (const slug of ['platform', 'recorder', 'medley']) {
   test(`direct slashless load of /cortico/${slug} renders the panel`, async ({ page }) => {

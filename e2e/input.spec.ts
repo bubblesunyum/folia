@@ -30,8 +30,14 @@ async function ctrlWheel(page: Page, deltaY: number, times: number): Promise<voi
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/?time=18:30')
+  // Still air: ambient frames would land inside the sub-second quiet windows
+  // below, and the startup probe would race them. Input, not ambience, is
+  // what's under test here; ambient interplay is ambient.spec's beat.
+  await page.goto('/?time=18:30&sway=off&reflection=off')
   await expect(page.locator(canvasHookSelector('assets', 'drawn'))).toBeVisible({ timeout: 60_000 })
+  // Startup first: the tier probe's frames stall input response, so every
+  // key, wheel and gesture asserts below starts after it.
+  await expect(page.locator('canvas[data-tier-probe="done"]')).toBeVisible({ timeout: 60_000 })
 })
 
 test('ctrl+wheel dollies the camera in and out', async ({ page }) => {
@@ -140,9 +146,14 @@ test('a trackpad gesture still zooms once the fingers are gone', async ({ page }
 })
 
 test('ctrl+wheel paints a frame through the demand loop', async ({ page }) => {
+  // Reload plus the startup tier probe run past the default timeout on
+  // software rendering; the quiet windows themselves are milliseconds.
+  test.slow()
   await page.addInitScript(COUNT_DRAWS)
   await page.reload()
   await expect(page.locator(canvasHookSelector('assets', 'drawn'))).toBeVisible({ timeout: 60_000 })
+  // Startup first again after the reload: the probe re-runs from scratch.
+  await expect(page.locator('canvas[data-tier-probe="done"]')).toBeVisible({ timeout: 60_000 })
   const calls = () =>
     page.evaluate(() => (window as unknown as { foliaDrawCalls: number }).foliaDrawCalls)
   await page.waitForTimeout(300)

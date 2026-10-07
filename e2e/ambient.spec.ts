@@ -18,9 +18,15 @@ async function ambientFrames(page: import('@playwright/test').Page): Promise<num
 }
 
 test('ambient motion runs at rest, pauses, and resumes without a time jump', async ({ page }) => {
+  // Software rendering plus the startup tier probe run past the default
+  // timeout; the windows themselves are milliseconds.
+  test.slow()
   await page.goto('/?time=18:30')
   const canvas = page.locator('canvas[data-assets="drawn"]')
   await expect(canvas).toBeVisible({ timeout: 60_000 })
+  // Startup first: the tier probe's frames stall the throttled ambient hooks,
+  // so the movement window starts after it, not inside it.
+  await expect(page.locator('canvas[data-tier-probe="done"]')).toBeVisible({ timeout: 60_000 })
   await expect.poll(() => ambientTime(page), { timeout: 10_000 }).toBeGreaterThan(0.2)
 
   const beforeRest = await ambientTime(page)

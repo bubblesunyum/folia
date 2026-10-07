@@ -9,7 +9,7 @@ import { COUNT_DRAWS, drawCalls, expectNoErrors, trackErrors, waitForTownDrawn }
 // window. Direct slashless load: the static server resolves /x to
 // x/index.html like Vercel, so no trailing slash is needed.
 
-const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow'
+const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow,town/skeleton'
 
 test('the open panel rests: zero draw calls after arrival', async ({ page }) => {
   test.slow()
@@ -29,6 +29,9 @@ test('the open panel rests: zero draw calls after arrival', async ({ page }) => 
   await expect(canvas).toHaveAttribute(canvasHookAttribute('focus'), 'platform', {
     timeout: 30_000,
   })
+  // Startup first, as in idle-rest: the tier probe's frames (and any tier
+  // verdict storm) must land before the quiet-seek, not inside the window.
+  await expect(page.locator('canvas[data-tier-probe="done"]')).toBeVisible({ timeout: 60_000 })
 
   // Stragglers (offset, dolly) settle on the same demand frames: poll for a
   // quiet second rather than a fixed wall time, so slow renderers still

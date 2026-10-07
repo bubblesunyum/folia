@@ -43,6 +43,9 @@ test('?perf=base renders at the base Air size and benches a burst', async ({ pag
 })
 
 test('the scene redraws when the camera moves', async ({ page }) => {
+  // Software rendering plus the startup tier probe can hold the main thread
+  // past the default timeout; the drag itself is seconds.
+  test.slow()
   await page.addInitScript(COUNT_DRAWS)
   await page.goto('/?time=18:30')
   const canvas = page.locator('canvas[data-assets="drawn"]')

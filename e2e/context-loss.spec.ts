@@ -5,7 +5,7 @@ import { COUNT_DRAWS, drawCalls, expectNoErrors, trackErrors, waitForTownDrawn }
 // WEBGL_lose_context extension fires the real events three handles, so the
 // Reconnecting overlay shows on loss and the restores count (the single redo
 // signal for the env cube, the composer and the timer) rebuilds on restore.
-const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow'
+const ASSETS = 'cortico/forum,cortico/fragment,cortico/meadow,town/skeleton'
 
 /** Forwards the WEBGL_lose_context extension call to the page's canvas. */
 async function loseContext(page: Page): Promise<void> {
@@ -30,6 +30,9 @@ async function restoreContext(page: Page): Promise<void> {
 }
 
 test('context loss shows Reconnecting, restore redraws without reload', async ({ page }) => {
+  // Software rendering plus the startup tier probe run the restore redraws
+  // and the capture past the default timeout.
+  test.slow()
   await page.addInitScript(COUNT_DRAWS)
   const errors = trackErrors(page)
   await page.goto('/?time=18:30')

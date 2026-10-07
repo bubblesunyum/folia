@@ -45,7 +45,7 @@ async function hoverAt(page: Page, world: [number, number, number]): Promise<str
 }
 
 async function bothAssetsDrawn(page: Page): Promise<void> {
-  await waitForTownDrawn(page, 'cortico/forum,cortico/fragment,cortico/meadow')
+  await waitForTownDrawn(page, 'cortico/forum,cortico/fragment,cortico/meadow,town/skeleton')
 }
 
 test('hover addresses the meadow terrace, not the fragment one', async ({ page }) => {
@@ -68,10 +68,14 @@ test('hover addresses the meadow terrace, not the fragment one', async ({ page }
   expect(meadow).toBe('6')
   await page.screenshot({ path: '/tmp/fol-hover-meadow-golden.png' })
 
-  // Fragment canopy crown (Blender (3.2, 2.6) → three (3.2, -2.6)): slot 0,
-  // proving the shared cream batch resolves per group rather than per mesh.
-  const canopy = await hoverAt(page, [3.2, 6.5, -2.6])
-  expect(canopy).toBe('0')
+  // Fragment terrace below the canopy (same Blender centre, y at terrace
+  // height): slot 4 in the manifest, proving the shared cream batch resolves
+  // per group rather than per mesh. The canopy crown above it (y 6.5) is
+  // high-LOD-only (mid_groups is ground+terrace per the D-072 split), so at
+  // the town vantage that ray correctly resolves the ground behind it —
+  // verified slot 0 up close at /cortico, where high LOD renders.
+  const terrace = await hoverAt(page, [3.2, 1.5, -2.6])
+  expect(terrace).toBe('4')
   await page.screenshot({ path: '/tmp/fol-hover-canopy-golden.png' })
 
   expect(errors).toEqual([])
