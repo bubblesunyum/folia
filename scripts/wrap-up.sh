@@ -69,7 +69,14 @@ if [ -n "$BEAD" ] && ! printf '%s' "$MSG" | grep -qF "$BEAD"; then
 
 $BEAD"
 fi
-if ! printf '%s' "$MSG" | grep -qE '\b[a-z0-9]{1,10}-[a-z0-9]+(\.[0-9]+)?\b'; then
+# Note-only wrap-ups (clean tree apart from the note file itself, no ledger
+# actions) commit nothing but the capture note, which needs no bead — so the
+# check below is skipped for them. Anything else names its bead up front.
+NOTE_ONLY=0
+if [ -n "$NOTE_FILE" ] && [ "${#ACTIONS[@]}" -eq 0 ] && [ -z "$(git status --porcelain -- . ":!$NOTE_FILE")" ]; then
+  NOTE_ONLY=1
+fi
+if [ "$NOTE_ONLY" -eq 0 ] && ! printf '%s' "$MSG" | grep -qE '\b[a-z0-9]{1,10}-[a-z0-9]+(\.[0-9]+)?\b'; then
   echo "wrap-up: message names no bead id — pass --bead so the commit hook accepts it" >&2
   exit 1
 fi
